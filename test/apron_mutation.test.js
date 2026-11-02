@@ -66,6 +66,9 @@ const MUTATIONS = [
   // across the lane's end, is P21's
   { id: 'P21 the plank walking across the lane\'s end again (a cap: the notch the user marked)', from: 'if (i !== k) notJoin[i] = notPlank[i] = true;', to: 'if (i !== k) notJoin[i] = true;', caughtBy: 'row 22:' },
   { id: 'P22 the hull not eased out beside the lane (a step in the bottom at the leave)', from: 'return x * x * (3 - 2 * x);', to: 'return 1;', caughtBy: 'row 26:' },
+  // the tube's openings (D604 follow-up), caught by the tube test (test/tube_cases.test.js, its rows by their own titles)
+  { id: 'P23 a wall side left open (no side face: the road\'s and the skin\'s edges free at a tube\'s slot)', from: 'closeWall: widthM > 0, scale:', to: 'closeWall: false, scale:', file: 'tube_cases.test.js', caughtBy: 'the drawn hull has no open edge' },
+  { id: 'P24 a strip\'s triangles of no area kept (a tapered plank\'s first row)', from: 'if (len(cross(sub(V[y], V[x]), sub(V[z], V[x]))) > 1e-12) idx.push(x, y, z);', to: 'idx.push(x, y, z);', file: 'tube_cases.test.js', caughtBy: 'the drawn hull has no sliver' },
 ];
 
 const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -74,8 +77,10 @@ function copyTree() {
   fs.cpSync(path.join(ROOT, 'src'), path.join(dir, 'src'), { recursive: true });
   fs.cpSync(path.join(ROOT, 'tools'), path.join(dir, 'tools'), { recursive: true });
   fs.cpSync(path.join(ROOT, 'app'), path.join(dir, 'app'), { recursive: true, filter: (p) => !/[\\/]app[\\/](sounds|test)([\\/]|$)/.test(p) });
-  fs.mkdirSync(path.join(dir, 'test')); fs.copyFileSync(path.join(__dirname, 'export_apron.test.js'), path.join(dir, 'test', 'export_apron.test.js'));
-  return { dir, file: path.join(dir, 'src', 'export', 'apron.js'), test: path.join(dir, 'test', 'export_apron.test.js') };
+  fs.mkdirSync(path.join(dir, 'test')); for (const f of ['export_apron.test.js', 'tube_cases.test.js']) fs.copyFileSync(path.join(__dirname, f), path.join(dir, 'test', f));
+  fs.mkdirSync(path.join(dir, 'test', 'fixtures')); fs.copyFileSync(path.join(__dirname, 'fixtures', 'tube-cases-2026-11-02.t180track'), path.join(dir, 'test', 'fixtures', 'tube-cases-2026-11-02.t180track'));   // the tube test reads it
+  // `test`: export_apron.test.js, or a mutant's own `file` (the tube test for the tube's openings)
+  return { dir, file: path.join(dir, 'src', 'export', 'apron.js'), test: path.join(dir, 'test', 'export_apron.test.js'), testOf: (f) => path.join(dir, 'test', f || 'export_apron.test.js') };
 }
 function runOnce(t, pattern) {
   const tap = path.join(path.dirname(path.dirname(t)), '.inner-run.tap');
@@ -107,7 +112,7 @@ for (const m of MUTATIONS) {
       const src = fs.readFileSync(c.file, 'utf8'), n = src.split(m.from).length - 1;
       assert.equal(n, 1, `NOT APPLIED: the patch text occurs ${n} times`);
       fs.writeFileSync(c.file, src.replace(m.from, m.to));
-      const { out, crashed } = runOnce(c.test, `^${escapeRe(m.caughtBy)}`), v = verdictOf(out, m.caughtBy);
+      const { out, crashed } = runOnce(c.testOf(m.file), `^${escapeRe(m.caughtBy)}`), v = verdictOf(out, m.caughtBy);
       if (v === null && crashed.length) throw new Error(IR.notTested(crashed));
       assert.equal(v, 'fail', `NOT CAUGHT: "${m.caughtBy}" ${v === null ? 'never reported' : 'passed'} on the mutant\n${out.slice(-1200)}`);
     } finally { fs.rmSync(c.dir, { recursive: true, force: true }); }

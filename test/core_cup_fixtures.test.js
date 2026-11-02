@@ -137,7 +137,7 @@ test('the fixture kit is the seal\'s: fixtures.js and manifest.json carry the sh
   assert.equal(sha(fs.readFileSync(path.join(FX, 'kn5nodes.js'))), '6a332f0c710768b04e1e05c592456073234d0d15fddf9188020ecfb721fec879');   // D593: the reader its row uses
   assert.deepEqual(Object.keys(AMEND11.fixtures), LIP_CHANGED);
   assert.deepEqual([...AMEND11.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !LIP_CHANGED.includes(k)).sort());
-  assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d604.json'))), 'f348d88feec74917242d5a6c580ce6e8ab9e32b66eebd8fd31f9cfcdf4789338');   // D604 (the hull)
+  assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d604.json'))), '4278e68f88316573141c21ad222fe290c47615133a8b3cc4eb078e79fc8041b6');   // D604 (the hull); AMENDED BY NAME 2026-11-02 for its follow-up (the tube's joints and openings moved F1 F2's skins again, nothing else: the record's own reason), was 1979e9089a53ea4a
   assert.deepEqual(Object.keys(AMEND12.fixtures), SLAB_CHANGED);
   assert.deepEqual([...AMEND12.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !SLAB_CHANGED.includes(k)).sort());
 });

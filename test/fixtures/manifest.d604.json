@@ -1,7 +1,7 @@
 {
  "amends": "the D190 seal, row 5a, as already amended by D196, D222, D230, D258, D260, D279, the mesh cap, the sector gates, D460, D572 and D593; F1 F2 only, their kn5 digest only",
- "made_at": "2026-11-01, D604 (the road as a hull) as drawn by the user at 10:44, t180 branch d604-o: test/fixtures/kn5nodes.js over F1 F2 built as fixtures.js builds them, in two trees: 8b573dd (public main, whose kn5 is the D593 record's after) and d604-o.",
- "reason": "The road is a hull (the user, 2026-11-01 08:49: \"the track gets 3D depth instead of a slice of a mesh\"; 10:32: \"the apron itself connects right to the other one without having an extra thicker bottom than we need\"; 10:44, his red line on the end-on cut): the underside skin hangs 1.5 m under the road (was 0.5 m) along each row's section up, deeper under an edge that rises (the default plank's drop plus 2 m · tan(rim + 5°), at most 3 m, easing back over 4 m in), and each plank's run under it is one smooth curve from its tip to the skin's edge, in the skin's own mesh (the join nodes are gone): the bottom is one curve from tip to tip; the skin wears the road's asphalt at 0.88 like the apron. So the two closed fixtures, which are exported, change their kn5 and nothing else: segs, path and mesh are unchanged in all nine; in the kn5 the road, paint and the physics planks are the same bytes, the skins moved, the joins are gone into them, and of the materials only t180b_underskin's own record changed.",
+ "made_at": "2026-11-01, D604 (the road as a hull) as drawn by the user at 10:44; amended 2026-11-02 for its follow-up (the pit notch, the tube joints and openings), t180 branch d604-o: test/fixtures/kn5nodes.js over F1 F2 built as fixtures.js builds them, in two trees: 8b573dd (public main, whose kn5 is the D593 record's after) and d604-o.",
+ "reason": "The road is a hull (the user, 2026-11-01 08:49: \"the track gets 3D depth instead of a slice of a mesh\"; 10:32: \"the apron itself connects right to the other one without having an extra thicker bottom than we need\"; 10:44, his red line on the end-on cut): the underside skin hangs 1.5 m under the road (was 0.5 m) along each row's section up, deeper under an edge that rises (the default plank's drop plus 2 m · tan(rim + 5°), at most 3 m, easing back over 4 m in), and each plank's run under it is one smooth curve from its tip to the skin's edge, in the skin's own mesh (the join nodes are gone): the bottom is one curve from tip to tip; the skin wears the road's asphalt at 0.88 like the apron. So the two closed fixtures, which are exported, change their kn5 and nothing else: segs, path and mesh are unchanged in all nine; in the kn5 the road, paint and the physics planks are the same bytes, the skins moved, the joins are gone into them, and of the materials only t180b_underskin's own record changed. AMENDED 2026-11-02 (the follow-up: the pit notch, the tube joints and openings): the skins moved again and nothing else did; a skin hangs by its section's middle (the mean of the two middle normals when a row has an even count), a row on a seam keeps every column, a seam whose zipper was all sliver has no skin of its own, and where an apron stops the hull eases to the plain depth.",
  "fixtures": {
   "F1-bowl-default-lap-closed": {
    "before_d604": {
@@ -17,8 +17,8 @@
     "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
     "mesh": "5e91dc2a2775576c73ce1f9c75c5650a7f4f35ff08d43edbd84e2c9655454722",
     "meshParts": 3745,
-    "kn5": "bec1c529d9f0e3f16db970373c2c23ba215946f9a26d114ff723d4fc2cb26f33",
-    "kn5Bytes": 8442052
+    "kn5": "ebfece8c212b9595afb81c1763ea77be1b52acc6f213933e303402d70e1a78fd",
+    "kn5Bytes": 8438864
    },
    "measure": {
     "changed": [
@@ -90,7 +90,7 @@
     "moved_skin": [
      {
       "name": "UNDERSKIN_p1_chunk_0",
-      "full": "1f5a285aac915763269da61eb0e2ed995040a5f5f8e3c5dd075e10def8572f51"
+      "full": "dd3db4311cf723912545e175a991eafbd790271779128e2479ee5c4ce35e1d4f"
      },
      {
       "name": "UNDERSKIN_p2_chunk_1",
@@ -102,7 +102,7 @@
      },
      {
       "name": "UNDERSKIN_p5_chunk_3",
-      "full": "10d327b3074950051c6beffefbe70a136ae481c234ed4bae57bf78a554f5c438"
+      "full": "30ba77908a82732eb16ed41fe26db01a2bb26e3b9eccaeeda73b644ea612c37a"
      }
     ],
     "joins_into_skin": [
@@ -142,8 +142,8 @@
     "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
     "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
     "meshParts": 3745,
-    "kn5": "7c6edc1be6496230db1355533affece9908da368d9972c1b68aa99960d818f56",
-    "kn5Bytes": 10764025
+    "kn5": "64d3b44ae6379477fcffd5cce2a7c63b5c3b36912b188dd0e31903504a44a89e",
+    "kn5Bytes": 10760837
    },
    "measure": {
     "changed": [
@@ -219,19 +219,19 @@
     "moved_skin": [
      {
       "name": "UNDERSKIN_p1_chunk_0",
-      "full": "f8dddf2403b8044dce448e5ccd72592a444e905fd56675646945f598ddf97303"
+      "full": "705e9b160692af0e8ebf57bed09c9083c3065adf5ddc21f69a6539f904a33b6e"
      },
      {
       "name": "UNDERSKIN_p2_chunk_1",
-      "full": "a9ac7df38f7b4775e2ac732a70d481a3d95f7210bf98ab16b02b5cbe9e629bbc"
+      "full": "03b5d561570f5fb428f65cf56f3eaaf95e5c73a2ec83c0d406f1752a9065e6b0"
      },
      {
       "name": "UNDERSKIN_p3_chunk_2",
-      "full": "83cf08644d44db35eeca862281b96d237727502b0bbc0bf8c7b4374eb55cbafd"
+      "full": "8a27dc9a59332c7ce3825aea1dac0d520f3b9913ec53caf8e69b453de9326d08"
      },
      {
       "name": "UNDERSKIN_p5_chunk_3",
-      "full": "5ae780a5c9840a4556dc9b47476a0c7c92a41f0bf6e428f414e3c0979a8308cf"
+      "full": "ad3b301d9627b233f268c07a484f633b13b60632088101144fd180982e2ddcea"
      }
     ],
     "joins_into_skin": [

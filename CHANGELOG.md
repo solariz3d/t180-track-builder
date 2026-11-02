@@ -25,7 +25,9 @@ All notable changes to this project are recorded here. The format follows
 
 - **The pit lane meets the road with no notch.** Where the lane left and rejoined the road its end was half a metre wide, so the road's edge stepped out half a metre there, and the edge apron turned a square corner round it (the notch at the rejoin, and a seam across the apron at the leave). The lane's ends are 0.1 m wide again and the apron runs straight from the road's edge to the lane's; the drivable surface changes only there: the lane's two ends and its outline's apron. Underneath, the road's deeper bottom under a rising edge now eases back to the lane's depth over the 30 m before the leave and after the rejoin, so the bottom has no step either.
 
-- **A tube's opening has no jagged edge.** Where a closed tube opened into a road, the underside's edge hung loose beside the walls with nothing joining it to the road, and the edge apron started square, so from outside the opening showed teeth. The underside is now closed along every wall, its extra depth eases out toward the wall, and the apron grows out of the edge there over 10 m. This changes the drivable apron near a tube's opening, and nowhere else.
+- **A tube's opening has no jagged edge.** Where a closed tube opened into a road, the underside's edge hung loose beside the walls with nothing joining it to the road, and the edge apron started square, so from outside the opening showed teeth. The underside is now closed along every wall by a side face, its extra depth eases out toward the wall, and the apron grows out of the edge there over 10 m. Where a tube opens or closes fast, the underside keeps every column and is thinner (down to half a metre), so it follows the road without folding. This changes the drivable apron near a tube's opening, and nowhere else.
+
+- **A tube shows no line of sky at its joints.** Where one piece of a tube met the next, the underside left a thin crack all round the ring, and a strip of near-zero-width triangles. The underside now meets itself vertex for vertex there, and the strip is gone.
 
 ## [0.4.36] - 2026-11-01
 

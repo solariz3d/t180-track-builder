@@ -105,7 +105,10 @@ function digestOf(out) {
 // depth beside the lane (apron.js padEase). Compared with e911792 node by node (test/fixtures/kn5nodes.js): the road physics, the paint and every other physics plank
 // are the same bytes; the lane's in, out and fill surfaces and their skins, the outline's plank and run (1ROAD_APRON_PIT_R, APRONSIDE_PIT_R) and three road skins
 // beside the lane moved; of the lap's files the kn5, map.png and ui/outline.png changed (the lane's ends narrower); the counts are the same.
-const PIN = { lap: 'sha256 03d805db106b31b6 files 10', open: 'sha256 50248bc3a07ddd32 files 11' };
+// AMENDED BY NAME again (2026-11-02, the tube's joints and openings, the tube test): the lap pin moved from 03d805db106b31b6 (a48e41e) to the value below; the open
+// pin is unchanged. A skin hangs by its section's middle, and a row on a seam keeps every column (src/export/underskin.js). Compared with a48e41e node by node: every
+// physics node, the paint, the lane and the outline are the same bytes; two drawn skins moved (UNDERSKIN_p1_chunk_0, UNDERSKIN_p5_chunk_3); only the kn5 changed.
+const PIN = { lap: 'sha256 4dd44dff31b0a8f9 files 10', open: 'sha256 50248bc3a07ddd32 files 11' };
 
 test('row 1: the export\'s bytes are b6969da\'s, a textured lap with a pit lane and an open TEST export', async () => {
   const ex = await makeExporter(fromDisk, { author: AUTHOR });

@@ -160,9 +160,14 @@ test('row 3: the road\'s own nodes are the same objects in the same places; a sk
   assert.equal(out.materials[out.materials.length - 1].name, 't180b_apron', 'the one material added is the apron\'s (D593: the road\'s asphalt in its shade, row 15)');
 });
 
-test('row 4: a wall side (a cup at 90°) gets none, a closed tube ring gets none, a seam row gets none', () => {
+// AMENDED BY NAME (2026-11-02, the jag at a tube's opening, the tube test): a wall side still gets no plank and no physics, but it now gets its hull's side face (an
+// APRONSIDE node, drawn only, as at width 0), straight from the road's edge row to the skin's edge: with none, the skin's edge hung free beside the wall, a fin
+test('row 4: a wall side (a cup at 90°) gets no plank, only its side face from the edge to the skin; a closed tube ring gets none, a seam row gets none', () => {
   const wall = build(extend(D.createDoc('w'), { length: 60, family: 'bowl', first: { w: 20, c: 90 } }), {});
-  assert.equal(wall.out.root.children.filter((c) => /^APRON/.test(c.name)).length, 0, 'a 90° cup is a wall on both sides');
+  assert.equal(wall.out.root.children.filter((c) => /^APRON[LR]_/.test(c.name) || (c.children || []).some((m) => /^1(ROAD|GRIP\d{3})_APRON_/.test(m.name))).length, 0, 'a 90° cup is a wall on both sides: no plank, no physics');
+  const faces = sides(wall.out);
+  assert.equal(faces.length, 2 * wall.mesh.cells.filter((c) => !c.seam).length, 'each wall side has its side face');
+  for (const f of faces) { const m = f.children[0]; assert.equal(m.positions.length / 3 % 2, 0, `${f.name}: two vertices a row, the edge and the skin's edge`); assert.ok(m.indices.length > 0 && m.visible && m.renderable, `${f.name}: drawn`); }
   const ring = build(extend(D.createDoc('t'), { length: 60, first: { w: 20, t: 360 } }), {});
   assert.equal(ring.out.root.children.filter((c) => /^APRON/.test(c.name)).length, 0, 'a closed ring has no edge');
   const joined = build(extend(flat(60), { length: 60, transition: 40, targets: { w: 12 } }), {});
