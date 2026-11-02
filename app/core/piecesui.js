@@ -218,7 +218,9 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null, 
   doc.addEventListener('t180:selection-request', onSelRequest);
   const nodes = {
     selection: [el('h3', { text: 'Selected pieces' }), selInfo, slots.grip, slots.save, el('div', { class: 'actions' }, delBtn, clearBtn), el('div', { class: 'actions' }, applyBtn, cancelBtn), proposalBox, el('div', { class: 'actions' }, applyCutBtn, cancelCutBtn), cutBox],
-    library: [el('h3', { text: 'Pieces library' }), el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'mirror on insert' }), mirror)), listBox, listNote],
+    // mirror on insert is a tick like every other in the menus (a box, then its words, the menu's own .menu-check): in a .picker it took the slider's column and
+    // was drawn as a long track with the box out in the middle of it (the user, 2026-11-02)
+    library: [el('h3', { text: 'Pieces library' }), el('label', { class: 'menu-check' }, mirror, el('span', { text: 'mirror on insert' })), listBox, listNote],
   };
   return { nodes, layer, menu, refresh: refreshList, items: () => items.slice(), unmount() { unsub(); doc.removeEventListener('t180:selection-request', onSelRequest); if (typeof offMirror === 'function') offMirror(); if (menu) { doc.removeEventListener('keydown', onKey, true); doc.removeEventListener('pointerdown', onOutside, true); menu.removeEventListener('toggle', onToggle); } if (tick) win.clearTimeout(tick); if (stage) { stage.removeEventListener('pointerdown', onDown); stage.removeEventListener('pointerup', onUp); } if (layer) layer.unmount(); } };
 }
