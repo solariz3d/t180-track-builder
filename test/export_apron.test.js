@@ -748,8 +748,9 @@ test('row 28: every plank hangs at the apron\'s own slope from the road\'s frame
 // rising edge sits lower, and the run under it from the tip to the skin's edge had to turn about 50° (TEST 10 s 3,725: 6° where it met the skin, 10° over its last
 // 0.3 m). The run now arrives along the skin's own first span and starts as its mirror about the chord (an arc, apron.js hullRun), and where that would still turn
 // more than 30° (a section whose middle the re-lean moved) the skin's edge comes up to the depth at which it does not (underskin.js edgeDepth)
-test('row 29: the run under every plank bends evenly into the skin: no more than 5° in any 0.3 m of it, and no more than 3° where it meets the skin\'s first span, on a cupped piece with an edge zone on one side, a symmetric cup and a flat road', () => {
-  for (const first of [{ w: 25, c: 15, er: 35 }, { w: 25, c: 15.5 }, { w: 20, c: 0 }]) {
+test('row 29: the run under every plank bends evenly into the skin: no more than 5° in any 0.3 m of it, and no more than 3° where it meets the skin\'s first span, on two cupped pieces with an edge zone on one side, a symmetric cup and a flat road', () => {
+  // c 10 er 35: a shallower cup, where the run could not meet the skin's edge evenly unless that edge is set where the run's arc meets it (underskin.js edgeDepth)
+  for (const first of [{ w: 25, c: 15, er: 35 }, { w: 25, c: 10, er: 35 }, { w: 25, c: 15.5 }, { w: 20, c: 0 }]) {
     let d = extend(D.createDoc('apron bend'), { length: 100, family: 'bowl', first }); d = extend(d, { length: 100, targets: {} });
     const { out } = build(d), bad = []; let rows = 0, worstSpan = 0, worstJoin = 0;
     const ang = (a, b) => Math.acos(Math.max(-1, Math.min(1, dot3(unit3(a), unit3(b))))) / DEG;

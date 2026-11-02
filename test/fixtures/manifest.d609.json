@@ -1,0 +1,266 @@
+{
+ "amends": "the D190 seal, row 5a, as already amended by D196, D222, D230, D258, D260, D279, the mesh cap, the sector gates, D460, D572, D593 and D604; F1 F2 only, their kn5 digest only",
+ "made_at": "2026-11-02, D609 (the apron hangs from the road's own centre line, and the underside sweeps evenly from each plank's tip), t180 branch d609-a at 9e5546b: test/fixtures/kn5nodes.js over F1 F2 built as fixtures.js builds them, in two trees: f1f3416 (whose kn5 is the D604 record's after) and 9e5546b.",
+ "reason": "The edge apron took its section from the middle column by count, which on a section whose columns are not spread evenly about the centre line is off the centre line (6.4 to 8.2 m on some pieces), so the planks leaned wrong; it now takes the column where the road's own across coordinate is 0 (between two columns when none is), and the underside skin does the same, so the skin and planks meet. Each plank's run into the skin is an even arc from its tip, and an edge whose skin sat above that arc is set where the arc meets it. So the two closed fixtures change their kn5 and nothing else: segs, path and mesh are unchanged in all nine; in the kn5 the road and paint are the same bytes, both fixtures' skins moved, and F2's physics planks moved (its sections have an even number of columns, so the old middle column was half a column off the centre line; F1's were already on it). No material changed and no node was added or removed.",
+ "fixtures": {
+  "F1-bowl-default-lap-closed": {
+   "before_d609": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "5e91dc2a2775576c73ce1f9c75c5650a7f4f35ff08d43edbd84e2c9655454722",
+    "meshParts": 3745,
+    "kn5": "ebfece8c212b9595afb81c1763ea77be1b52acc6f213933e303402d70e1a78fd",
+    "kn5Bytes": 8438864
+   },
+   "after_d609": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "5e91dc2a2775576c73ce1f9c75c5650a7f4f35ff08d43edbd84e2c9655454722",
+    "meshParts": 3745,
+    "kn5": "2c9f56f27944301206507c39c9d6a02a3cdd503eab9560c7175d80d9ebd16e4c",
+    "kn5Bytes": 8438864
+   },
+   "measure": {
+    "changed": [
+     "kn5"
+    ],
+    "kn5_meshes": 19,
+    "kept_byte_for_byte": [
+     {
+      "name": "1ROAD_p1_chunk_0",
+      "full": "113c105b294cc2f62031fd6556eeb1985ac00fbdefb52d986765f8a3090924a6"
+     },
+     {
+      "name": "1ROAD_p2_chunk_1",
+      "full": "9bea4fa87bbe5c43855977a83a4e6bc405734fa2c3e713f80eb86193d2b07b92"
+     },
+     {
+      "name": "1ROAD_p3_chunk_2",
+      "full": "9a6f0e3935b2305937288fccef48d1e5bc38cd544bad643c7e874ea7fe421e79"
+     },
+     {
+      "name": "1ROAD_p5_chunk_3",
+      "full": "afaeaa92e19a1178850bb172b7334695273a77e6edd117ce5b883f8778d69eab"
+     },
+     {
+      "name": "PAINT_START_LINE",
+      "full": "356379fb6318d10c86eb0cf4efee68a7a5ae13f82ae20fa26a77b0aa0dc74ea1"
+     },
+     {
+      "name": "PAINT_GRID_0",
+      "full": "cf04784d8ba8c125ee5d0928f8b218c7f8fe71c4308b588114fca294a8a46035"
+     },
+     {
+      "name": "PAINT_GRID_1",
+      "full": "585dfec56e1296efd976972acb70c93133915530456a35c1d49b2bf6c491f76c"
+     },
+     {
+      "name": "PAINT_GRID_2",
+      "full": "bfb61be3ebbac309ea7773bdeb9faa797415ce0b5a3fbb7e4d9738696065ee7e"
+     },
+     {
+      "name": "PAINT_GRID_3",
+      "full": "070e827c16941dea3b5cc1e542a26823caabf21da36a6736f98f8f80200f98bf"
+     },
+     {
+      "name": "PAINT_PIT_0",
+      "full": "e91bd103e1aef884c4b064a8a25861b5915a4644a8a8ea8bb5d02b3513e52256"
+     },
+     {
+      "name": "PAINT_PIT_1",
+      "full": "9a550ee10a3881014ef5ac17c1f5a48909b30b5919b20558c260bccb94478e2e"
+     },
+     {
+      "name": "1ROAD_APRON_p1_chunk_0",
+      "full": "95f93ea47f320b9e94dca6445c27ff0ed14db459d49db7607f2ae447f1e95d10"
+     },
+     {
+      "name": "1ROAD_APRON_p2_chunk_1",
+      "full": "346af6e1b1a7337c4517427f9b50244abf32551bf7b1729d1461da6ddcc16d95"
+     },
+     {
+      "name": "1ROAD_APRON_p3_chunk_2",
+      "full": "4778e9a6bfabf5fca9a4c3255ebc07cc3db2ebff3fb3394c871dc0bb421791a7"
+     },
+     {
+      "name": "1ROAD_APRON_p5_chunk_3",
+      "full": "e322c8188cc83e27d6bd078dff3037b788375cb05b2c1e3733121311809c9e70"
+     }
+    ],
+    "moved": [
+     {
+      "name": "UNDERSKIN_p1_chunk_0",
+      "before": "dd3db4311cf723912545e175a991eafbd790271779128e2479ee5c4ce35e1d4f",
+      "full": "1fc77db2814852943af5b3d0d1fee5e0461711f770efa101b67d83abf03aafbd"
+     },
+     {
+      "name": "UNDERSKIN_p2_chunk_1",
+      "before": "5c6a4c65a533e09974bc96969ee82a623e2718a84133bb3d477cb181482c1b8a",
+      "full": "495242a7cb8bcea6e7753e1e57f18c0dc053d84451800dd14b82505ab109c264"
+     },
+     {
+      "name": "UNDERSKIN_p3_chunk_2",
+      "before": "5cc3d67bfbe7ad192a35be1e8f439cd676bbdacf3c07851156f1db584b09da2e",
+      "full": "bcb48b82065f975137cb1e7effa4a27bc3341d7f68234d4cf09070b504709eeb"
+     },
+     {
+      "name": "UNDERSKIN_p5_chunk_3",
+      "before": "30ba77908a82732eb16ed41fe26db01a2bb26e3b9eccaeeda73b644ea612c37a",
+      "full": "b07f8677b02d73130b730188fe885600b7ad42ebbf93a27faf487de2ab366477"
+     }
+    ],
+    "materials": [
+     "t180b_road",
+     "t180b_paint",
+     "t180b_underskin",
+     "t180b_apron"
+    ],
+    "material_digests_after": [
+     "223dc32d874d6dbba06e171b5cc5fc0547e79aa532f775020bc6e0f6674f83dd",
+     "881a8f13ab08820242ae0f41d429284d0e48bcb3fea349fe3bd0554d6e259508",
+     "a569215a738ec41bc181a9580fda5cdcdba373576f7dd807175a65cbda9fbfc2",
+     "a07871a540376f46eaf67c83a603f46da94802ae5811cb13f6da61c22039ba82"
+    ],
+    "materials_changed": []
+   }
+  },
+  "F2-halfpipe-default-lap-closed": {
+   "before_d609": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "64d3b44ae6379477fcffd5cce2a7c63b5c3b36912b188dd0e31903504a44a89e",
+    "kn5Bytes": 10760837
+   },
+   "after_d609": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "c2e385fd9f031fcac2a184d53a263248782d5e4c5c3c7322b5dcf268a658c187",
+    "kn5Bytes": 10760837
+   },
+   "measure": {
+    "changed": [
+     "kn5"
+    ],
+    "kn5_meshes": 20,
+    "kept_byte_for_byte": [
+     {
+      "name": "1ROAD_p1_chunk_0",
+      "full": "fb390a839c3e3381b0cd8fe54c61e794be690ac50511b8546d55a47e913bccbc"
+     },
+     {
+      "name": "1ROAD_p2_chunk_1",
+      "full": "c6f7008b95c46a60c9efce30a5d41b088a7365d4afa43695e1dff04bc54a0477"
+     },
+     {
+      "name": "1ROAD_p3_chunk_2",
+      "full": "f28b7ec4f81b74b63c684b794ed07ec8840b42e4ae2d4ea10edab0628249469b"
+     },
+     {
+      "name": "1ROAD_p4_chunk_3",
+      "full": "488972d39c45ce6dcb4d75855baecdfe8cd390f9fc96b6fc59456d327fa4c288"
+     },
+     {
+      "name": "1ROAD_p5_chunk_4",
+      "full": "327be7f60d3b3fb6fef0e72a0d18e356186f020574e36a72e99987c07882f893"
+     },
+     {
+      "name": "PAINT_START_LINE",
+      "full": "b8d3d1809de6d3d4134b1650b1140ff46d3cd416d4e4da9f74d6c9c45af1a246"
+     },
+     {
+      "name": "PAINT_GRID_0",
+      "full": "697789149d96700d5818df99e9441fa53a5cd7c4027cb758d7bbbfab288fd356"
+     },
+     {
+      "name": "PAINT_GRID_1",
+      "full": "57d57109aef2f512c88a938bbed06ad5ed29bccf1c55d787977abee0146a8a12"
+     },
+     {
+      "name": "PAINT_GRID_2",
+      "full": "85068d8e4f551e6c4ecb87ed02a8b328f6e03d169aba0360b6c13a88f7eef0d0"
+     },
+     {
+      "name": "PAINT_GRID_3",
+      "full": "a60a600a33d7b2e9df223662b22993b407a3c8d172980da9e9fd802205de9b18"
+     },
+     {
+      "name": "PAINT_PIT_0",
+      "full": "83940f329a74438ce759e9ffddd2bdbc1a4d0fe66875c008d97c7c8136bdba84"
+     },
+     {
+      "name": "PAINT_PIT_1",
+      "full": "4d8c667fe6e0ac88c743504087956316e762d0a21b5edce4575fbfd6cbce2767"
+     }
+    ],
+    "moved": [
+     {
+      "name": "UNDERSKIN_p1_chunk_0",
+      "before": "705e9b160692af0e8ebf57bed09c9083c3065adf5ddc21f69a6539f904a33b6e",
+      "full": "a753a29a63a4b58795e749ef52038c19cbd18b951302318e0c18f4b664dbbaf4"
+     },
+     {
+      "name": "UNDERSKIN_p2_chunk_1",
+      "before": "03b5d561570f5fb428f65cf56f3eaaf95e5c73a2ec83c0d406f1752a9065e6b0",
+      "full": "3b8081d30638b8b82d8ea4b29eeef381ad2efdd5e8a2cbe6cce961d48b3f331e"
+     },
+     {
+      "name": "UNDERSKIN_p3_chunk_2",
+      "before": "8a27dc9a59332c7ce3825aea1dac0d520f3b9913ec53caf8e69b453de9326d08",
+      "full": "9224d5f2c72b3a619d1e9acc13d45cf0ce98ee3cb5b35ee03d1bd0c3be86f832"
+     },
+     {
+      "name": "UNDERSKIN_p5_chunk_3",
+      "before": "ad3b301d9627b233f268c07a484f633b13b60632088101144fd180982e2ddcea",
+      "full": "81c40d1d30068a14a5b2bfa211f64c71fc5ece4d5e98da48e05913af862b52a0"
+     },
+     {
+      "name": "1ROAD_APRON_p1_chunk_0",
+      "before": "c79e2336991940fac94221fd7b61060f970eed9881626d08e691334945ee1799",
+      "full": "69ae6606cd63ff57a5981d31b2f8d19c852cefa11f4ad6ac7365057b80422088"
+     },
+     {
+      "name": "1ROAD_APRON_p2_chunk_1",
+      "before": "02c2612bb56a47fe18b9e5f3c75e940d64cfa8be39bc3ec64f18f6a9b914bbf6",
+      "full": "7d70c8b07a861598e5cb826a8fc1cef2339f091ee1617dc125e19f49b2448763"
+     },
+     {
+      "name": "1ROAD_APRON_p3_chunk_2",
+      "before": "7909941b06ba4fff124b3fed4d9a3a11a4c55b81fe98a892d53f49c58f03fdf2",
+      "full": "cff8abf1a720034d6304b2e0b4ad390893a96f8b8e8824a0ac982cc7dc9aaf6a"
+     },
+     {
+      "name": "1ROAD_APRON_p5_chunk_3",
+      "before": "784c4690e4cd1dd9ac6148d9ff298177edb166a28981b24844fff6525175a2ee",
+      "full": "c3a3c2bfdbae96ba3ea52058e8e030058cdb22c86edee73e55962fd2940ea4f5"
+     }
+    ],
+    "materials": [
+     "t180b_road",
+     "t180b_paint",
+     "t180b_underskin",
+     "t180b_apron"
+    ],
+    "material_digests_after": [
+     "223dc32d874d6dbba06e171b5cc5fc0547e79aa532f775020bc6e0f6674f83dd",
+     "881a8f13ab08820242ae0f41d429284d0e48bcb3fea349fe3bd0554d6e259508",
+     "a569215a738ec41bc181a9580fda5cdcdba373576f7dd807175a65cbda9fbfc2",
+     "a07871a540376f46eaf67c83a603f46da94802ae5811cb13f6da61c22039ba82"
+    ],
+    "materials_changed": []
+   }
+  }
+ },
+ "unchanged": [
+  "F3-bowl-narrow-12m-cap-binds",
+  "F4-halfpipe-width-31.5-to-12-along-s",
+  "F5-flat-20m-bank-30",
+  "F6-bowl-r-brushed",
+  "F7-hill-then-jump",
+  "F8-mixed-families",
+  "F9-empty"
+ ]
+}

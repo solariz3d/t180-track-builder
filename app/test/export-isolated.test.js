@@ -108,7 +108,12 @@ function digestOf(out) {
 // AMENDED BY NAME again (2026-11-02, the tube's joints and openings, the tube test): the lap pin moved from 03d805db106b31b6 (a48e41e) to the value below; the open
 // pin is unchanged. A skin hangs by its section's middle, and a row on a seam keeps every column (src/export/underskin.js). Compared with a48e41e node by node: every
 // physics node, the paint, the lane and the outline are the same bytes; two drawn skins moved (UNDERSKIN_p1_chunk_0, UNDERSKIN_p5_chunk_3); only the kn5 changed.
-const PIN = { lap: 'sha256 4dd44dff31b0a8f9 files 10', open: 'sha256 50248bc3a07ddd32 files 11' };
+// AMENDED BY NAME again (2026-11-02, the apron hung from the road's own centre line and the underside swept evenly from each plank's tip): both pins moved from
+// 4dd44dff31b0a8f9 / 50248bc3a07ddd32 (f1f3416) to the values below. The skin and the planks take their section from the column on the centre line, not the middle
+// column by count, each plank's run into the skin is an even arc from its tip, and the pit outline's plank and run follow the same arc. Compared with f1f3416 node by
+// node: the road physics, the paint and every road plank are the same bytes; the lap's four road skins and the outline's plank and run (1ROAD_APRON_PIT_R,
+// APRONSIDE_PIT_R) moved, and the open run's three skins; of each export's files only the kn5 changed; no node or material was added, removed or changed.
+const PIN = { lap: 'sha256 d89c835f5f103a8c files 10', open: 'sha256 4e1404430764e540 files 11' };
 
 test('row 1: the export\'s bytes are b6969da\'s, a textured lap with a pit lane and an open TEST export', async () => {
   const ex = await makeExporter(fromDisk, { author: AUTHOR });

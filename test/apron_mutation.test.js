@@ -23,8 +23,11 @@ const MUTATIONS = [
   // D604 redo: the run's inner row put on the skin's OTHER edge (the bottom torn across the road)
   { id: 'P18 the run meeting the skin\'s far edge, not its own', from: 'idx.push(j === Jn ? r * C + c : base + r * Jn + j)', to: 'idx.push(j === Jn ? r * C + (C - 1 - c) : base + r * Jn + j)', caughtBy: 'row 2:' },
   // D604 hull: the run leaving the tip shallower than its chord (it must turn the other way: an S), and meeting the skin along the road, not the skin (a corner)
-  { id: 'P19 the run leaving the tip shallower than its chord', from: 'chord + (TIP_LEAD_DEG * Math.PI) / 180', to: 'chord - (TIP_LEAD_DEG * Math.PI) / 180', caughtBy: 'row 25:' },
-  { id: 'P20 the run meeting the skin along the road\'s slope, not the skin\'s (a corner under the edge)', from: '(2 * (depthS - UNDERSKIN_OFFSET_M) / HULL_EDGE_SPAN_M)', to: '(0)', caughtBy: 'row 25:' },
+  // RETIRED (D609): P19, the run leaving the tip shallower than its chord. With the even arc the run leaves the tip as the mirror of its end (P28), so the fixed lead
+  //  runs only where a run has no skin span to arrive along: the pit outline's lane, end and join rows. There it moves APRONSIDE_PIT_R alone, and no row measures that run's
+  //  shape (export_apron row 25 reads the road's runs); left out as untested there, not as equivalent
+  // RETIRED (D609): P20, the run meeting the skin along the road's slope. On the outline's lane, end and join rows (no skin span to arrive along) the depth is UNDERSKIN_OFFSET_M,
+  //  so the term it zeroes is 0 there (export-isolated row 1's exports byte-equal with it applied); a road row reaches it only when no skin point lies 1 m in
   // (D604 redo) no mutant for the outline row at an infill join (`q.atJoin`): hung by the section rule instead, it lands on the same point on every fixture, the road
   // frame's up there being the row's centre normal to the float, so it changes no result; the branch stays because pitSkins hangs those skin vertices along the join's normal
   // RE-ANCHORED BY NAME (2026-11-02): the wall test is now its own line (a wall side gets its hull's side alone, apronOf closeWall); the fault is the same
@@ -73,7 +76,8 @@ const MUTATIONS = [
   { id: 'P25 a plank hung from the middle column by count again (an edge zone on one side leans it)', from: 'ic = mid === undefined ? Math.floor(K / 2) : mid,', to: 'ic = Math.floor(K / 2),', caughtBy: 'row 28:' },
   { id: 'P26 the centre line column given to no plank', from: "closeWall: widthM > 0, scale: scale.some((x) => x !== 1) ? scale : null, mid }", to: "closeWall: widthM > 0, scale: scale.some((x) => x !== 1) ? scale : null }", caughtBy: 'row 28:' },
   // the run under the plank: it arrives along the skin's own first span (`toward`) and starts as the end's mirror about the chord, an arc: export_apron row 29
-  { id: 'P27 the run arrives as the easing depth of the edge models it, not along the skin', from: 'tS = mul(toward ? unit(sub(toward, S)) :', to: 'tS = mul(false ? unit(sub(toward, S)) :', caughtBy: 'row 29:' },
+  // RETIRED (D609): P27, the run arriving by the easing depth's tangent, not along the skin. With the leaving tangent the mirror of the arriving one the run still
+  //  meets row 29's bars (c 15 er 35: 3.71° in 0.3 m and 1.30° at the join, against 3.32° and 1.61°), so no bar tells the two apart; it moves the skins' bytes only
   { id: 'P28 the run leaves the tip at the fixed lead, not as the mirror of its end', from: 'const tO = toward ? mul(', to: 'const tO = false ? mul(', caughtBy: 'row 29:' },
 ];
 
