@@ -21,6 +21,12 @@
 //            pit lane's leave; a hull that deepens evenly, under a rising edge, is a slope, not a step). It is read only on pieces that never curl into a
 //            wall side or a tube, BOTTOM_CLEAR_M clear of one: the hull there thins and turns by design, and the fold reads it
 //   sliver   a drawn or driven triangle thinner than acready.js SLIVER, its height over its longest edge (a zipper of zero-width strips)
+//   through  a drawn face (the skin, the hull's side) that passes through the road, the apron or the pit lane of ANOTHER pass (its station more than PASS_M away
+//            along the road, both ways round a closed lap): the hull hung through a pass running under it (ELYSIUM's p38 over p41's apron). Read only in the
+//            4 m cells that hold drivable faces of two passes; a cell that holds the lap's start and its end is one pass, so a crossing right at a closed
+//            lap's start line is not read. A drawn face is another pass's only if EVERY one of its corners is: each corner's station is walked along the road
+//            from the face's own (a light hull's long triangle runs tens of metres, across a piece joint, and its centre alone made it another pass's at the next
+//            piece's apron), and it must stand THROUGH_MIN_M or more out of the surface (a corner on it only touches)
 //
 // Measured as the tests that first caught each one measure it: test/export_apron.test.js rows 22 and 26, test/tube_cases.test.js rows 2, 3 and 4.
 // Not read: the catch (a second sheet under the road, open by design), the painted markers (decals laid on the road) and the test route's end wall; nor a
@@ -37,6 +43,9 @@ const BOTTOM_STEP_M = 0.03;   // the most a metre of the hull's bottom beside an
 const BOTTOM_IN_M = 0.5;      // the bottom is read this far in from the road's edge (row 26)
 const BOTTOM_ABOVE_M = 3;     // from this far above the road's own surface there, down its normal
 const SAME_PASS_M = 10;       // a surface whose own station lies further along the track than this is another pass's, and is not read
+const PASS_M = 25;            // `through`: a drivable face this far along the road from a drawn one is another pass's (src/geom/bvh.js minSeparationM)
+const PASS_CELL_M = 4;        // `through`: the cells the drivable faces are filed in by station
+const THROUGH_MIN_M = 0.01;   // `through`: a drawn face standing out of the other pass's surface by less than this only touches it (a centimetre, SKY_CRACK_M's floor)
 const BOTTOM_PSI_MAX = 45 * DEG;   // the bottom is read only on a section this flat: a wall side or a tube has no bottom beside its edge
 const CURL_PSI = 60 * DEG;    // a piece whose section turns past this anywhere curls into a wall side or a tube
 const BOTTOM_CLEAR_M = 25;    // and the bottom is read only this far clear of one: its twisted zone, the 4 m pad and the 10 m ease (underskin.js), with margin
@@ -153,6 +162,26 @@ function edgeGroups() {
     if (out.count[g] < 3) out.count[g]++;
   };
   return out;
+}
+
+/**
+ * How far the drawn triangle v stands out of the drivable triangle w (unit normal n, its drivable side) over w ITSELF: v clipped to the prism on w (its three edge
+ * planes along n, Sutherland-Hodgman), then the clipped polygon's highest point over w's plane; 0 when nothing of v is over w on its drivable side. Over w's
+ * infinite plane a long skin triangle tilted to the road stood 179 mm "out" of a road it only grazed by 5 mm (export_finalscene row 12).
+ */
+function standOut(v, w, n) {
+  let poly = v.map((p) => p.slice());
+  for (let e = 0; e < 3 && poly.length; e++) {
+    const a = w[e], b = w[(e + 1) % 3], c = w[(e + 2) % 3]; let m = cross(n, sub(b, a)); if (dot(sub(c, a), m) < 0) m = m.map((x) => -x);
+    const side = (p) => dot(sub(p, a), m), out = [];
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i], q = poly[(i + 1) % poly.length], sp = side(p), sq = side(q);
+      if (sp >= 0) out.push(p);
+      if ((sp >= 0) !== (sq >= 0)) { const t = sp / (sp - sq); out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t]); }
+    }
+    poly = out;
+  }
+  return poly.reduce((h, p) => Math.max(h, dot(sub(p, w[0]), n)), 0);
 }
 
 /** Group findings by kind, piece and family, each with its count and its worst place, into one message apiece. */
@@ -372,6 +401,55 @@ function checkFinalScene(scene, { path, segments, lane = null, open = false, det
   }
   for (const side of [...runs.keys()]) flush(side);
 
+  // THROUGH: the drivable faces' stations, least and most, per PASS_CELL_M cell (a typed table, as the triangles'); a cell is read for a drawn face when it holds a
+  // drivable face of another pass (its least or its most station is PASS_M or more from the drawn face's); then each such drawn face against each drivable face of
+  // another pass in its cells
+  const through = [], closedLap = !open, apart = (a, b) => { const d = Math.abs(a - b); return (closedLap ? Math.min(d, sEnd - d) : d) > PASS_M; };
+  const cells = tripleIds(); let sLo = new Float64Array(1 << 12), sHi = new Float64Array(1 << 12);
+  const cellsOf = (v, f) => { const lo = [0, 1, 2].map((k) => Math.floor(Math.min(v[0][k], v[1][k], v[2][k]) / PASS_CELL_M)), hi = [0, 1, 2].map((k) => Math.floor(Math.max(v[0][k], v[1][k], v[2][k]) / PASS_CELL_M));
+    for (let x = lo[0]; x <= hi[0]; x++) for (let y = lo[1]; y <= hi[1]; y++) for (let z = lo[2]; z <= hi[2]; z++) f(x, y, z); };
+  const filed = (x, y, z) => { const before = cells.size, c = cells.id(x, y, z); return c === before ? -1 : c; };   // the cell's number, or -1 when no drivable face is filed there
+  const nFiled = (() => {
+    for (let i = 0; i < N; i++) {
+      if (!tHasN[i] || !DRIVABLE.has(meshes[tMesh[i]].f)) continue;
+      const sq = S[tQ[i]].s;
+      cellsOf(tri(i).v, (x, y, z) => {
+        const before = cells.size, c = cells.id(x, y, z);
+        if (c >= sLo.length) { const a = new Float64Array(2 * sLo.length), b = new Float64Array(2 * sHi.length); a.set(sLo); b.set(sHi); sLo = a; sHi = b; }
+        if (c === before) { sLo[c] = sq; sHi[c] = sq; } else { if (sq < sLo[c]) sLo[c] = sq; if (sq > sHi[c]) sHi[c] = sq; }
+      });
+    }
+    return cells.size;
+  })();
+  const wanted = new Map(), drawnFaces = [];   // a wanted cell -> its drivable faces; the drawn faces that meet one
+  for (let i = 0; i < N; i++) {
+    const f = meshes[tMesh[i]].f; if (!tHasN[i] || DRIVABLE.has(f)) continue;
+    const t = tri(i); if (atEnd(t.q)) continue;
+    let any = false;
+    cellsOf(t.v, (x, y, z) => { const c = filed(x, y, z); if (c >= 0 && c < nFiled && (apart(t.q.s, sLo[c]) || apart(t.q.s, sHi[c]))) { any = true; if (!wanted.has(c)) wanted.set(c, []); } });
+    if (any) drawnFaces.push(i);
+  }
+  if (wanted.size) {
+    for (let i = 0; i < N; i++) {
+      if (!tHasN[i] || !DRIVABLE.has(meshes[tMesh[i]].f)) continue;
+      cellsOf(tri(i).v, (x, y, z) => { const c = filed(x, y, z), l = c >= 0 ? wanted.get(c) : null; if (l) l.push(i); });
+    }
+    const meets = (p, q, t) => { const d = sub(q, p), e1 = sub(t[1], t[0]), e2 = sub(t[2], t[0]), h = cross(d, e2), a = dot(e1, h); if (Math.abs(a) < 1e-12) return false; const u = dot(sub(p, t[0]), h) / a; if (u < 0 || u > 1) return false; const qq = cross(sub(p, t[0]), e1), v = dot(d, qq) / a; if (v < 0 || u + v > 1) return false; const w = dot(e2, qq) / a; return w > 1e-6 && w < 1 - 1e-6; };
+    for (const i of drawnFaces) {
+      const t = tri(i), v = t.v, near = new Set(), sv = v.map((p) => S[walk(tQ[i], p, null)].s);   // each corner's station, walked from the face's own
+      cellsOf(v, (x, y, z) => { const c = filed(x, y, z), l = c >= 0 ? wanted.get(c) : null; if (l) for (const j of l) near.add(j); });
+      let worst = -1, phys = null, other = null;
+      for (const j of near) {
+        const g = tri(j); if (!sv.every((x) => apart(x, g.q.s))) continue;
+        const w = g.v; if (![[0, 1], [1, 2], [2, 0]].some(([a, b]) => meets(v[a], v[b], w) || meets(w[a], w[b], v))) continue;
+        const out = standOut(v, w, g.n);   // how far the drawn face stands out on the drivable side, over the drivable face itself
+        if (out < THROUGH_MIN_M) continue;
+        if (out > worst) { worst = out; phys = g.f; other = detail ? { mesh: t.mesh, with: g.mesh, sWith: g.q.s } : null; }
+      }
+      if (phys) through.push({ kind: 'through', piece: pieceOf(t.q), fam: t.f, phys, s: t.q.s, u: t.u, worst: Math.max(0, worst), at: other });
+    }
+  }
+
   // the messages
   const where = (g) => `at ${place(g.s, g.u)}, in piece ${g.piece}`, mm = (x) => `${(x * 1000).toFixed(0)} mm`;
   refuse.push(...grouped(across, (g) => `${g.count} face(s) of ${NAMES[g.fam]} stand across the road ${where(g)}: a step in the road's edge the car would hit`));
@@ -379,7 +457,8 @@ function checkFinalScene(scene, { path, segments, lane = null, open = false, det
   warn.push(...grouped(opens.filter((o) => !o.drivable), (g) => `${g.count} edge(s) of ${NAMES[g.fam]} are open by up to ${g.worst >= 1 ? 'a metre or more' : mm(g.worst)} ${where(g)}: a line of sky through the hull`));
   warn.push(...grouped(steps, (g) => `the hull's bottom steps ${g.worst.toFixed(3)} m in a metre against the bottom either side ${where(g)} (at most ${BOTTOM_STEP_M} m): a step in its underside`));
   warn.push(...grouped(thin, (g) => `${g.count} triangle(s) of ${NAMES[g.fam]} thinner than ${(SLIVER * 1000).toFixed(0)} mm ${where(g)}: slivers`));
-  return detail ? { refuse, warn, detail: { opens, hairline, folds: [...most.values()], steps, across, thin, rays: rays.length, read, compared, depths } } : { refuse, warn };
+  warn.push(...grouped(through, (g) => `${g.count} face(s) of ${NAMES[g.fam]} pass through ${NAMES[g.phys]} of another pass (standing up to ${g.worst >= 1 ? `${g.worst.toFixed(2)} m` : mm(g.worst)} out of it) ${where(g)}: the hull shows through a surface the car drives on`));
+  return detail ? { refuse, warn, detail: { opens, hairline, folds: [...most.values()], steps, across, thin, through, rays: rays.length, read, compared, depths } } : { refuse, warn };
 }
 
 /** One line for an export message: every finding, LISTED at most, the rest counted. */
@@ -388,4 +467,4 @@ function sayFindings(list) {
   return shown.join('; ') + (list.length > LISTED ? `; and ${list.length - LISTED} more` : '');
 }
 
-module.exports = { checkFinalScene, sayFindings, tripleIds, edgeGroups, ACROSS_DEG, LANE_END_M, FOLD_SLACK_DEG, BOTTOM_STEP_M, COVER, DRIVE_CRACK_M, SKY_CRACK_M, END_M };
+module.exports = { checkFinalScene, sayFindings, tripleIds, edgeGroups, PASS_M, THROUGH_MIN_M, ACROSS_DEG, LANE_END_M, FOLD_SLACK_DEG, BOTTOM_STEP_M, COVER, DRIVE_CRACK_M, SKY_CRACK_M, END_M };

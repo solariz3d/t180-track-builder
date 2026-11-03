@@ -41,6 +41,16 @@ const MUTATIONS = [
   { id: 'F18 the second triangle at an edge is not filed (the fold reads the first against nothing)', in: 'finalscene', from: 'if (out.count[g] === 1) out.second[g] = s;', to: '', caughtBy: 'row 5: each defect made by hand' },
   { id: 'F19 the weld table loses its vertices when it grows', in: 'finalscene', from: 'K2[3 * g + 2] = K[3 * h + 2]; V2[g] = V[h]; }', to: 'K2[3 * g + 2] = K[3 * h + 2]; }', caughtBy: "row 11: the triangles' tables keep every vertex" },
   { id: 'F20 the edge table loses its edges when it grows', in: 'finalscene', from: 'A2[g] = KA[h]; B2[g] = KB[h]; G2[g] = G[h]; }', to: 'A2[g] = KA[h]; B2[g] = KB[h]; }', caughtBy: "row 11: the triangles' tables keep every vertex" },
+  // a drawn face through another pass's road or apron (the hull hung through a pass running under it: ELYSIUM's p38)
+  { id: 'F21 a drawn face through another pass is never said', in: 'finalscene', from: 'if (phys) through.push(', to: 'if (false) through.push(', caughtBy: 'row 12: a drawn surface that passes through' },
+  { id: "F22 a drawn face is another pass's by its centre's station alone", in: 'finalscene', from: 'if (!sv.every((x) => apart(x, g.q.s))) continue;', to: 'if (!apart(t.q.s, g.q.s)) continue;', caughtBy: 'row 15: a drawn face is another pass' },
+  { id: 'F23 a drawn face must stand 2 m out to count', in: 'finalscene', from: 'const THROUGH_MIN_M = 0.01;', to: 'const THROUGH_MIN_M = 2;', caughtBy: 'row 13: ELYSIUM' },
+  { id: 'F24 another pass is any surface over a metre along the road', in: 'finalscene', from: 'const PASS_M = 25;', to: 'const PASS_M = 1;', caughtBy: 'row 15: a drawn face is another pass' },
+  { id: 'F25 a face that only grazes another pass is said', in: 'finalscene', from: 'const THROUGH_MIN_M = 0.01;', to: 'const THROUGH_MIN_M = 0;', caughtBy: 'row 12: a drawn surface that passes through' },
+  { id: "F26 a drawn face stands out by its corners over the other face's whole plane", in: 'finalscene', from: 'const out = standOut(v, w, g.n);', to: 'const out = Math.max(...v.map((p) => dot(sub(p, w[0]), g.n)));', caughtBy: 'row 15: a drawn face is another pass' },
+  // the export's warning by the builder's pass-clearance rule (src/validate/passclear.js), a stretch at a time
+  { id: 'F27 the export never warns by the pass-clearance rule', in: 'fromwords', from: 'for (const c of clearance) warnings.push(', to: 'for (const c of []) warnings.push(', caughtBy: 'row 14: the export warns by the builder' },
+  { id: 'F28 each station is its own stretch', in: 'fromwords', from: 'if (r && f.s - r.last.s <= DS_CLEAR_M', to: 'if (false && f.s - r.last.s <= DS_CLEAR_M', caughtBy: 'row 14: the export warns by the builder' },
   // the wiring in the export
   { id: 'W1 a drivable fault never refuses the export', in: 'fromwords', from: "if (!test) throw new ExportError('SCENE'", to: "if (false) throw new ExportError('SCENE'", caughtBy: 'row 7: the export gives the check' },
   { id: 'W2 a drawn fault is never passed on as a warning', in: 'fromwords', from: 'for (const w of sceneCheck.warn) warnings.push(', to: 'for (const w of []) warnings.push(', caughtBy: 'row 7: the export gives the check' },
