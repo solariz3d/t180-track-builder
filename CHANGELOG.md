@@ -5,6 +5,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.39] - 2026-11-03
+
 ### Added
 
 - **The builder will not lay a road too close over another.** Since the underside became a solid hull it hangs 1.5 m under the road, and up to 3 m under an edge that rises, so a pass built close over another road showed its hull through the road below, and at one crossing on ELYSIUM the two roads' edge planks run into each other. A road that passes over another must now keep its underside, and its edge aprons, 3.1 m clear of the road below and of that road's aprons: room for the car (its collision box rode at most 2.42 m over the road on a measured lap) and for the camera behind the car, its eye 3 m up. Over a flat road that is 4.6 m from road to road. A piece or an edit that would break it is refused, saying where and by how much, and nothing changes. A track that already breaks it still opens and can still be edited elsewhere; the track checker lists each place, and it is drawn red across the road of both passes in the view (a click on it in the list takes the view there, each click the next place). A lap's last piece laid along its start, before Close, is the lap's seam, not a pass. Every red the checker finds is now drawn on the road this way, not only this one. Upside down, a road keeps only the car's room, as its underside is on its far side. The export does not stop on it.
@@ -17,7 +19,6 @@ All notable changes to this project are recorded here. The format follows
 
 - **A roll that runs on through a joint no longer stops at it.** Every piece's bank ramp starts and ends at rest, so where the next piece kept rolling the same way, the road's roll stopped at the joint and started again: a corkscrew of 250 m pieces banking 90° each rolled at about 0.5 °/m mid-piece and almost 0 at every joint, and a car off the centre felt each one as a bump (about 30 to 115 m/s² at the driven line and speed in a replay of it). Where two pieces meet like that, the built road now rolls through the joint at the two pieces' joint rate, smoothly from the middle of one to the middle of the next; the bank at every joint is still the one the pieces set, and nothing else about either piece changes. A roll that turns back at a joint, or a bank held between two rolls, is built as before. Saved tracks are carried as they are, without being changed. On ELYSIUM three joints roll on this way (at about 6,450 m, 9,100 m and 11,600 m), so the road there leans up to 3° differently than before.
 - **A bank of exactly ±360° is a full turn of roll.** Typed into the bank field, 360 or -360 was read as 0 (the field keeps the bank within one turn), so after banking to -270° a piece meant to finish the turn rolled 270° back to upright instead. Exactly one turn is now kept as one; past one turn the bank still wraps as before.
-
 
 ## [0.4.38] - 2026-11-02
 

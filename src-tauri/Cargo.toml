@@ -1,6 +1,6 @@
 [package]
 name = "t180-track-builder"
-version = "0.4.38"
+version = "0.4.39"
 description = "T-180 Track Builder: shape Assetto Corsa tracks piece by piece, for normal cars and the T-180s, and export a folder AC can load"
 authors = ["solariz3d"]
 edition = "2021"
