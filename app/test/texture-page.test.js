@@ -20,8 +20,8 @@
 //      menu that the menu partly covers is left out, by name). It was titled row 6 beside the other row 6 until renumbered
 //  10  every dialog the page draws (save before closing, Export layouts, Export for Blender) reads 4.5:1 or more on its own pixels in every look, each
 //      enabled button among them: Aqua's pale gel pills carried the dialogs' light --accent and --dim words at 1.06 and 1.20 : 1 (the user, 0.4.31)
-//   9  the warning texts read 4.5:1 or more on their own pixels in EVERY look: the checker's red, amber and lap lines (a 150 m piece turning 720°, which
-//      crosses itself and loads hard, gives both), and every text in Track ▸ Pit lane… with the lane on (its status note and fields). Each look's own
+//   9  the warning texts read 4.5:1 or more on their own pixels in EVERY look: the checker's red, amber and lap lines (a 30 m piece turning 120°, too tight
+//      for the road's width, which folds and lays its folded road low over itself, gives both), and every text in Track ▸ Pit lane… with the lane on (its status note and fields). Each look's own
 //      --bad-text and --warn-text are what these read in; before them the lines wore the 3D road's paint colours (skyline's amber read 1.1:1)
 //  11  the hover card (app/hovertip.js) reads 4.5:1 or more on its own pixels in EVERY look: the pointer moved onto the bank's "early" box by a real
 //      mouse event, the card shown after its delay, every text in it read by the probe above
@@ -267,9 +267,12 @@ test('row 9: the warning texts (the checker\'s red, amber and lap lines, and Tra
   const report = [], under = [];
   for (const look of LOOKS) {
     await load(look);
-    // a 150 m piece turning 720° (the turn field reads a corner's degrees): it crosses itself (red) and loads hard (amber)
+    // AMENDED BY NAME (2026-11-03, the pass clearance): this row laid a 150 m piece turning 720°, which crosses itself, and the builder now refuses to
+    // lay it (the user: "forbid building the track a little closer because of the bulk of the underside"), so the checker listed nothing. A 30 m piece
+    // turning 120° (the turn field reads a corner's degrees) never comes back over its start and is laid: too tight for the road's width, it folds (red)
+    // and lays its folded road low over itself (amber)
     await ev(`const f = (lab) => [...document.querySelectorAll('#palette label')].find((l) => l.firstChild && l.firstChild.textContent.trim().startsWith(lab));
-      for (const [lab, v] of [['length', '150'], ['turn', '720']]) { const r = f(lab); const i = r && r.querySelector('input'); if (i) { i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); } } return true;`);
+      for (const [lab, v] of [['length', '30'], ['turn', '120']]) { const r = f(lab); const i = r && r.querySelector('input'); if (i) { i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); } } return true;`);
     await extend(1);
     let lines = [];
     for (let i = 0; i < 60; i++) { await sleep(250); lines = await ev("return [...document.querySelectorAll('#validation li')].map((l) => l.textContent.slice(0, 6));"); if (lines.some((x) => /^red:/.test(x)) && lines.some((x) => /^amber/.test(x))) break; }
