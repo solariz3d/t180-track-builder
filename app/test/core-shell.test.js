@@ -35,9 +35,10 @@ const R = 180, Q = Math.PI * R / 2;
 /** A lap one click from closed: a 300 m straight, four quarter turns (each reaching 1/R over 40 m), and a straightening. */
 async function lap(opts = {}) {
   const s = await createCoreShell({ brushFn: null, ...opts });
-  s.extend({ length: 300, family: 'bowl' });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); }
   assert.equal(s.getState().message, null);
   return s;
 }
@@ -249,9 +250,10 @@ test('a lap that starts pitched, turned and off the origin: the preview starts a
   const { createTrackModel } = require('../preview/trackmodel.js'), st = memStorage(), ex = await makeExporter(fromDisk);
   const s = await createCoreShell({ storage: st, exporter: ex, brushFn: null });
   s.adopt(D.createDoc('pitched', { start: { pos: [40, 12, -25], heading: 0.9, pitch: 0.06 } }));
-  s.extend({ length: 300, family: 'bowl', targets: { kv: 0 } });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl', targets: { kv: 0 } });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); }
   const d = s.getState().history.present, ref = toPath(d).path, tm = createTrackModel(), shown = tm.update(s.getState().resolved).path;
   for (let c = 0; c < 3; c++) { close(shown.samples[0].pos[c], d.start.pos[c], 1e-9, 'start'); close(shown.head.pos[c], ref.head.pos[c], 1e-6, 'head'); }
   s.close(); assert.equal(s.getState().history.present.closed, true, s.getState().message);
@@ -295,9 +297,10 @@ const acTreeCore = (...inside) => { const root = fs.mkdtempSync(path.join(os.tmp
 /** A closed lap (the plain bowl lap) whose first piece may carry options, with the real exporter; `exporter` is swappable to stand in for a red. */
 async function closedLap(st, ex, first = undefined) {
   const s = await createCoreShell({ brushFn: null, storage: st, exporter: ex });
-  s.extend({ length: 300, family: 'bowl', ...(first ? { first } : {}) });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } }); assert.equal(s.getState().message, null); s.close(); assert.equal(s.getState().history.present.closed, true, s.getState().message); return s;
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl', ...(first ? { first } : {}) });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); } assert.equal(s.getState().message, null); s.close(); assert.equal(s.getState().history.present.closed, true, s.getState().message); return s;
 }
 const GONE = /removed the empty folder "T180 TUBE V2" so Content Manager does not list it/;
 const refusedAndGone = (s, st, picked, why) => {

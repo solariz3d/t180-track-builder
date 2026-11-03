@@ -20,6 +20,15 @@
 //  11  the triangles' tables (the welded vertices, the edges) keep every entry as they grow: one number per vertex and one group per edge, in the order first
 //      seen. A table that lost entries would file them again as duplicates, which the open-edge check reads as covered (they coincide), so a clean lap
 //      cannot show it
+//  12  two passes, one lap's edge over the next lap's (a spiral of a lap and a half): the check warns nothing (a light hull's long triangle at a piece
+//      joint touched the next piece's apron, and its centre's station made it another pass's); a copy of an upper skin cell laid onto the lower road by hand
+//      warns, at its piece and station; a small drawn face 5 mm out of the lower road only grazes it and is not said, and one 50 mm out is
+//  13  ELYSIUM (the fixture): its p38's hull, hung 2 to 3 m under a rising edge, passes through p40's road and apron, and the check says so in piece p38
+//  14  the export warns by the builder's own pass-clearance rule (src/validate/passclear.js passClearance, called, not copied), one warning a stretch where
+//      another pass comes within the car's room: on the two passes, the stretches are the rule's own findings; the clean pit lap has none
+//  15  on the two passes, faces made by hand: a long face with two corners on its own pass's road is that pass's, though its centre lies 40 m on; a face
+//      climbing out of a road face 4 mm over the face itself only grazes it, though it stands 50 mm over its plane further on; a road face filed under the
+//      piece before, 15 m back along the road, is the same pass. Each beside a control that is said
 // Rows 2-4 were red on the commits before their fixes: 8fb6ecc (the notch) and e911792 (the bottom's step and the tubes); see the hand-back.
 'use strict';
 const test = require('node:test');
@@ -265,4 +274,108 @@ test('row 11: the triangles\' tables keep every vertex and every edge as they gr
   for (let g = 0; g < E; g++) {
     if (ed.first[g] !== 2 * g || ed.second[g] !== 2 * g + 1 || ed.count[g] !== (g % 7 === 0 ? 3 : 2)) assert.fail(`edge ${g}: first ${ed.first[g]}, second ${ed.second[g]}, count ${ed.count[g]}`);
   }
+});
+
+// two passes: a lap at radius 120 m, then 0.6 of a lap 21 m further in, climbing 3.4 m a lap, so the second lap's edge apron comes down by the first lap's inner
+// edge, through the hull's run under that edge's plank
+function twoPasses() {
+  const gap = 3.4, R1 = 120, R2 = R1 - 21, turn = 2 * Math.PI * R1, p = Math.atan(gap / turn);
+  let d = D.createDoc('two passes'); d = { ...d, start: { ...d.start, pitch: p } };
+  d = extend(d, { length: 300, family: 'bowl', first: { w: 20, c: 15.5 } });
+  d = extend(d, { length: 0.75 * turn, transition: 40, targets: { kh: Math.cos(p) / R1 } });
+  return extend(d, { length: 0.6 * 2 * Math.PI * R2, transition: 40, targets: { kh: Math.cos(p) / R2 } });
+}
+
+test("row 12: a drawn surface that passes through another pass's road or apron warns at its piece and station, and the two passes alone warn nothing", () => {
+  const b = exportDoc(twoPasses(), { test: true, lightHull: false }), clean = checked(b);
+  assert.deepEqual(b.test.reds, [], 'control: the two passes export as a clean test route');
+  assert.deepEqual(clean.warn.filter((f) => f.kind === 'through').map((f) => f.message), []);
+  assert.deepEqual(checkedLight().warn.filter((f) => f.kind === 'through').map((f) => f.message), [], 'and with the light hull, whose long triangles cross piece joints');
+  // a copy of one of the upper lap's skin cells (its station about 1,029 m), laid onto the lower lap's road where it passes under (about 286 m); a copy, so the
+  // cell's own place keeps its skin (moved away, its apron's tip edge opened, a crack the check refuses)
+  const scene = (AR.weldApronJoints || ((x) => x))(AR.weldSeams(AR.flattenForAc(b.scene))), S = b.path.samples, at = (s) => S.reduce((a, q) => (Math.abs(q.s - s) < Math.abs(a.s - s) ? q : a)).pos;
+  const up = at(1029), low = at(286), cen = (n) => { const P = n.positions, c = [0, 0, 0]; for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) c[k] += P[i + k] / (P.length / 3); return c; };
+  const skin = scene.root.children.filter((n) => n.type === 'mesh' && /^UNDERSKIN_p3_body_/.test(n.name)).reduce((a, n) => (Math.hypot(...cen(n).map((x, k) => x - up[k])) < Math.hypot(...cen(a).map((x, k) => x - up[k])) ? n : a));
+  const c = cen(skin), d = low.map((x, k) => x - c[k]);
+  const moved = { ...scene, root: { ...scene.root, children: [...scene.root.children, { ...skin, name: `${skin.name}_copy`, positions: Float32Array.from(skin.positions, (x, i) => x + d[i % 3]) }] } };
+  const r = FS.checkFinalScene(moved, { path: b.path, segments: b.segments, open: true }), through = r.warn.filter((f) => f.kind === 'through');
+  assert.equal(through.length, 1, r.warn.map((f) => f.message).join('; '));
+  assert.match(through[0].message, /^\d+ face\(s\) of the underside skin pass through (the road|the edge apron) of another pass \(standing up to .* out of it\) at .* in piece p3: the hull shows through a surface the car drives on$/);
+  assert.ok(Math.abs(through[0].s - 1029) < 25, `found at s ${through[0].s}, made from the cell at s 1,029`);
+  assert.deepEqual(r.refuse, [], 'drawn only: nothing is refused');
+  // a small drawn face across one face of the lower road, two corners 20 mm under it and one standing H over it, all within it: at 5 mm it only grazes the road
+  // (under the floor, THROUGH_MIN_M) and is not said; at 50 mm it is
+  const road = scene.root.children.filter((n) => n.type === 'mesh' && /^1ROAD_p1_body_/.test(n.name)).reduce((x, n) => (Math.hypot(...cen(n).map((v, k) => v - low[k])) < Math.hypot(...cen(x).map((v, k) => v - low[k])) ? n : x));
+  const w = [0, 1, 2].map((j) => { const i = road.indices[j] * 3; return [road.positions[i], road.positions[i + 1], road.positions[i + 2]]; });
+  const sb = (p, o) => [p[0] - o[0], p[1] - o[1], p[2] - o[2]], cr = (p, o) => [p[1] * o[2] - p[2] * o[1], p[2] * o[0] - p[0] * o[2], p[0] * o[1] - p[1] * o[0]], un = (p) => { const l = Math.hypot(...p); return p.map((x) => x / l); };
+  const n = un(cr(sb(w[1], w[0]), sb(w[2], w[0]))), e1 = un(sb(w[1], w[0])), e2 = cr(n, e1), c0 = [0, 1, 2].map((k) => (w[0][k] + w[1][k] + w[2][k]) / 3);
+  const pt = (x, y, h) => [0, 1, 2].map((k) => c0[k] + x * e1[k] + y * e2[k] + h * n[k]);
+  const face = (H) => ({ type: 'mesh', name: `UNDERSKIN_p3_body_graze_${H}`, visible: true, renderable: true, positions: Float32Array.from([...pt(-0.08, -0.05, -0.02), ...pt(0.08, -0.05, -0.02), ...pt(0, 0.08, H)]), normals: new Float32Array(9), uvs: new Float32Array(6), indices: Uint16Array.from([0, 1, 2]) });
+  const said = (H) => FS.checkFinalScene({ ...scene, root: { ...scene.root, children: [...scene.root.children, face(H)] } }, { path: b.path, segments: b.segments, open: true }).warn.filter((f) => f.kind === 'through').map((f) => f.message);
+  assert.deepEqual(said(0.005), [], "a face 5 mm out of the other pass's road only grazes it");
+  assert.equal(said(0.05).length, 1, 'a face 50 mm out of it is said');
+});
+const checkedLight = () => checked(exportDoc(twoPasses(), { test: true }));
+
+test("row 13: ELYSIUM: its p38's hull passes through p40's road and apron, and the check says so in piece p38", () => {
+  const doc = D.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'elysium-2026-10-22.t180track'), 'utf8')), b = exportDoc(doc), r = checked(b);
+  const through = r.warn.filter((f) => f.kind === 'through');
+  assert.ok(through.some((f) => f.piece === 'p38' && /of the underside skin pass through (the road|the edge apron) of another pass/.test(f.message)), through.map((f) => f.message).join('; ') || 'nothing found');
+  assert.deepEqual(r.refuse, [], 'drawn only: nothing is refused');
+});
+
+test("row 14: the export warns by the builder's pass-clearance rule, a stretch at a time, and the clean pit lap has no such warning", () => {
+  const { passClearance, CAR_MARGIN_M } = require('../src/validate/passclear.js');
+  const b = exportDoc(twoPasses(), { test: true }), said = b.warnings.filter((w) => w.startsWith('clearance: '));
+  const found = passClearance(b.path, b.segments, { apronM: 2 });
+  assert.ok(found.length > 0, "control: by the rule, the two passes are closer than the car's room");
+  assert.equal(said.length, b.clearance.length, 'one warning a stretch');
+  assert.ok(said.length > 0 && said.length <= found.length, `${said.length} warnings for ${found.length} stations`);
+  assert.equal(said.length, 1, `the rule's ${found.length} stations, 2 m apart against one other pass, are one stretch`);
+  for (const w of said) assert.match(w, new RegExp(`^clearance: another stretch of the road \\(at [0-9.]+ km\\) passes [0-9.]+ m (over|through) the road at .* where a car needs ${CAR_MARGIN_M.toFixed(1)} m: [0-9.]+ m short.*The builder refuses an edit that brings a pass this close$`));
+  // every station the rule found lies in a stretch, and each stretch's worst is the rule's own
+  for (const x of found) assert.ok(b.clearance.some((c) => x.s >= c.s0 - 1e-9 && x.s <= c.s1 + 1e-9), `the rule's station s ${x.s} is in a stretch`);
+  for (const c of b.clearance) assert.equal(c.shortM, Math.max(...found.filter((x) => x.s >= c.s0 - 1e-9 && x.s <= c.s1 + 1e-9).map((x) => x.shortM)));
+  assert.deepEqual(b.test.reds, [], 'a warning, not a red');
+  assert.deepEqual(pitLap().warnings.filter((w) => w.startsWith('clearance: ')), []);
+});
+
+test("row 15: a drawn face is another pass's only when all its corners are, 15 m along the road is the same pass, and it stands out by what lies over the road face", () => {
+  const b = exportDoc(twoPasses(), { test: true, lightHull: false }), S = b.path.samples, scene = (AR.weldApronJoints || ((x) => x))(AR.weldSeams(AR.flattenForAc(b.scene)));
+  const at = (s) => S.reduce((a, q) => (Math.abs(q.s - s) < Math.abs(a.s - s) ? q : a));
+  const sb = (p, o) => [p[0] - o[0], p[1] - o[1], p[2] - o[2]], cr = (p, o) => [p[1] * o[2] - p[2] * o[1], p[2] * o[0] - p[0] * o[2], p[0] * o[1] - p[1] * o[0]], un = (p) => { const l = Math.hypot(...p); return p.map((x) => x / l); };
+  const dt = (p, o) => p[0] * o[0] + p[1] * o[1] + p[2] * o[2];
+  // the lower lap's road face nearest the path at s: its corners, its unit normal (its drivable side, as row 12's), the road's way along it in its plane and across
+  // it, and pt(x along, y across, h out) from its centre
+  const faceAt = (s) => {
+    const q = at(s); let w = null, bd = Infinity;
+    for (const m of scene.root.children) if (m.type === 'mesh' && /^1ROAD_p[0-9]+_body_/.test(m.name)) for (let t = 0; t < m.indices.length; t += 3) {
+      const v = [0, 1, 2].map((j) => { const i = m.indices[t + j] * 3; return [m.positions[i], m.positions[i + 1], m.positions[i + 2]]; }), c = [0, 1, 2].map((k) => (v[0][k] + v[1][k] + v[2][k]) / 3), d = Math.hypot(...sb(c, q.pos));
+      if (d < bd) { bd = d; w = v; }
+    }
+    const n = un(cr(sb(w[1], w[0]), sb(w[2], w[0]))), along = un(sb(q.T, n.map((x) => x * dt(q.T, n)))), across = cr(n, along), c0 = [0, 1, 2].map((k) => (w[0][k] + w[1][k] + w[2][k]) / 3);
+    // how far from the centre, straight along, the face ends (its edge the ray leaves by)
+    const P = w.map((p) => [dt(sb(p, c0), along), dt(sb(p, c0), across)]); let xe = Infinity;
+    for (let e = 0; e < 3; e++) { const [a, c] = [P[e], P[(e + 1) % 3]]; if ((a[1] > 0) !== (c[1] > 0)) { const x = a[0] + ((c[0] - a[0]) * a[1]) / (a[1] - c[1]); if (x > 0) xe = Math.min(xe, x); } }
+    return { w, xe, pt: (x, y, h) => [0, 1, 2].map((k) => c0[k] + x * along[k] + y * across[k] + h * n[k]) };
+  };
+  const mesh = (name, pts) => ({ type: 'mesh', name, visible: true, renderable: true, positions: Float32Array.from(pts.flat()), normals: new Float32Array(3 * pts.length), uvs: new Float32Array(2 * pts.length), indices: Uint16Array.from([0, 1, 2]) });
+  const said = (...extra) => FS.checkFinalScene({ ...scene, root: { ...scene.root, children: [...scene.root.children, ...extra] } }, { path: b.path, segments: b.segments, open: true }).warn.filter((f) => f.kind === 'through').map((f) => f.message);
+  // (1) a long drawn face of the lower lap's own piece through its own road at s 400, 50 mm out over the road face, its third corner 120 m out along the road's way
+  // and 12 m up: its centre's station is some 40 m on, but two of its corners are on the road it crosses, so it is the same pass and not said
+  const a = faceAt(400), longPts = [a.pt(-0.05, -0.08, -0.02), a.pt(-0.05, 0.08, -0.02), a.pt(120, 0, 12)];
+  assert.ok(a.xe > 0.25, `control: the road face reaches ${a.xe} m on, past where the long face comes out of it`);
+  assert.equal(said(mesh('UNDERSKIN_p3_body_long', longPts)).length, 1, "control: the same face filed under the upper lap's piece is said");
+  assert.deepEqual(said(mesh('UNDERSKIN_p2_body_long', longPts)), [], "a face with corners on its own pass's road is that pass's, wherever its centre lies");
+  // (2) the upper lap's drawn face laid onto the lower road at s 286 (as row 12's), climbing out of the road face so gently that over the face itself it stands 4 mm
+  // out (under THROUGH_MIN_M), and 50 mm only some metres on, where it is over no face it crosses: not said
+  const g = faceAt(286), k = 0.008 / g.xe, x0 = g.xe / 2, slope = mesh('UNDERSKIN_p3_body_slope', [g.pt(0, -0.02, -k * x0), g.pt(0, 0.02, -k * x0), g.pt(x0 + 0.05 / k, 0, 0.05)]);
+  const k5 = 5 * k;   // control: five times as steep, it stands 20 mm out over the road face itself, and is said
+  assert.equal(said(mesh('UNDERSKIN_p3_body_steeper', [g.pt(0, -0.02, -k5 * x0), g.pt(0, 0.02, -k5 * x0), g.pt(x0 + 0.05 / k5, 0, 0.05)])).length, 1, 'control: 20 mm out over the road face is said');
+  assert.deepEqual(said(slope), [], `a face 4 mm out over the road face it crosses only grazes it, though it is 50 mm over that face's plane ${(x0 + 0.05 / k).toFixed(1)} m on`);
+  // (3) one face of the lower road at s 315 copied and filed under the piece before it, p1, whose own station there is its end (300): a drawn face of p2 through it,
+  // 50 mm out, is 15 m along the road from it, the same pass, and not said
+  const c = faceAt(315), copy = mesh('1ROAD_p1_body_copy', c.w), near = mesh('UNDERSKIN_p2_body_near', [c.pt(-0.08, -0.05, -0.02), c.pt(0.08, -0.05, -0.02), c.pt(0, 0.08, 0.05)]);
+  assert.equal(said(mesh('1ROAD_p3_body_copy', c.w), near).length, 1, "control: the same face filed under the upper lap's piece is another pass's, and said");
+  assert.deepEqual(said(copy, near), [], 'a road face 15 m along the road is the same pass');
 });

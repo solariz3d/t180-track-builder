@@ -82,7 +82,8 @@ const PitLane = require('./pitlane.js');
 const PitBoxes = require('./pitboxes.js');
 const { withTextureSet } = require('../texture/set.js');
 const { withUnderskin } = require('./underskin.js');
-const { withApron, APRON_WIDTH_M } = require('./apron.js');   // the edge apron (src/export/apron.js)
+const { withApron, APRON_WIDTH_M } = require('./apron.js');
+const { passClearance } = require('../validate/passclear.js');   // the pass-clearance rule the builder refuses by (src/validate/passclear.js); here, a warning   // the edge apron (src/export/apron.js)
 const { withLightHull } = require('./lighthull.js');   // the hull's bottom with as few triangles as its shape needs
 const { withCatch, catchCells, rangesOfAmber, CATCH_OFFSET_M } = require('./catch.js');   // a physical catch under the road (src/export/catch.js)
 const { withGripKeys } = require('./gripkeys.js');
@@ -350,6 +351,12 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
     testReds.push(`scene: ${t}`);
   }
   for (const w of sceneCheck.warn) warnings.push(`scene: ${w.message}`);
+  // THE PASS-CLEARANCE RULE (the builder's own, src/validate/passclear.js, called and not copied): where another pass of the road, with its plank and its hull,
+  // comes within the car's room over this road (CAR_MARGIN_M), a warning a stretch: the stations in a row (DS_CLEAR_M apart at most) that meet the same other
+  // pass (its stations OTHER_CLEAR_M apart at most), at its worst. A warning, not a refusal: the builder refuses the edit that makes it; a track already this
+  // close still exports, and says where
+  const apronM = o.edgeApronM === undefined ? APRON_WIDTH_M : o.edgeApronM, clearance = clearanceRuns(passClearance(p, segs, { apronM }));
+  for (const c of clearance) warnings.push(`clearance: ${c.message}`);
   // acScene: the very scene the kn5 is written from (flat, welded, merged, with diffuse textures), returned too so the export for Blender (src/export/gltf.js) serialises the same meshes
   const acScene = ensureDiffuse(o.mergeMeshes === false ? welded : mergeForAc(welded)), kn5 = Buffer.from(writeKn5(acScene));
   stage('reading the kn5 back');
@@ -371,11 +378,31 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   const turn = segs.reduce((a, g) => a + ((g.k0 + g.k1) / 2) * g.length, 0);
   return {
     folder: o.folder || folderName(doc) + (test ? '_test' : ''), scene, acScene, kn5, ai, test: test ? { reds: testReds, runoffM: TEST_RUNOFF_M, wall: TEST_WALL_NAME } : null, path: p, segments: segs, geometry: geometryOf(p, segs), resolvedVia: via, validation: v, markers: mk, markerChecks: mc, pitLane: pit ? pit.lane : null, sceneCheck,
-    readback: { version: back.version, meshes: back.meshes.length, dummies: back.dummies.map((d) => d.name) },
+    clearance, readback: { version: back.version, meshes: back.meshes.length, dummies: back.dummies.map((d) => d.name) },
     aiLine: line ? { points: line.points.length, lengthM: line.points[line.points.length - 1].length + line.extra[line.extra.length - 1].length, speedKmh: line.speedKmh } : null,
     desc: { name: (doc.name || 'Untitled') + (test ? ' (test, unfinished)' : ''), description: meta.description || 'Built by t180-track-builder.', length: p.lengthM, width: roadWidthM(segs), run: turn >= 0 ? 'counterclockwise' : 'clockwise', tags: ['t180', 'original', BUILDER], author, version: '0.1' },
     warnings,
   };
+}
+
+/**
+ * The pass-clearance findings (passClearance: one a station, by s) as stretches: a finding joins the stretch before it when its station is at most DS_CLEAR_M
+ * on and its other pass's station at most OTHER_CLEAR_M from the stretch's last. Each: { s0, s1, otherS, shortM, gapM, needM, clip, message }, at its worst
+ * (the most short).
+ */
+const DS_CLEAR_M = 6, OTHER_CLEAR_M = 30;
+function clearanceRuns(found) {
+  const runs = [];
+  for (const f of found) {
+    const r = runs[runs.length - 1];
+    if (r && f.s - r.last.s <= DS_CLEAR_M && Math.abs(f.otherS - r.last.otherS) <= OTHER_CLEAR_M) { r.last = f; r.s1 = f.s; if (f.shortM > r.worst.shortM) r.worst = f; r.clip = r.clip || f.clip; continue; }
+    runs.push({ s0: f.s, s1: f.s, last: f, worst: f, clip: !!f.clip });
+  }
+  const km = (x) => `${(x / 1000).toFixed(2)} km`;
+  return runs.map((r) => { const w = r.worst;
+    return { s0: r.s0, s1: r.s1, otherS: w.otherS, shortM: w.shortM, gapM: w.gapM, needM: w.needM, clip: r.clip,
+      message: `another stretch of the road (at ${km(w.otherS)}) passes ${w.gapM < 0 ? `${Math.abs(w.gapM).toFixed(2)} m through` : `${w.gapM.toFixed(2)} m over`} the road at ${km(r.s0)}${r.s1 > r.s0 ? ` to ${km(r.s1)}` : ''} (s ${r.s0.toFixed(0)}${r.s1 > r.s0 ? `–${r.s1.toFixed(0)}` : ''} m), where a car needs ${w.needM.toFixed(1)} m: ${w.shortM.toFixed(2)} m short${r.clip ? "; the two roads' own surfaces meet there" : ''}. The builder refuses an edit that brings a pass this close` };
+  });
 }
 
 /**

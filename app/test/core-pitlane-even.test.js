@@ -15,9 +15,12 @@ const R = 180, Q = Math.PI * R / 2, XS = { w: 35, c: 10, e: 20, s: 0.7 };
 const exporter = { checkTarget: () => ({ ok: true }), runSegments: (segs, meta, opts) => ({ result: FW.buildFromSegments(segs, meta, { markers: opts.markers }) }) };
 async function lap() {
   const s = await createCoreShell({ brushFn: null, exporter });
-  s.extend({ length: 600, family: 'bowl', first: { ...XS } });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R, ...XS } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0, ...XS } });
+  // AMENDED BY NAME (2026-11-02, the pass clearance): the lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid
+  // building the track a little closer because of the bulk of the underside"); made with the core's own pieces (turnby.js extendCorner) and opened (adopt), then closed
+  const TB = require('../../src/core/turnby.js');
+  let d = TB.extendCorner(s.getState().history.present, { length: 600, family: 'bowl', first: { ...XS } });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R, ...XS } });
+  s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0, ...XS } }));
   s.close();
   assert.equal(s.getState().history.present.closed, true, s.getState().message);
   return s;

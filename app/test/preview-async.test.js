@@ -48,9 +48,13 @@ const tick = () => new Promise((r) => setImmediate(r));
 
 async function openLap({ turns = 4, lastLen = 200, runner = null } = {}) {
   const s = await createCoreShell({ brushFn: null, autosaveMs: 0, overlapRunner: runner });
-  s.extend({ length: 300, family: 'bowl' });
-  for (let i = 0; i < turns; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: lastLen, transition: Math.min(40, lastLen), targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-02, the pass clearance): the lap's circle comes back onto its own first straight (and the coil's second circle onto its first), which the
+  // builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces from the core's own
+  // extendCorner (what the shell's extend runs), committed as one edit (commitDoc)
+  const TB = require('../../src/core/turnby.js');
+  let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' });
+  for (let i = 0; i < turns; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.commitDoc(TB.extendCorner(d, { length: lastLen, transition: Math.min(40, lastLen), targets: { kh: 0 } }));
   assert.equal(s.getState().message, null, s.getState().message); return s;
 }
 /** A NEAR lap, 8.87 m from closing (as in core-close-preview.test.js), optionally with a runner. */
@@ -185,7 +189,9 @@ test('row 3b: the check\'s TWO PARTS put together are EXACTLY the one-piece chec
   const coil = await openLap({ turns: 8, lastLen: 60 }), cp = closedCheck(coil); assert.ok(cp.check.overlaps.length > 0);
   assert.deepEqual(parts(cp.doc, true), clone(cp.check), 'a coil\'s Close (overlaps of three kinds)'); assert.deepEqual(parts(cp.doc, true, 120), clone(OJ.overlapCheck(OJ.resolveDoc(cp.doc), 120, { closed: true })), 'with a design speed');
   coil.cancelClose(); coil.selectPiece(0); coil.deleteSelection(); const dp = coil.getState().deleteProposal; assert.deepEqual(parts(dp.doc, false), clone(dp.check), 'a coil\'s delete');
-  const DEG = Math.PI / 180, j = await mk(); j.extend({ length: 200, family: 'bowl' }); j.extend({ length: 100, transition: 40, targets: { kh: 1 / 300 } }); j.commitDoc(D.appendPiece(j.getState().history.present, D.flightPiece({ forward: -30, left: 60, heading: Math.PI }))); j.extend({ length: 150 }); j.extend({ length: 150, transition: 40, targets: { kh: 1 / 200 } }); j.extend({ length: 100 });
+  const DEG = Math.PI / 180, j = await mk(); j.extend({ length: 200, family: 'bowl' }); j.extend({ length: 100, transition: 40, targets: { kh: 1 / 300 } }); j.commitDoc(D.appendPiece(j.getState().history.present, D.flightPiece({ forward: -30, left: 60, heading: Math.PI })));
+  // AMENDED BY NAME (2026-11-03, the pass clearance): the road after this jump runs back past its own take-off, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and committed as one edit (commitDoc)
+  { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(j.getState().history.present, { length: 150 }); d = TB.extendCorner(d, { length: 150, transition: 40, targets: { kh: 1 / 200 } }); j.commitDoc(TB.extendCorner(d, { length: 100 })); }
   // since the jumps core (fae3910) a flight is INTENDED, not red: the control's non-overlap red is a landing too short for the speed (core_jump row 3's), a 40 m jump taken at the 460 km/h design speed misses its landing ramp (checked: gap 40, drop 2, land -2 deg, 460: landing-misses-zone; 700: none)
   // CHANGED (the user: jumps are tuned by driving them): landing-misses-zone is a WARNING now, amber, so it is no longer in `others` (the reds).
   // The control becomes the jump's warning, which the merge must carry too (`amber`, a count). A non-overlap RED for this row would need another kind; a
@@ -193,7 +199,8 @@ test('row 3b: the check\'s TWO PARTS put together are EXACTLY the one-piece chec
   // CHANGED (the free jump): nothing is computed about where the car lands any more, so the jump's warning here is the free jump's own: its landing
   // is placed BEHIND its take-off (60 m to the left, 30 m back, turned round), jump-gap-not-forward, amber
   j.setDesignSpeed(460); j.selectPiece(1); j.deleteSelection(); const jp = j.getState().deleteProposal; assert.ok(jp.check.amber > 0 && !jp.check.others.some((x) => x.reason === 'jump-gap-not-forward'), 'control: the jump track carries the jump\'s warning (amber), not a red: ' + JSON.stringify({ amber: jp.check.amber, others: jp.check.others.map((x) => x.reason) })); assert.deepEqual(parts(jp.doc, false, 460), clone(jp.check), 'a track with a jump');
-  const cup = await mk(); cup.extend({ length: 300, family: 'bowl', first: { c: 45 } }); for (let i = 0; i < 4; i++) cup.extend({ length: Q, transition: 40, targets: { kh: 1 / R, c: 45 } }); cup.extend({ length: 100, transition: 40, targets: { kh: 0, c: 45 } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  const cup = await mk(); { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(cup.getState().history.present, { length: 300, family: 'bowl', first: { c: 45 } }); for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R, c: 45 } }); cup.adopt(TB.extendCorner(d, { length: 100, transition: 40, targets: { kh: 0, c: 45 } })); }
   cup.selectPiece(2); cup.deleteSelection(); assert.deepEqual(parts(cup.getState().deleteProposal.doc, false), clone(cup.getState().deleteProposal.check), 'a cup track');
   const tube = await mk(); tube.extend({ length: 300, first: { w: 40, t: 360 } }); for (let i = 0; i < 3; i++) tube.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); tube.extend({ length: 100, transition: 40, targets: { kh: 0 } });
   tube.selectPiece(1); tube.deleteSelection(); assert.deepEqual(parts(tube.getState().deleteProposal.doc, false), clone(tube.getState().deleteProposal.check), 'a tube track');

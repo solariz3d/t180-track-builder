@@ -31,10 +31,14 @@ function storage({ autosave = null, failSave = false } = {}) {
 }
 /** Timers the test runs by hand. */
 function handTimers() { const t = { due: [] }; t.setTimeout = (fn) => { t.due.push(fn); return t.due.length; }; t.clearTimeout = () => { t.due = []; }; t.run = async () => { const d = t.due; t.due = []; for (const f of d) await f(); }; return t; }
+// AMENDED BY NAME (2026-11-02, the pass clearance): the lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid
+// building the track a little closer because of the bulk of the underside"); the same pieces are made with the core's own extendCorner (what the shell's extend runs)
+// and committed as one edit (commitDoc), so the track is the same and still unsaved
 const extendLap = (s) => {
-  s.extend({ length: 300, family: 'bowl' });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  const TB = require('../../src/core/turnby.js');
+  let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.commitDoc(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } }));
 };
 const text = (s) => D.serialize(s.getState().history.present);
 
@@ -321,8 +325,11 @@ test(`extending ${EXTEND_AT_LEAST} pieces, a brush stroke and Close the loop com
   s.subscribe((st) => g.observe(st));
   s.extend({ length: 300, family: 'bowl' }); s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
   assert.equal(g.state.step.id, 'extend', 'two is not yet a few');
-  for (let i = 0; i < 3; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the third piece above is the guide's "a few", and the rest of the same pieces are made with the core (turnby.js extendCorner) and committed as one edit (commitDoc)
+  { const TB = require('../../src/core/turnby.js'); let d = s.getState().history.present;
+  for (let i = 0; i < 2; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.commitDoc(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); }
   assert.deepEqual([g.state.done.extend, g.state.step.id], [true, 'brush']);
   s.beginBrush({ mode: 'rate', channel: 'kv', s0: 200, r: 80 }); s.brushTo(0.001); s.endBrush();
   assert.deepEqual([g.state.done.brush, g.state.step.id], [true, 'close'], s.getState().message || '');

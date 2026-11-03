@@ -17,9 +17,12 @@ const exporter = { checkTarget: () => ({ ok: true }), runSegments: (segs, meta, 
 async function lap(cup = false) {
   const s = await createCoreShell({ brushFn: null, exporter });
   // a CUP lap is cupped all the way round, the start straight too (core_cup_export's cupStart lap, at 90°)
-  s.extend({ length: 600, family: 'bowl', ...(cup ? { first: { c: 90 } } : {}) });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R, ...(cup ? { c: 90 } : {}) } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0, ...(cup ? { c: 90 } : {}) } });
+  // AMENDED BY NAME (2026-11-02, the pass clearance): the lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid
+  // building the track a little closer because of the bulk of the underside"); made with the core's own pieces (turnby.js extendCorner) and opened (adopt), then closed
+  const TB = require('../../src/core/turnby.js');
+  let d = TB.extendCorner(s.getState().history.present, { length: 600, family: 'bowl', ...(cup ? { first: { c: 90 } } : {}) });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R, ...(cup ? { c: 90 } : {}) } });
+  s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0, ...(cup ? { c: 90 } : {}) } }));
   s.close();
   assert.equal(s.getState().history.present.closed, true, s.getState().message);
   return s;
@@ -108,9 +111,12 @@ test('"Flatten road for pit" on a cup lap: the refused lane builds, one undo ste
 
 test('flattening a TUBE says up front that opening a tube under the racing line usually fails the export', async () => {
   const s = await createCoreShell({ brushFn: null, exporter });
-  s.extend({ length: 600, family: 'bowl', first: { t: 360 } });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R, t: 360 } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0, t: 360 } });
+  // AMENDED BY NAME (2026-11-02, the pass clearance): as lap() above, the tube lap's circle comes back onto its first straight, which the builder now refuses to lay
+  // (the user: "forbid building the track a little closer because of the bulk of the underside"); made with the core's own pieces and opened (adopt)
+  const TB = require('../../src/core/turnby.js');
+  let d = TB.extendCorner(s.getState().history.present, { length: 600, family: 'bowl', first: { t: 360 } });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R, t: 360 } });
+  s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0, t: 360 } }));
   s.close();
   s.setPitLane(LANE());
   s.flattenForPit();

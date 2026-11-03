@@ -20,9 +20,13 @@ const R = 180, Q = (Math.PI * R) / 2;
 /** An OPEN lap that ends near its start: 300 m, `turns` quarter turns, then `lastLen` m. */
 async function openLap({ turns = 4, lastLen = 200 } = {}) {
   const s = await createCoreShell({ brushFn: null });
-  s.extend({ length: 300, family: 'bowl' });
-  for (let i = 0; i < turns; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: lastLen, transition: Math.min(40, lastLen), targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-02, the pass clearance): the lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid
+  // building the track a little closer because of the bulk of the underside"); it is made with the core's own pieces (turnby.js extendCorner, what the shell's extend
+  // runs) and opened as a saved track is (adopt)
+  const TB = require('../../src/core/turnby.js');
+  let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' });
+  for (let i = 0; i < turns; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.adopt(TB.extendCorner(d, { length: lastLen, transition: Math.min(40, lastLen), targets: { kh: 0 } }));
   assert.equal(s.getState().message, null, s.getState().message); assert.equal(s.getState().history.present.closed, false); return s;
 }
 /** A NEAR lap in front of the user (adopted, as opening one does): openLap's lap closed whole, opened, one turn's inner control points nudged 1e-4
@@ -59,7 +63,10 @@ test('row 6: a refused export names EVERY red in plain words, grouped, with wher
   const reds = [{ reason: 'downforce-ray-gap', s0: 210, s1: 212 }, { reason: 'self-intersection', s0: 200, s1: 230 }, { reason: 'stacked-within-2m', s0: 205, s1: 228 }, { reason: 'roll-rate', s0: 600, s1: 610, worst: 1.3 }];
   const red = { ...ex, runSegments() { throw new ex.ExportError('RED', 'validation is red, nothing written: downforce-ray-gap at s 210.0–212.0 m; …', { red: reds }); } };
   const s = await createCoreShell({ brushFn: null, exporter: red, storage: { writeExport: async () => {}, folderIsEmpty: async () => false, removeEmptyFolder: async () => {} } });
-  s.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 200, transition: 40, targets: { kh: 0 } }); s.close();
+  // AMENDED BY NAME (2026-11-02, the pass clearance): the lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid
+  // building the track a little closer because of the bulk of the underside"); made with the core's own pieces (turnby.js extendCorner) and opened (adopt), then closed
+  { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } }); s.adopt(TB.extendCorner(d, { length: 200, transition: 40, targets: { kh: 0 } })); }
+  s.close();
   assert.equal(s.getState().history.present.closed, true, s.getState().message);
   await s.exportTo(require('os').tmpdir());
   const msg = s.getState().message;
@@ -80,7 +87,9 @@ test('row 7: the press writes the copy from BEFORE the close first (backupNow(\'
   }
   // an edit while the copy is being written: the close of the track that is no longer there is never committed over it
   const u = await nearLap(); let release, asked; const copying = new Promise((r) => { asked = r; }); u.backupNow = () => { asked(); return new Promise((r) => { release = r; }); };
-  const pending = u.closeBest(); await copying; u.extend({ length: 20 }); const ub = u.getState().history.present; release(null); await pending;
+  // AMENDED BY NAME (2026-11-02, the pass clearance): any edit will do; 20 m laid the head past the start onto its road, which the builder now refuses (the user:
+  // "forbid building the track a little closer because of the bulk of the underside"), so the edit is 5 m, short of the start
+  const pending = u.closeBest(); await copying; const ua = u.getState().history.present; u.extend({ length: 5 }); const ub = u.getState().history.present; assert.notEqual(ub, ua, u.getState().message || 'control: the edit is made'); release(null); await pending;
   assert.equal(u.getState().history.present, ub, 'the edit stands; no close was committed over it'); assert.equal(ub.closed, false);
   assert.match(u.getState().message, /changed while the close was being worked out/);
 });

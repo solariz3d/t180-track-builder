@@ -106,7 +106,8 @@ test('row 7: an oval\'s mirror gap is about 0 about its own centre, for left/rig
   const off = G.guidePlan({ bounds: t.bounds, path: t.path, mode: 'auto', mirror: 'x', centre: { x: (t.bounds.min[0] + t.bounds.max[0]) / 2 + 12, z: (t.bounds.min[2] + t.bounds.max[2]) / 2 } });
   assert.ok(off.gap.max > 20 && off.gap.max <= 24.5, `the same stadium about a centre 12 m off: its mirror is 24 m away at most: ${off.gap.max.toFixed(2)}`);
   const sh = await stadium(), st = createTrackModel().update(sh.getState().resolved), sg = G.guidePlan({ bounds: st.bounds, path: st.path, mode: 'auto', mirror: 'both' }).gap; assert.ok(sg.max > 0.5, `the shell's own oval is not exactly symmetric, and the gap says so: ${sg.max.toFixed(2)} m`);
-  const lap = await createCoreShell({ brushFn: null }); lap.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) lap.extend({ length: Math.PI * 90, transition: 40, targets: { kh: 1 / 180 } }); lap.extend({ length: 60, transition: 40, targets: { kh: 0 } }); lap.close();
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  const lap = await createCoreShell({ brushFn: null }); { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(lap.getState().history.present, { length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Math.PI * 90, transition: 40, targets: { kh: 1 / 180 } }); lap.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); } lap.close();
   const lt = createTrackModel().update(lap.getState().resolved), asym = G.guidePlan({ bounds: lt.bounds, path: lt.path, mode: 'auto', mirror: 'both' }); assert.ok(asym.gap.max > 5, `an asymmetric lap reads a real gap: ${asym.gap.max.toFixed(1)} m`);
   assert.ok(res.x && res.z && res.both);
 });
@@ -149,7 +150,8 @@ function fake() {
 }
 async function trackShell(hilly) {
   const s = await createCoreShell({ brushFn: null }); s.extend({ length: 300, family: 'bowl' });
-  if (hilly) { s.extend({ length: 250, transition: 120, targets: { kv: 0.05 } }); s.extend({ length: 250, transition: 120, targets: { kv: -0.05 } }); s.extend({ length: 200, transition: 120, targets: { kv: 0 } }); }
+  // AMENDED BY NAME (2026-11-03, the pass clearance): the hilly track's pitch turns it over into a loop that passes over its own road, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  if (hilly) { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 250, transition: 120, targets: { kv: 0.05 } }); d = TB.extendCorner(d, { length: 250, transition: 120, targets: { kv: -0.05 } }); s.adopt(TB.extendCorner(d, { length: 200, transition: 120, targets: { kv: 0 } })); }
   assert.equal(s.getState().message, null, s.getState().message); return s;
 }
 test('row 11: through the real shell and the preview: a flat track draws the ground grid, a hilly one the lattice; the modes and the mirror follow setGuides, and each change is announced once', async () => {

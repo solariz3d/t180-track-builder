@@ -38,9 +38,13 @@ const AUTHOR = () => 'D437b test';
 /** The test lap (core-pitlane.test.js's): a 600 m start straight, four quarter turns, 60 m, closed; with a pit lane on the right. */
 async function pitLap(opts) {
   const s = await createCoreShell({ brushFn: null, autosaveMs: 0, ...opts });
-  s.extend({ length: 600, family: 'bowl' });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): the lap's fourth turn comes back onto its own first straight, which the builder now refuses to lay (the user:
+  // "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened
+  // (adopt), then closed, as core-pitlane.test.js's lap(). The document and so the pins below are unchanged.
+  const TB = require('../../src/core/turnby.js');
+  let d = TB.extendCorner(s.getState().history.present, { length: 600, family: 'bowl' });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } }));
   s.close();
   assert.equal(s.getState().history.present.closed, true, s.getState().message);
   s.setPitLane({ ...D.PIT_DEFAULT, side: 'R', leave: { word: 'p1', along: 60 }, rejoin: { word: 'p1', along: 540 } });
@@ -195,7 +199,8 @@ test('row 2: through the runner (every message structured-cloned) the textured l
 test('row 2b: a LIFTED lap (a 1 m hill, the offset lift of the core not the identity) gives the same bytes through the runner as on the page', { timeout: 120000 }, async () => {
   const SC = require('../../src/core/sculpt.js'), { ex } = await isolatedExporter();
   const s = await createCoreShell({ brushFn: SC.brush, autosaveMs: 0, exporter: ex });
-  s.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 60, transition: 40, targets: { kh: 0 } }); s.close();
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } }); s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); } s.close();
   const flat = digestOf(s.buildExport());
   // 1 m over r 140 inside the 300 m straight: a crest the car holds (core-shell.test.js's landed-core hill)
   s.beginBrush({ channel: 'height', s0: 150, r: 140 }); s.brushTo(1); s.endBrush();

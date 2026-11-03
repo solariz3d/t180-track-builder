@@ -96,9 +96,10 @@ test('save, reopen, append: neither the hand-placed nor the automatic line moves
 
 test('a CLOSED lap keeps its automatic start where it was: 15 m before the end of the longest straight run (the export of a finished track is unchanged)', async () => {
   const R = 180, Q = Math.PI * R / 2, s = await createCoreShell({ storage: null, autosaveMs: 0, brushFn: null });
-  s.extend({ length: 300, family: 'bowl' }); s.extend({ length: 200, family: 'bowl' });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  s.extend({ length: 300, family: 'bowl' }); { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 200, family: 'bowl' });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); }
   s.close(); assert.equal(s.getState().history.present.closed, true);
   const sr = s.getState().resolved, lay = startLayout(sr.segments, sr.lift, sr.start);
   assert.equal(lay.line.word, 'p2', 'the run spans p1 and p2; the closed rule keeps the line at its far end');

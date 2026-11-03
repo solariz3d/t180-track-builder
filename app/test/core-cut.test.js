@@ -31,9 +31,12 @@ function store({ backupFails = false } = {}) {
 /** A closed lap, closed by the shell's own one-click close: p1 straight, p2-p5 quarter turns, p6 a short straight. */
 async function lap(st = store()) {
   const s = await createCoreShell({ brushFn: null, storage: st, autosaveMs: 0 });
-  s.extend({ length: 300, family: 'bowl' });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-02, the pass clearance): the lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid
+  // building the track a little closer because of the bulk of the underside"); made with the core's own pieces (turnby.js extendCorner) and opened (adopt), then closed
+  const TB = require('../../src/core/turnby.js');
+  let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } }));
   s.close();
   assert.equal(s.getState().history.present.closed, true, s.getState().message);
   return s;

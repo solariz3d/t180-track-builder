@@ -64,7 +64,9 @@ function windowEnd(path, segments, g) {
 
 function createValidationController(shell, { csp = true, designSpeedKmh, validate: extra = {}, onUpdate = () => {}, schedule = (fn) => fn(), sharedPath = null, colours = true } = {}) {   // colours: false makes no colour map (live.js; the checker worker sends none back)
   let design = designSpeedKmh;
-  const vo = () => ({ ...extra, csp, ...(design === undefined ? { fullSpeed: true } : design == null ? {} : { designSpeed: design / 3.6 }) });
+  // D623: the pass clearance, at the track's own apron width (the core shell's edgeApron(); a shell without one, the default)
+  const apronOf = () => { try { return typeof shell.edgeApron === 'function' ? shell.edgeApron() : undefined; } catch (e) { return undefined; } };
+  const vo = () => ({ passClearance: true, apronM: apronOf(), ...extra, csp, ...(design === undefined ? { fullSpeed: true } : design == null ? {} : { designSpeed: design / 3.6 }) });
   let live = createLive({ validate: vo(), colours });
   let segs = null, path = null, resolvedSeen = null, source = null, lastClosed = null;   // source: 'shared' (a view of the preview's path) | 'own'
   const out = { state: { path: null, result: null, map: null, arcs: [], changed: null, full: true, how: null, error: null, pathFrom: null } };

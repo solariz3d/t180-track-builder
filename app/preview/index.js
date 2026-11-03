@@ -106,7 +106,10 @@ function mount(root, shell) {
   // a click on a red in a list moves the camera there ('t180-camera-focus', { s }: metres along the placed track)
   const focusNow = (e) => { if (e.detail && Number.isFinite(e.detail.s)) p.focus(e.detail.s); };
   doc.addEventListener('t180-camera-focus', focusNow);
-  return { preview: p, unmount() { doc.removeEventListener('t180-camera-focus', focusNow); doc.removeEventListener('t180:guides', setGuides); doc.removeEventListener('t180:guides-request', guidesNow); doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180:ghost-request', ghostNow); doc.removeEventListener('t180:ghost-building', buildingNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180-pick', pickNow); doc.removeEventListener('t180-grab-ray', rayNow); doc.removeEventListener('t180:view', viewNow); p.dispose(); root.replaceChildren(); } };
+  // the track checker's reds, drawn on the road (preview.js redMarks); the checker says them on 't180:validation' (app/validate-ui/index.js)
+  const redsNow = (e) => { const r = e.detail && e.detail.result; p.setReds(r ? r.red : null); };
+  doc.addEventListener('t180:validation', redsNow);
+  return { preview: p, unmount() { doc.removeEventListener('t180-camera-focus', focusNow); doc.removeEventListener('t180:validation', redsNow); doc.removeEventListener('t180:guides', setGuides); doc.removeEventListener('t180:guides-request', guidesNow); doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180:ghost-request', ghostNow); doc.removeEventListener('t180:ghost-building', buildingNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180-pick', pickNow); doc.removeEventListener('t180-grab-ray', rayNow); doc.removeEventListener('t180:view', viewNow); p.dispose(); root.replaceChildren(); } };
 }
 
 module.exports = { mount, PreviewMountError };

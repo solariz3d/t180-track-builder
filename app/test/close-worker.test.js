@@ -45,9 +45,13 @@ const workerRunner = () => createCloseRunner({ win: {}, WorkerCtor: CloneWorker 
 
 async function openLap({ turns = 4, lastLen = 200, closeRunner = null } = {}) {
   const s = await createCoreShell({ brushFn: null, autosaveMs: 0, closeRunner });
-  s.extend({ length: 300, family: 'bowl' });
-  for (let i = 0; i < turns; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: lastLen, transition: Math.min(40, lastLen), targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-02, the pass clearance): the lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid
+  // building the track a little closer because of the bulk of the underside"); it is made with the core's own pieces (turnby.js extendCorner, what the shell's extend
+  // runs) and opened as a saved track is (adopt)
+  const TB = require('../../src/core/turnby.js');
+  let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' });
+  for (let i = 0; i < turns; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.adopt(TB.extendCorner(d, { length: lastLen, transition: Math.min(40, lastLen), targets: { kh: 0 } }));
   assert.equal(s.getState().message, null, s.getState().message); return s;
 }
 /** A NEAR lap, 8.87 m from closing (as in core-close-preview.test.js). */
@@ -101,7 +105,9 @@ test('row 3: while the worker works the close is pending; an edit drops the answ
   assert.equal(r.jobs.length, 1); assert.ok(st.closePending && st.closePending.base === base, 'the close is pending, for this track'); assert.equal(st.history.present, base, 'nothing is applied yet');
   assert.equal(r.jobs[0].args.best, true, 'the job is the one press'); assert.equal(r.jobs[0].args.doc, base);
   const sent = r.jobs[0].args.edited; assert.ok(Array.isArray(sent) && sent.includes(base.pieces.length - 1), `the whole-lap route is told what to go round: ${JSON.stringify(sent)}`);
-  s.extend({ length: 50 }); const edited = s.getState().history.present;
+  // AMENDED BY NAME (2026-11-02, the pass clearance): any edit will do here; 50 m laid the head 41 m onto the start's own road, which the builder now refuses (the user:
+  // "forbid building the track a little closer because of the bulk of the underside"), so the edit is 5 m, short of the start
+  s.extend({ length: 5 }); const edited = s.getState().history.present; assert.notEqual(edited, base, s.getState().message || 'control: the edit is made');
   r.jobs[0].resolve(answerOf(base)); await p0;
   st = s.getState(); assert.equal(st.history.present, edited, 'a stale answer changes nothing'); assert.equal(st.closePending, null); assert.match(st.message, /track changed while the close was being worked out/);
   s.closeBest(); s.cancelClose(); assert.equal(r.jobs[1].cancelled, 1, 'Cancel stops the job'); assert.equal(s.getState().closePending, null);
@@ -220,5 +226,7 @@ test('row 7: a press hands the worker the reds the live checker found for this v
   s.closeBest(); assert.equal(r.jobs[0].args.openReds, null, 'nothing noted: the worker checks the open track itself'); s.cancelClose();
   s.noteCheck(base, { csp: false, red: reds }); s.closeBest(); assert.equal(r.jobs[1].args.openReds, null, 'a check with CSP off is not the press check'); s.cancelClose();
   s.noteCheck(base, { csp: true, red: reds }); s.closeBest(); assert.deepEqual(r.jobs[2].args.openReds, [{ reason: 'stacked-within-2m', s: 120 }], 'this track check, as { reason, s }'); s.cancelClose();
-  s.extend({ length: 20 }); s.closeBest(); assert.equal(r.jobs[3].args.openReds, null, 'a check of another document is not used'); s.cancelClose();
+  // AMENDED BY NAME (2026-11-02, the pass clearance): another document is all this needs; 20 m laid the head past the start onto its road, which the builder now
+  // refuses (the user: "forbid building the track a little closer because of the bulk of the underside"), so the edit is 5 m, short of the start
+  s.extend({ length: 5 }); assert.notEqual(s.getState().history.present, base, s.getState().message || 'control: the edit is made'); s.closeBest(); assert.equal(r.jobs[3].args.openReds, null, 'a check of another document is not used'); s.cancelClose();
 });

@@ -16,8 +16,11 @@ const wrap = (x) => ((((x + 180) % 360) + 360) % 360) - 180;
 const pathEndDeg = (doc) => { const S = AD.toPath(doc).path.samples, T = S[S.length - 1].T; return (Math.atan2(T[0], T[2]) * 180) / Math.PI; };
 async function spiral() {
   const s = await createCoreShell({});
-  s.extend({ length: 200, family: 'bowl' });
-  for (const [length, kh] of [[300, 1 / 150], [250, 1 / 90], [400, -1 / 200], [180, 1 / 60]]) s.extend({ length, transition: 60, targets: { kh } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): the spiral's reverse turn crosses its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  const TB = require('../src/core/turnby.js');
+  let d = TB.extendCorner(s.getState().history.present, { length: 200, family: 'bowl' });
+  for (const [length, kh] of [[300, 1 / 150], [250, 1 / 90], [400, -1 / 200], [180, 1 / 60]]) d = TB.extendCorner(d, { length, transition: 60, targets: { kh } });
+  s.adopt(d);
   assert.equal(s.getState().message, null, s.getState().message);
   return s;
 }

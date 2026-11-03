@@ -36,14 +36,19 @@ test('row 1: after every kind of edit the cached segments equal a fresh conversi
   step('turn', () => s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }));
   step('straighten', () => s.extend({ length: 60, transition: 40, targets: { kh: 0 } }));
   step('tube', () => s.extend({ length: 300, first: { w: 40, t: 360 } }));
-  step('cup out of a tube', () => s.extend({ length: 300, first: { c: 60 } }));
-  step('cup turn', () => s.extend({ length: Q, transition: 40, targets: { kh: 1 / R, c: 45 } }));
-  step('plain', () => s.extend({ length: 200 }));
+  // AMENDED BY NAME (2026-11-03, the pass clearance): the tube and the cup keep turning at about 50 m and come round beside their own road, aprons over aprons, which
+  // the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); this step is the same piece made with
+  // the core (turnby.js extendCorner) and committed as one edit (commitDoc), which the cache must follow as it follows an extend; so is every road piece after it,
+  // which goes on round the same circle
+  const laid = (o) => s.commitDoc(require('../src/core/turnby.js').extendCorner(doc(s), o));
+  step('cup out of a tube', () => laid({ length: 300, first: { c: 60 } }));
+  step('cup turn', () => laid({ length: Q, transition: 40, targets: { kh: 1 / R, c: 45 } }));
+  step('plain', () => laid({ length: 200 }));
   step('jump', () => s.commitDoc(D.appendPiece(doc(s), D.flightPiece({ forward: 30, left: 0, up: 0, heading: 0, pitch: 0, bank: 0 }))));
-  step('landing road', () => s.extend({ length: 150 }));
+  step('landing road', () => laid({ length: 150 }));
   // reuse: placing one more piece keeps every earlier piece's segment objects
   const before = s.getState().resolved.segments;
-  step('one more', () => s.extend({ length: 120 }));
+  step('one more', () => laid({ length: 120 }));
   const after = s.getState().resolved.segments, reused = before.filter((g, i) => after[i] === g).length;
   assert.ok(reused >= before.length - 200, `the earlier pieces were reused (${reused} of ${before.length} kept; only the last piece may change)`);
   step('brush', () => { s.beginBrush({ channel: 'height', s0: 150, r: 60 }); s.brushTo(4); s.endBrush(); });
@@ -53,9 +58,10 @@ test('row 1: after every kind of edit the cached segments equal a fresh conversi
   step('remove the last piece', () => s.commitDoc({ ...doc(s), pieces: doc(s).pieces.slice(0, -1) }));
   // a real closed lap through the shell's own close (it may decline this track; the segments must match either way)
   const lap = await createCoreShell({});
-  lap.extend({ length: 300, family: 'bowl' });
-  for (let i = 0; i < 4; i++) lap.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  lap.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  { const TB = require('../src/core/turnby.js'); let d = TB.extendCorner(lap.getState().history.present, { length: 300, family: 'bowl' });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  lap.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); }
   same(lap, 'the lap before closing');
   lap.close(); assert.equal(doc(lap).closed, true, `the lap closed: ${lap.getState().message}`); same(lap, 'closed lap');
   lap.undo(); same(lap, 'close undone');
@@ -126,9 +132,10 @@ test('row 2c: the SAME later piece after a changed earlier one is rebuilt, becau
 
 test('row 2d: a brush step inside the FIRST piece of a closed tube lap rebuilds that piece only: every later piece, handed the same cross-section by value (a new object), is reused (D421: they were rebuilt at every step)', async () => {
   const s = await createCoreShell({});   // A's 360° tube oval (E's probe3 row 4a)
-  s.extend({ length: 300, first: { w: 31, t: 360 } });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  { const TB = require('../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 300, first: { w: 31, t: 360 } });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); }
   s.close(); assert.equal(doc(s).closed, true, s.getState().message);
   const first = doc(s).pieces[0].id;
   s.beginBrush({ channel: 'height', s0: 150, r: 60 });   // a height brush (the Sculpt mode's Grab is the same brush, on its own branch)

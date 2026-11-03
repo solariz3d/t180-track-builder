@@ -183,7 +183,10 @@ test('row 5: Close the loop from Build starts the close as the button did; on a 
   assert.match(P.byLabel('close').textContent, /^Closing the loop…/, 'the line under it says so at once'); assert.equal(P.timers.length, 1, 'and the close is started off the press');
   // a closed loop (as app/test/core-close-preview.test.js makes one: four quarter turns and the shell's own close)
   const s = await createCoreShell({ brushFn: null, storage: store(), autosaveMs: 0 });
-  s.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) s.extend({ length: (Math.PI * R) / 2, transition: 40, targets: { kh: TURN } }); s.extend({ length: 200, transition: 40, targets: { kh: 0 } }); s.close();
+  // AMENDED BY NAME (2026-11-02, the pass clearance): the lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid
+  // building the track a little closer because of the bulk of the underside"); made with the core's own pieces (turnby.js extendCorner) and opened (adopt), then closed
+  { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: (Math.PI * R) / 2, transition: 40, targets: { kh: TURN } }); s.adopt(TB.extendCorner(d, { length: 200, transition: 40, targets: { kh: 0 } })); }
+  s.close();
   assert.equal(s.getState().history.present.closed, true, s.getState().message);
   const Q = await mountPanel({ shell: s }), c2 = Q.item(Q.build(), 'Close the loop');
   assert.equal(c2.disabled, true, 'a closed loop: Close is disabled'); const t0 = Q.timers.length, d0 = s.getState().history.present; c2.run();

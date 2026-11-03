@@ -25,11 +25,13 @@ function closedCheck(s, opts = {}) {
   return { doc: out.doc, resolved, check: structuredClone(OJ.overlapCheck(resolved, null, { closed: true })) };
 }
 /** A coil (two circles on one another) closed: a track whose check finds overlaps of several kinds. */
+// AMENDED BY NAME (2026-11-02, the pass clearance): the builder now refuses to lay a circle on another (the user: "forbid building the track a little closer because
+// of the bulk of the underside"), so the coil is made with the core's own pieces (turnby.js extendCorner, what the shell's extend runs) and opened as a saved track is (adopt)
 async function coilClosed() {
-  const s = await createCoreShell({ brushFn: null, autosaveMs: 0 });
-  s.extend({ length: 300, family: 'bowl' });
-  for (let i = 0; i < 8; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  const s = await createCoreShell({ brushFn: null, autosaveMs: 0 }), TB = require('../../src/core/turnby.js');
+  let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' });
+  for (let i = 0; i < 8; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } }));
   const cp = closedCheck(s); assert.ok(cp.check && cp.check.overlaps.length > 0, 'control: the coil overlaps itself');
   return cp;
 }

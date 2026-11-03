@@ -25,7 +25,8 @@ async function built(storage = null) {
   const s = await createCoreShell(storage ? { storage, autosaveMs: 0 } : {});
   s.extend({ length: 300, family: 'bowl' });
   for (let i = 0; i < 3; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 200, targets: { e: 20 } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this track's last straight runs back across its own first, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same piece made with the core (turnby.js extendCorner) and committed as its own undo step (commitDoc), as these rows read the history
+  s.commitDoc(require('../../src/core/turnby.js').extendCorner(s.getState().history.present, { length: 200, targets: { e: 20 } }));
   assert.equal(s.getState().message, null, s.getState().message);
   return s;
 }
@@ -61,7 +62,9 @@ test('row 4: the checker keeps its result when only the start moved, and re-chec
   const before = hows.length;
   s.commitDoc({ ...s.getState().history.present, name: 'renamed' });
   assert.equal(hows.slice(before).pop(), 'same', 'nothing in the road changed: the result stands');
-  s.extend({ length: 100 });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): built()'s last straight crosses its first, and 100 m more lengthens that crossing, which the builder now refuses
+  // (the user: "forbid building the track a little closer because of the bulk of the underside"); the same piece made with the core and committed (commitDoc)
+  s.commitDoc(require('../../src/core/turnby.js').extendCorner(s.getState().history.present, { length: 100 }));
   assert.notEqual(hows.slice(before).pop(), 'same', 'a new piece is checked');
   ctl.dispose();
 });

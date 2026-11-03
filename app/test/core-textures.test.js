@@ -17,9 +17,12 @@ test.after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: 
 const R = 180, Q = Math.PI * R / 2;
 async function lap(opts = {}) {
   const s = await createCoreShell({ brushFn: null, ...opts });
-  s.extend({ length: 300, family: 'bowl' });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-02, the pass clearance): the lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid
+  // building the track a little closer because of the bulk of the underside"); the same pieces from the core's own extendCorner, committed as one edit (commitDoc)
+  const TB = require('../../src/core/turnby.js');
+  let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.commitDoc(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } }));
   assert.equal(s.getState().message, null); return s;
 }
 const memStorage = () => { const s = { writes: [] }; return Object.assign(s, { saveDoc: async () => {}, openDoc: async () => null, listDocs: async () => [], writeExport: async (dir, folder, files) => { s.writes.push({ dir, folder, n: files.length }); for (const f of files) { const p = path.join(dir, folder, ...f.path.split('/')); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, f.bytes); } } }); };

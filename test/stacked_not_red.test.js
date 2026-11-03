@@ -109,7 +109,9 @@ test('row 8: Close refuses a road that lies on itself through the checker\'s cli
   coil = extend(coil, { length: 60, transition: 40, targets: { kh: 0 } });
   const r = runCloseBest({ doc: coil });
   assert.equal(r.converged, false, r.report); assert.equal(r.doc, null);
-  assert.ok(r.tried.some((t) => /self-intersection/.test(t.miss || '')), `a way of closing it was refused for the road meeting itself: ${JSON.stringify(r.tried.map((t) => t.miss))}`);
+  // AMENDED BY NAME (2026-11-02, the pass clearance): Close counts the pass clearance as a red it may not add, and on the coil it names that first (the two circles
+  // meet: a clip); the user: "forbid building the track a little closer because of the bulk of the underside". The road meeting itself, by either name
+  assert.ok(r.tried.some((t) => /self-intersection|pass-clearance/.test(t.miss || '')), `a way of closing it was refused for the road meeting itself: ${JSON.stringify(r.tried.map((t) => t.miss))}`);
 });
 
 // D432c: A CLIP ONLY THE MESH SAW. Two roads whose edge strips cross each other BETWEEN stations: every sampled point of one lies on one side of the other, or beyond

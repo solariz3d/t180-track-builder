@@ -259,7 +259,9 @@ test('row 8: delete in the MIDDLE is previewed (displacement, overlap check); Ap
 
 test('row 8b: the delete preview\'s overlap check finds a road running into itself (a two-circle coil, as TEST 1 stacked) and reports where', async () => {
   const s = await createCoreShell({ brushFn: null, autosaveMs: 0 });
-  s.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 8; i++) s.extend({ length: Q, transition: 40, targets: { kh: TURN } }); s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-02, the pass clearance): the builder now refuses to lay the second circle on the first (the user: "forbid building the track a little
+  // closer because of the bulk of the underside"), so the coil is made with the core's own pieces (turnby.js extendCorner) and opened as a saved track is (adopt)
+  { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' }); for (let i = 0; i < 8; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: TURN } }); s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); }
   s.selectPiece(1); s.deleteSelection();   // one quarter of the coil goes: three of the eight remain, so it does not overlap...
   const a = s.getState().deleteProposal; assert.ok(a, s.getState().message);
   s.cancelDelete(); s.selectPiece(0); s.deleteSelection(); const b = s.getState().deleteProposal; assert.ok(b, s.getState().message);   // ...and the straight at the start going leaves both circles
@@ -610,7 +612,8 @@ test('row 14: the Jump button (D258, the free jump): beside Extend; the old Add-
   len.value = '77'; shell.undo(); assert.equal(shell.getState().history.present, d0); assert.equal(len.value, '120', 'the length the jump was made with');
   // after a flight the Jump button's own Extend lays the landing road, so Jump again is allowed; a closed loop has no open end: the button is off (the core's words for it are in jump-ui row 1b)
   shell.extend({ length: 100 }); shell.commitDoc(D.appendPiece(shell.getState().history.present, D.flightPiece({ forward: 30, left: 0, up: 0, heading: 0, pitch: 0, bank: 0 }))); jmp.onclick(); assert.deepEqual(shell.getState().history.present.pieces.slice(-4).map((p) => p.type), ['flight', 'road', 'flight', 'road'], 'the old landing road, then a new flight and landing');
-  const lap = await handlePanel(); lap.shell.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) lap.shell.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); lap.shell.extend({ length: 60, transition: 40, targets: { kh: 0 } }); lap.shell.close(); assert.ok(lap.shell.getState().history.present.closed, 'a closed lap'); assert.equal(lap.button('Jump').disabled, true, 'a closed loop has no open end to jump from'); lap.panel.unmount();
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  const lap = await handlePanel(); { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(lap.shell.getState().history.present, { length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } }); lap.shell.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); } lap.shell.close(); assert.ok(lap.shell.getState().history.present.closed, 'a closed lap'); assert.equal(lap.button('Jump').disabled, true, 'a closed loop has no open end to jump from'); lap.panel.unmount();
   P1.panel.unmount();
 });
 
@@ -842,7 +845,8 @@ test('row 19b: the values of the piece being edited are drawn LARGE over the 3D 
   assert.match(layer.layer.style.cssText, /font:700 24px/, 'one slim line, its numbers 24 px bold (AMENDED: it was 26 px type, then about 15 px for one slim line; now 24 px with the unit and label at 11 px)'); assert.ok(layer.layer.style.cssText.includes(VO.SPOT_CSS), 'at the spot the constant names'); assert.match(layer.layer.style.cssText, /pointer-events:none/);
   // the pure part, and nothing to show: hidden
   assert.deepEqual(VO.entries({ length: '10.0 m', turn: '0.0°', climb: '0.0°', bank: '0.0°' }, '31.00 m').map((e) => e.key), ['length', 'turn', 'climb', 'bank', 'width']); assert.equal(VO.entries(null, '31.00 m'), null); assert.deepEqual(VO.entries({ length: '10.0 m' }, '').map((e) => e.key), ['length']);
-  const lap = await handlePanel(); lap.shell.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) lap.shell.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); lap.shell.extend({ length: 60, transition: 40, targets: { kh: 0 } }); lap.shell.close(); assert.ok(lap.shell.getState().history.present.closed); lap.frame();
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  const lap = await handlePanel(); { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(lap.shell.getState().history.present, { length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } }); lap.shell.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); } lap.shell.close(); assert.ok(lap.shell.getState().history.present.closed); lap.frame();
   assert.equal(lap.panel.values.visible(), false, 'a closed loop has no piece being edited: hidden'); lap.panel.unmount(); P1.panel.unmount();
 });
 

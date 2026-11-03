@@ -70,7 +70,12 @@ function mount(root, shell) {
     const r = state.result;
     if (r) {
       for (const [kind, items, lvl] of [['red', r.red, LEVEL.RED], ['amber', r.amber, LEVEL.AMBER]]) {
-        for (const f of findingGroups(kind, items)) list.append(el('li', { textContent: f.text, title: f.title, style: `color: ${textCss(lvl)}` }));   // one line per reason with its places; the rule and its sources in the tooltip
+        for (const f of findingGroups(kind, items)) {
+          const li = el('li', { textContent: f.text, title: f.title, style: `color: ${textCss(lvl)}${kind === 'red' && f.places ? '; cursor: pointer' : ''}` });
+          // a RED entry takes the camera to its place (preview.js focus, 't180-camera-focus'); each click the next of its places (the pass clearance names both passes)
+          if (kind === 'red' && f.places && f.places.length) { let k = 0; li.addEventListener('click', () => { const s = f.places[k % f.places.length]; k++; li.dispatchEvent(new CustomEvent('t180-camera-focus', { bubbles: true, detail: { s } })); }); }
+          list.append(li);
+        }   // one line per reason with its places; the rule and its sources in the tooltip
       }
       // "holds above N km/h" (information): where the centreline faces the ground, the slowest speed that keeps the car on it
       for (const x of r.info) if (x.reason === 'holds-above') { const f = findingLine('info', x); list.append(el('li', { textContent: f.text, title: f.title, style: `color: ${css(PALETTE[LEVEL.INFO])}` })); }

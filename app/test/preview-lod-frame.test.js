@@ -29,11 +29,15 @@ const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.mi
 
 /** the 100 km track's saved text, built by the shell as a user would extend it */
 async function longTrack() {
-  const s = await createCoreShell({ autosaveMs: 0 }), R = 400, Q = (Math.PI * R) / 2; let m = 0, i = 0;
+  // AMENDED BY NAME (2026-11-02, the pass clearance): each 800 m piece keeps the turn before it, so this 100 km track circles back over itself again and again, which
+  // the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces from the core's own
+  // extendCorner (what the shell's extend runs), committed as one edit (commitDoc)
+  const s = await createCoreShell({ autosaveMs: 0 }), R = 400, Q = (Math.PI * R) / 2, TB = require('../../src/core/turnby.js'); let m = 0, i = 0, d = s.getState().history.present;
   while (m < 100000) {
-    if (i % 4 === 3) { s.extend({ length: Q, transition: 60, targets: { kh: (i % 8 === 3 ? 1 : -1) / R } }); m += Q; } else { s.extend({ length: 800, ...(i === 0 ? { family: 'bowl' } : {}) }); m += 800; }
+    if (i % 4 === 3) { d = TB.extendCorner(d, { length: Q, transition: 60, targets: { kh: (i % 8 === 3 ? 1 : -1) / R } }); m += Q; } else { d = TB.extendCorner(d, { length: 800, ...(i === 0 ? { family: 'bowl' } : {}) }); m += 800; }
     i++;
   }
+  s.commitDoc(d);
   assert.equal(s.getState().message, null, s.getState().message);
   return D.serialize(s.getState().history.present);
 }
