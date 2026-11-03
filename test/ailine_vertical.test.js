@@ -72,7 +72,10 @@ test('an ordinary track\'s AI line is byte-identical to before (the platform tes
 
 // ELYSIUM's loop comes within 1.93e-4 of vertical and AC loads its line: the bar must not move a point of it. The line the export makes (fromwords.js:
 // aiInput on the lifted path, the floor line at the road's speed), pinned on 8b573dd, where the whole export wrote it (ely-base.txt, ai/fast_lane.ai)
-const ELYSIUM_AI = 'edeb7e54f72f8e034d63f7a81bc72587d6617fdc8f79e3d142b9c6b6b05cd12a';
+// AMENDED BY NAME (2026-11-02, the roll carried through a joint, src/core/adapter.js carryOf): three of this ELYSIUM's joints roll on the same way through a
+// rest, and are now carried, so the line's camber, normal and side widths move at those three stretches only (s 2128–2176, 2994–3076, 3828–3950); not one of its
+// 4,600 points moves, and the vertical bar still moves nothing. It was 'edeb7e54f72f8e034d63f7a81bc72587d6617fdc8f79e3d142b9c6b6b05cd12a'.
+const ELYSIUM_AI = 'b865be114c0cc18c32ccfa3df125367157cbe00b5be703acafa15a47012e7971';
 test('ELYSIUM\'s AI line (a loop through vertical that AC loads) is byte-identical to before', () => {
   const doc = D.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'elysium-2026-10-22.t180track'), 'utf8')), segs = AD.toSegments(doc);
   const start = { pos: doc.start.pos.slice(), theta: doc.start.heading, p: doc.start.pitch }, p = AD.offsetPath(doc, segs, buildPath(segs, { step: 2, closed: true, start }));
