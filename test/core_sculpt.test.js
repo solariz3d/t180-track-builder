@@ -51,7 +51,10 @@ for (const ch of Object.keys(DELTA)) for (const frac of [0.25, 0.5, 0.75]) for (
       // grade) and the document's channels above stay bit for bit. Everywhere else outside W⁺ every field is bit for bit, as sealed. (A carry kept within W⁺
       // would leave the roll dipping to about half its rate at the joint, which is most of the bump this carry takes away.) Ruled 2026-11-02: the ride through
       // the joint outweighs the sealed locality here; the route and the document stay local as sealed.
-      const carried = []; doc.pieces.forEach((P, j) => { const a = AD.carryOf(BASE, j), b = AD.carryOf(doc, j); if ((a || b) && !(a && b && a.key === b.key)) carried.push([OFF[j] + P.length / 2, OFF[j + 1] + doc.pieces[j + 1].length / 2]); });
+      // AMENDED AGAIN BY NAME (2026-11-03, the bank's corners rounded as built, src/core/adapter.js bankPlan): a corner's rounding reaches up to 250 m either side of
+      // it, so the span the roll may move in is now every piece whose built bank (its carry and its rounded corners, bankPlan's key) the brush changed
+      const PB = AD.bankPlan(BASE), PD = AD.bankPlan(doc), carried = [];
+      doc.pieces.forEach((P, j) => { if (PB[j].key !== PD[j].key) carried.push([OFF[j], OFF[j] + P.length]); });
       const ROLLED = new Set(['L', 'U', 'roll', 'bankG']), inCarry = (s) => carried.some(([a, b]) => s >= a && s <= b);
       NEW.forEach((x, i) => { if (x.s >= loP && x.s <= hiP) return; for (const f of FIELDS) { if (ch === 'phi' && ROLLED.has(f) && inCarry(x.s)) continue; const a = x[f], b = OLD[i][f]; assert.ok(Array.isArray(a) ? sameVec(a, b) : same(a, b), `${f} at s ${x.s}`); } });
     } else {

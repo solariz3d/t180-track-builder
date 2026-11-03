@@ -75,7 +75,10 @@ test('an ordinary track\'s AI line is byte-identical to before (the platform tes
 // AMENDED BY NAME (2026-11-02, the roll carried through a joint, src/core/adapter.js carryOf): three of this ELYSIUM's joints roll on the same way through a
 // rest, and are now carried, so the line's camber, normal and side widths move at those three stretches only (s 2128–2176, 2994–3076, 3828–3950); not one of its
 // 4,600 points moves, and the vertical bar still moves nothing. It was 'edeb7e54f72f8e034d63f7a81bc72587d6617fdc8f79e3d142b9c6b6b05cd12a'.
-const ELYSIUM_AI = 'b865be114c0cc18c32ccfa3df125367157cbe00b5be703acafa15a47012e7971';
+// AMENDED BY NAME again (2026-11-03, the bank's corners rounded within each piece, adapter.js bankPlan): where this ELYSIUM's bank changed faster than the
+// 3 g bar the built bank is re-laid, so the line's camber, normal and side widths move there; not one of its 4,600 points moves (checked against b865be11…'s
+// line point for point, largest move 0.0000 m), and the vertical bar still moves nothing. It was 'b865be114c0cc18c32ccfa3df125367157cbe00b5be703acafa15a47012e7971'.
+const ELYSIUM_AI = 'b1eafad274d5410862cbc29e57076ec79494d9ffd548badbf61c809c165b833b';
 test('ELYSIUM\'s AI line (a loop through vertical that AC loads) is byte-identical to before', () => {
   const doc = D.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'elysium-2026-10-22.t180track'), 'utf8')), segs = AD.toSegments(doc);
   const start = { pos: doc.start.pos.slice(), theta: doc.start.heading, p: doc.start.pitch }, p = AD.offsetPath(doc, segs, buildPath(segs, { step: 2, closed: true, start }));

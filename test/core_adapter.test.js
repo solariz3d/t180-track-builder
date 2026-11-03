@@ -33,14 +33,18 @@ test('at the family\'s own rate the core\'s cross-section IS fonts.js\'s (ref 09
 });
 
 test('the samples\' roll is within the smoothstep bound of the φ channel (ref 09 §5), and 2 m chords move the line under 1 cm over 530 m against 0.25 m chords (the stated deviation, measured)', () => {
-  const d = sample(), { path, segments } = toPath(d, { segM: 2 }), fine = toPath(d, { segM: 0.25 }).path;
+  // AMENDED BY NAME (2026-11-03, the bank's corners rounded within each piece, src/core/adapter.js bankPlan): the built roll is the PLANNED bank where a piece has a plan
+  // (p3 here, whose 25° comes off in 150 m faster than the 3 g bar), so the reference is the plan, not the document: read against the document that piece departs
+  // by 2.55 × the bound, by design; against the plan the worst is 0.003 × (the segments now carry their rate, a cubic Hermite through each). Unplanned pieces as before
+  const d = sample(), { path, segments } = toPath(d, { segM: 2 }), fine = toPath(d, { segM: 0.25 }).path, plan = require('../src/core/adapter.js').bankPlan(d);
   let worst = 0;
   for (const x of path.samples) {
-    const g = segments[x.seg], P = d.pieces.find((q) => q.id === g.id), sp = offsetIn(segments, x.seg) + (x.s - segStart(segments, x.seg));
+    const g = segments[x.seg], pi = d.pieces.findIndex((q) => q.id === g.id), P = d.pieces[pi], sp = offsetIn(segments, x.seg) + (x.s - segStart(segments, x.seg));
     // ref 09 §5: the smoothstep's departure from the chord, plus the channel's own departure from the chord, |φ″|·len²/8
     const mid = offsetIn(segments, x.seg) + g.length / 2, curv = Math.abs(D.channelAt(P, 'phi', mid).d2) * g.length ** 2 / 8;
     const bound = (1 / (6 * Math.sqrt(3))) * Math.abs(g.roll1 - g.roll0) + 1.5 * curv + 1e-9;
-    worst = Math.max(worst, Math.abs(x.roll - D.channelAt(P, 'phi', sp).v) / bound);
+    const want = plan[pi].fn ? plan[pi].fn(sp) : D.channelAt(P, 'phi', sp).v;
+    worst = Math.max(worst, Math.abs(x.roll - want) / bound);
   }
   assert.ok(worst <= 1, `the roll departs by ${worst.toFixed(3)} × its bound`);
   const end = path.samples[path.samples.length - 1].pos, endF = fine.samples[fine.samples.length - 1].pos;

@@ -20,7 +20,8 @@ const MUTANTS = [
   { id: 'R5 a piece carried at both ends starts from rest', pattern: 'row 1|row 3', edits: [[AD, 'const c = [v0, left.r * L, 0, 0, right.r * L, v1];', 'const c = [v0, 0, 0, 0, right.r * L, v1];']] },
   { id: 'R6 the carried half ends at rest', pattern: 'row 1|row 3', edits: [[AD, 'const c = [m.v, m.d1 * h, m.d2 * h * h, 0, right.r * h, v1];', 'const c = [m.v, m.d1 * h, m.d2 * h * h, 0, 0, v1];']] },
   { id: 'R7 the carried half ignores the bank as built at its middle', pattern: 'row 2|row 3', edits: [[AD, 'const c = [m.v, m.d1 * h, m.d2 * h * h, 0, right.r * h, v1];', 'const c = [m.v, 0, 0, 0, right.r * h, v1];']] },
-  { id: 'R9 the cache keeps a piece built before its next one carried it', pattern: 'row 5', edits: [[AD, '`${carryKey(pi - 1)}|${carryKey(pi)}`', "''"]] },
+  // AMENDED BY NAME (2026-11-03): the cache key is now the bank plan's (adapter.js bankPlan), which holds the carry key; the same mutation, emptying that key, re-anchored
+  { id: 'R9 the cache keeps a piece built before its next one carried it', pattern: 'row 5', edits: [[AD, '`${pi === 0}|${plan[pi].key}`', '`${pi === 0}|`']] },
 ];
 
 function tree() {

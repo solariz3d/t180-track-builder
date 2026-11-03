@@ -77,7 +77,8 @@ const MUTANTS = [
   { id: 'M24 (K5-2) the schema is still core/2', pattern: 'row 5', edits: [[C + 'document.js', "const SCHEMA = 't180b.core/4',", "const SCHEMA = 't180b.core/2',"]] },
   { id: 'M25 a cup brush is allowed to reach a legacy piece', pattern: 'row 5e', edits: [[C + 'sculpt.js', "if (channel === 'c' && !P.cup) throw new D.CoreError('NOT_CUP'", "if (false) throw new D.CoreError('NOT_CUP'"]] },
   // row 6: cup then roll
-  { id: 'M26 (K6-3) the cup feeds the roll', pattern: 'row 6', edits: [[C + 'adapter.js', 'roll0: a.phi, roll1: b.phi, heartline: 0, profile, blend: cup', 'roll0: a.phi + a.c * 1e-3, roll1: b.phi + b.c * 1e-3, heartline: 0, profile, blend: cup']] },
+  // AMENDED BY NAME (2026-11-03): the anchored line moved (a rolling road segment now carries ...rollRates(s0, s1) between roll1 and heartline); the same mutation, re-anchored
+  { id: 'M26 (K6-3) the cup feeds the roll', pattern: 'row 6', edits: [[C + 'adapter.js', 'roll0: a.phi, roll1: b.phi, ...rollRates(s0, s1), heartline: 0, profile, blend: cup', 'roll0: a.phi + a.c * 1e-3, roll1: b.phi + b.c * 1e-3, ...rollRates(s0, s1), heartline: 0, profile, blend: cup']] },
   // row 7: the readout
   { id: 'M27 (K7-1) cupToDeg reads the wrong station of the document', pattern: 'row 7', edits: [[C + 'readout.js', "cupToDeg: P.tube ? D.channelAt(P, 't', P.length).v / 2 : P.cup ? D.channelAt(P, 'c', P.length).v", "cupToDeg: P.tube ? D.channelAt(P, 't', P.length).v / 2 : P.cup ? D.channelAt(P, 'c', P.length * 0.5).v"]] },
   { id: 'M28 (K7-2) a legacy piece reads the nominal edge (w and r ignored)', pattern: 'row 7', edits: [[C + 'readout.js', "D.legacyEdgeDeg(P.family, D.channelAt(P, 'w', 0).v, D.channelAt(P, 'r', 0).v)", 'D.legacyEdgeDeg(P.family, 1e9, 1e9)']] },

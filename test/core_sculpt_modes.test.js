@@ -23,11 +23,20 @@ test('the default brush is a HILL, and while the document has no height channel 
   assert.throws(() => S.brush(OPEN, { s0: 2000, r: 100, delta: 5 }), /NOT_YET.*"h"/);
   assert.throws(() => S.brush(OPEN, { mode: 'swerve', s0: 2000, r: 100, delta: 3 }), /NOT_YET.*"l"/);
 });
-test('a value brush (bank) leaves every sample past W⁺ bit for bit, and calls no close', () => {
+// AMENDED BY NAME (2026-11-03, the bank's corners rounded within each piece, src/core/adapter.js bankPlan; the ruling of 2026-11-02 on the carried roll, "his ride wins over the sealed
+// locality"): the brushed bank changes faster than the 3 g bar at the brush's edges, and that corner is rounded inside its own piece, never across a joint. So
+// past W⁺ the samples are bit for bit from the brushed piece's END on (it was: from W⁺ on), and between W⁺ and that end the roll moves by under 0.001° (measured
+// when amended: under 0.0001°, the last changed sample 0.5 m before the piece's end)
+test('a value brush (bank) leaves every sample past its piece bit for bit, moves the roll past W⁺ by under 0.001°, and calls no close', () => {
   const s0 = 2000, r = 100, hi = s0 + r + 2 * span(OPEN), res = S.brush(OPEN, { mode: 'value', channel: 'phi', s0, r, delta: 0.1 });
   assert.equal(res.close, undefined);
+  let o = 0, end = null; for (const P of OPEN.pieces) { if (o <= s0 && o + P.length > s0) end = o + P.length; o += P.length; }
+  assert.ok(end > hi, 'control: the brushed piece runs past W⁺');
   const a = samples(OPEN), b = samples(res.doc);
-  b.forEach((x, i) => { if (x.s > hi) for (const f of FIELDS) assert.ok(same(x[f], a[i][f]), `${f} at ${x.s}`); });
+  b.forEach((x, i) => {
+    if (x.s > end) for (const f of FIELDS) assert.ok(same(x[f], a[i][f]), `${f} at ${x.s}`);
+    else if (x.s > hi) assert.ok(Math.abs(x.roll - a[i].roll) < 0.001 * Math.PI / 180, `the roll at ${x.s}, past W⁺ in the brushed piece, moved ${(x.roll - a[i].roll) * 180 / Math.PI}°`);
+  });
 });
 test('a RATE brush must be asked for: a heading-rate channel under the hill or value mode is refused', () => {
   assert.throws(() => S.brush(OPEN, { mode: 'value', channel: 'kh', s0: 2000, r: 100, delta: 0.001 }), /BAD_CHANNEL/);

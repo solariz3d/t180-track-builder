@@ -70,9 +70,15 @@ test('row 2: a drag step builds nothing placed: how "drag", the placed path and 
   const s = await openTrack(), tm = createTrackModel(), base = tm.update(s.getState().resolved), d = s.getState().history.present;
   const fr = drag(s, tm, { mode: 'rate', channel: 'phi', s0: mid(d, 4), r: 50 }, [0.05, 0.1, 0.15]);   // r under half the piece: the shell converts the whole piece again, the window is the brushed part
   assert.equal(fr.how, 'drag'); assert.equal(fr.path, base.path, 'the placed path, not rebuilt'); assert.equal(fr.mesh, base.mesh, 'the placed mesh, not rebuilt');
-  const w = fr.drag.window; assert.ok(w.to > w.from && w.to - w.from <= 80, `the window is the brushed stretch: segments ${w.from} to ${w.to}`);
-  const s0 = mid(d, 4), wA = base.path.starts[w.from].s, wB = base.path.starts[w.to].s;   // the brush's span, give or take a knot span (20 m): not the whole piece the shell converted again
-  assert.ok(wA >= s0 - 50 - 20 && wB <= s0 + 50 + 20, `the window ${wA.toFixed(0)} to ${wB.toFixed(0)} m lies within the brush's span ${s0 - 50} to ${s0 + 50}, a knot span either side`);
+  // AMENDED BY NAME (2026-11-03, the bank's corners rounded within each piece, src/core/adapter.js bankPlan): a rate brush on the bank turns it faster than the 3 g
+  // bar at its edges, and that corner is rounded inside its own piece, so what the step changes (and so the window, which is what changed) reaches past the brush
+  // to the brushed piece's ends (measured when amended: segments 400 to 500, 800 to 1,000 m, for a brush over 850 to 950 m; it was at most 80 segments, within a
+  // knot span of the brush). It never leaves the brushed piece, and it is still drawn from a few dozen chords (25 then); the release still equals a fresh build
+  const w = fr.drag.window; assert.ok(w.to > w.from && w.to - w.from <= 120, `the window is the brushed piece at most: segments ${w.from} to ${w.to}`);
+  const s0 = mid(d, 4), wA = base.path.starts[w.from].s, wB = base.path.starts[w.to].s;
+  const Pi = 4, pA = d.pieces.slice(0, Pi).reduce((a, P) => a + P.length, 0), pB = pA + d.pieces[Pi].length;   // the brushed piece (mid(d, 4) is in it)
+  assert.ok(s0 > pA && s0 < pB, 'control: the brush is in piece 4');
+  assert.ok(wA >= pA - 1e-6 && wB <= pB + 1e-6, `the window ${wA.toFixed(0)} to ${wB.toFixed(0)} m lies within the brushed piece, ${pA.toFixed(0)} to ${pB.toFixed(0)} m`);
   assert.ok(fr.drag.chords <= 60 && fr.drag.chords < w.to - w.from, `the window drawn from ${fr.drag.chords} chords, not ${w.to - w.from}`);
   const placed = new Set(base.batches), ghosts = fr.batches.filter((b) => !placed.has(b));
   assert.equal(ghosts.length, fr.batches.filter((b) => String(b.key).startsWith('drag:')).length, 'every batch that is not a placed one is the window\'s ghost');

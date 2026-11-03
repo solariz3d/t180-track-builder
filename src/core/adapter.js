@@ -386,6 +386,157 @@ function carriedPhiOf(P, left, right) {
   if (right) { const c = [m.v, m.d1 * h, m.d2 * h * h, 0, right.r * h, v1]; return (s) => (s >= h ? quinticAt(c, (s - h) / h) : null); }
   const c = [v0, left.r * h, 0, m.d2 * h * h, m.d1 * h, m.v]; return (s) => (s <= h ? quinticAt(c, s / h) : null);
 }
+/**
+ * THE BANK'S CORNERS, as built (the user, 2026-11-03, RIBBON CORKSCREW TEST: "EVERYTIME there is a banked piece that tries to bank back towards center or another
+ * banking there are rank bumps"; his picture shows a crease in the road's edge there). A bank ramp starts and ends its roll over a short rounding (about 10 to
+ * 20 m, src/core/extend.js), so wherever the roll starts, stops, turns back or changes rate, the roll's ACCELERATION peaked: on his track up to 0.058 °/m², a lift
+ * of 295 m/s² at a wheel 10 m out at 170 m/s (his replay: 62 to 134 m/s² where it turns back, holds or starts). After the carry (above), the built bank of each run
+ * of road pieces (a flight or a tube ends a run) is read every BANK_DS m; wherever the roll accelerates faster than BANK_BAR (3 g at a wheel 10 m out at 170
+ * m/s, the bar the bank ramps' own onset is held to elsewhere), that corner is re-rounded: a window centred where the roll's two straight runs would meet, grown
+ * until one quintic across it (the bank, its rate and its acceleration matched at both ends, so the built bank stays C2) accelerates no faster than the bar.
+ * Outside the windows the built bank is the carried one, value for value, so every hold and target is kept; inside, the corner's roll is spread over the
+ * window instead of its rounding. A window is at most CORNER_MAX either side, never leaves its run, and windows that would overlap are one window. A bank that
+ * never accelerates faster than the bar is built exactly as before. Only the BUILT roll moves; the document is not rewritten.
+ *   bankPlan(doc) -> per piece index: { fn: s -> phi, or null where the piece is built as the document lays it, key: a string of what it depends on }
+ */
+const BANK_BAR = 29.4 / (10 * 170 * 170);   // rad/m²: 3 g at a wheel 10 m out at 170 m/s
+const BANK_DS = 2;   // m: the built bank is read this often along a run
+const CORNER_MAX = 250;   // m: the longest a window reaches either side of its corner
+const BANK_WILD = 0.1 * Math.PI / 180;   // rad: how far a window may leave the range of the bank it replaces (see build in bankPlan)
+const BANK_TURN_KEEP = 4 * Math.PI / 180;   // rad: how far a window may move the bank where the road turns: inside the lean rows' 5° (core_close_banks_lap), a degree kept for the lean being read off the built path, not the bank
+const TURN_KH = 1 / 600;   // 1/m: a station turns when |κh| is over this (D443's curved station)
+const JOINT_NEAR = 25;   // m: a corner this close to a joint is rounded up to the joint from each side, so the joint keeps its own bank
+// A piece's own bank read every BANK_DS (the document's, before any carry), kept by its BANK CHANNEL (the array, with its knots and length), not by the piece:
+// a turn or climb drag makes a new piece object every step and leaves the bank array as it was, and re-reading a 20 km piece's bank cost 90 ms a step (the
+// 20,000 m turn drag went from 8 to 100 ms p95, drag-frame row 4). A bank whose control points are all one value is that value everywhere: no reading at all
+const BANK_DOC = new WeakMap();
+const constantPhi = (P) => { const c = P.channels.phi; for (let k = 1; k < c.length; k++) if (c[k] !== c[0]) return false; return true; };
+function docSamples(P) {
+  const c = P.channels.phi, hit = BANK_DOC.get(c);
+  if (hit && hit.knots === P.knots && hit.length === P.length) return hit.r;
+  const n = Math.max(1, Math.round(P.length / BANK_DS)), v = new Float64Array(n + 1);
+  if (constantPhi(P)) v.fill(c[0]); else for (let k = 0; k <= n; k++) v[k] = D.channelAt(P, 'phi', (P.length * k) / n).v;
+  const r = { n, v }; BANK_DOC.set(c, { knots: P.knots, length: P.length, r });
+  return r;
+}
+function bankPlan(doc) {
+  const out = doc.pieces.map(() => ({ fn: null, key: '' }));
+  const carryFn = doc.pieces.map((P, i) => (P.type === 'road' ? carriedPhiOf(P, carryOf(doc, i - 1), carryOf(doc, i)) : null));
+  const phi1 = (i) => { const P = doc.pieces[i], c = carryFn[i]; return (s) => { const x = c ? c(s) : null; return x === null ? D.channelAt(P, 'phi', s).v : x; }; };
+  doc.pieces.forEach((P, i) => { if (carryFn[i]) out[i] = { fn: phi1(i), key: `c${carryOf(doc, i - 1) ? carryOf(doc, i - 1).key : ''}|${carryOf(doc, i) ? carryOf(doc, i).key : ''}` }; });
+  // runs of road pieces, a flight or a tube between them
+  const runs = []; let cur = null;
+  doc.pieces.forEach((P, i) => { if (P.type !== 'road' || P.tube) { cur = null; return; } if (!cur) runs.push((cur = [])); cur.push(i); });
+  for (const run of runs) {
+    // the run's built bank (after the carry) every BANK_DS: global s, value, and which piece
+    const S = [], V = [], at = []; let o = 0;
+    for (const i of run) {
+      const P = doc.pieces[i], f = carryFn[i] ? phi1(i) : null, d = f ? null : docSamples(P), n = f ? Math.max(1, Math.round(P.length / BANK_DS)) : d.n;
+      for (let k = S.length ? 1 : 0; k <= n; k++) { const s = (P.length * k) / n; S.push(o + s); V.push(f ? f(s) : d.v[k]); at.push(i); }
+      o += P.length;
+    }
+    const N = S.length; if (N < 8) continue;
+    const rate = (k) => (V[k + 1] - V[k]) / (S[k + 1] - S[k]);   // between samples k and k + 1
+    const acc = (k) => (rate(k) - rate(k - 1)) / ((S[k + 1] - S[k - 1]) / 2);   // at sample k
+    const over = []; for (let k = 1; k < N - 1; k++) if (Math.abs(acc(k)) > BANK_BAR) over.push(k);
+    if (!over.length) continue;
+    // corners: runs of samples over the bar, a gap shorter than 20 m joining them
+    const zones = []; for (const k of over) { const z = zones[zones.length - 1]; if (z && S[k] - S[z[1]] < 20) z[1] = k; else zones.push([k, k]); }
+    const pieceOf = (s) => { let pos = 0; for (const i of run) { const L = doc.pieces[i].length; if (s <= pos + L + 1e-9) return [i, Math.min(L, Math.max(0, s - pos))]; pos += L; } const i = run[run.length - 1]; return [i, doc.pieces[i].length]; };
+    const f1 = run.map((i) => phi1(i));
+    const val = (s) => { const [i, t] = pieceOf(s); return f1[run.indexOf(i)](t); };
+    const turnsAt = (s) => { const [i, t] = pieceOf(s); return Math.abs(D.channelAt(doc.pieces[i], 'kh', t).v) > TURN_KH; };   // a curved station (D443's)
+    const h = 0.5, d1 = (s) => (val(Math.min(S[N - 1], s + h)) - val(Math.max(0, s - h))) / (Math.min(S[N - 1], s + h) - Math.max(0, s - h));
+    const d2 = (s) => { const a = Math.max(h, Math.min(S[N - 1] - h, s)); return (val(a + h) - 2 * val(a) + val(a - h)) / (h * h); };
+    // the run's joints (global s): no window crosses one, so a joint keeps the bank, rate and acceleration its pieces give it, and a piece's edit moves no bank
+    // past its two neighbours (a neighbour's rounding starts from the joint's own rate and acceleration). A corner within JOINT_NEAR of a joint is rounded on each side up to the joint itself; a corner inside a piece is centred where the
+    // bank's two straight runs would meet, inside that piece
+    const bounds = [0]; { let q = 0; for (const i of run) bounds.push((q += doc.pieces[i].length)); }
+    // and the bank's own turning points inside a piece (its rate's sign flips; on a flat top, the top's middle), pinned the same way: a window joining a bump's
+    // two feet erased the bump (a 5° bump built as 0°). At a turning point the rate is 0 and the acceleration is the bank's own, at most the bar, both sides
+    const turns = [];
+    { let last = -1; for (let k = 0; k + 1 < N; k++) { const r = rate(k); if (Math.abs(r) < 1e-9) continue;
+      if (last >= 0 && Math.sign(r) !== Math.sign(rate(last))) {
+        let t;
+        if (k === last + 1) { let lo = S[last], hi = S[k + 1]; const sg = Math.sign(rate(last)); for (let g = 0; g < 40; g++) { const m = (lo + hi) / 2; if (Math.sign(d1(m)) === sg) lo = m; else hi = m; } t = (lo + hi) / 2; } else t = (S[last + 1] + S[k]) / 2;
+        if (!bounds.some((x) => Math.abs(x - t) < 1)) turns.push(t);
+      }
+      last = k; } }
+    const pins = [...bounds, ...turns].sort((p, q) => p - q), isTurn = (x) => turns.some((t) => Math.abs(t - x) < 1e-9);
+    const spanOf = (x) => { for (let k = 1; k < pins.length; k++) if (x < pins[k] - 1e-9 || k === pins.length - 1) return [pins[k - 1], pins[k]]; return [0, S[N - 1]]; };
+    // at every pin the acceleration a window starts from is at most the bar: a fitted or sculpted piece can end mid-swing (15 times the bar), and a window
+    // grown from that swung the next piece's bank to -135° on its way to -40°
+    const isPin = (x) => pins.some((t) => Math.abs(t - x) < 1e-9);
+    const r1At = (x) => (isTurn(x) ? 0 : d1(x)), r2At = (x) => (isPin(x) ? Math.max(-BANK_BAR, Math.min(BANK_BAR, d2(x))) : d2(x));
+    const build = (a, b) => {
+      const W = b - a, c = [val(a), r1At(a) * W, (a <= 0 ? 0 : r2At(a)) * W * W, (b >= S[N - 1] ? 0 : r2At(b)) * W * W, r1At(b) * W, val(b)];
+      let peak = 0; for (let k = 0; k <= 200; k++) { const u = k / 200, x = Math.abs(quinticD2(c, u)) / (W * W); if (x > peak) peak = x; }
+      // WILD: it leaves the range of the bank it replaces by more than 0.1° (an overshoot, never a rounding); such a window is never used
+      let lo = Infinity, hi = -Infinity, qlo = Infinity, qhi = -Infinity;
+      for (let k = 0; k <= 100; k++) { const x = a + (W * k) / 100, v = val(x), q = quinticAt(c, k / 100); lo = Math.min(lo, v); hi = Math.max(hi, v); qlo = Math.min(qlo, q); qhi = Math.max(qhi, q); }
+      const wild = qlo < lo - BANK_WILD || qhi > hi + BANK_WILD;
+      // HELD: where the road turns, the bank is what the curve leans on, and a rounding centred at a corner near a curve's end re-laid the curve's last few
+      // hundred metres (a Close-banked curve's exit, 32.5°, built at 15°). So a window may move a turning road's bank by at most BANK_TURN_KEEP; a wider one is
+      // never used, and the corner keeps more of the document's own roll there
+      let td = 0;
+      for (let k = 0; k <= 100; k++) { const x = a + (W * k) / 100; if (turnsAt(x)) td = Math.max(td, Math.abs(quinticAt(c, k / 100) - val(x))); }
+      return { a, b, c, peak: wild ? Infinity : peak, wild, held: td > BANK_TURN_KEEP };
+    };
+    const accNear = (a, b) => { let m = 0; for (let k = 1; k < N - 1; k++) if (S[k] >= a && S[k] <= b) m = Math.max(m, Math.abs(acc(k))); return m; };
+    const windows = [];
+    for (const [k0, k1] of zones) {
+      const ka = Math.max(1, k0 - 3), kb = Math.min(N - 2, k1 + 3), r1 = rate(ka - 1), r2 = rate(kb), p1 = V[ka], p2 = V[kb];
+      const H0 = Math.max((S[k1] - S[k0]) / 2 + 2 * BANK_DS, 0.9375 * Math.abs(r2 - r1) / BANK_BAR);
+      // every pin the zone reaches (a turning point next to a joint is two: each rounds its own sides)
+      const js = pins.slice(1, -1).filter((x) => x >= S[k0] - JOINT_NEAR && x <= S[k1] + JOINT_NEAR);
+      if (js.length) for (const j of js) {
+        // up to the joint from each side, each grown inside its own piece until it is under the bar; a side that does not change its bank there needs none
+        for (const side of [-1, 1]) {
+          const [lo, hi] = spanOf(side < 0 ? j - 1e-6 : j + 1e-6);
+          if (accNear(side < 0 ? Math.max(lo, j - JOINT_NEAR) : j, side < 0 ? j : Math.min(hi, j + JOINT_NEAR)) <= BANK_BAR) continue;
+          let W = 2 * H0, w, ok = null;
+          for (;;) { const a = side < 0 ? Math.max(lo, j - W) : j, b = side < 0 ? j : Math.min(hi, j + W); w = build(a, b); if (w.held) break; if (!w.wild) ok = w; if (w.peak <= BANK_BAR || W >= 2 * CORNER_MAX || (side < 0 ? a <= lo : b >= hi)) break; W = Math.min(2 * CORNER_MAX, W * 1.15); }
+          if (ok) windows.push(ok);   // the widest that is neither wild nor held
+        }
+      }
+      if (js.length) continue;
+      // inside a piece: centred where the two straight runs would meet (the middle of the zone when they are parallel)
+      const [lo, hi] = spanOf((S[k0] + S[k1]) / 2);
+      let mid = (S[k0] + S[k1]) / 2;
+      if (Math.abs(r2 - r1) > 1e-9) { const x = (p2 - p1 - r2 * S[kb] + r1 * S[ka]) / (r1 - r2); if (x > S[ka] - 50 && x < S[kb] + 50) mid = x; }
+      // at least the whole zone (a steep roll easing into a gentle one meets the runs either side of the zone outside it, and a window there missed the corner)
+      let H = Math.max(H0, mid - S[k0] + BANK_DS, S[k1] - mid + BANK_DS), w, ok = null;
+      for (;;) { const a = Math.max(lo, mid - H), b = Math.min(hi, mid + H); w = build(a, b); if (w.held) break; if (!w.wild) ok = w; if (w.peak <= BANK_BAR || H >= CORNER_MAX || (a <= lo && b >= hi)) break; H = Math.min(CORNER_MAX, H * 1.15); }
+      if (ok) windows.push(ok);
+    }
+    // windows that overlap inside one piece become one; never across a joint (each window lies in one piece's span)
+    windows.sort((p, q) => p.a - q.a);
+    for (let k = 1; k < windows.length; k++) {
+      const p = windows[k - 1], q = windows[k], [lo, hi] = spanOf((q.a + q.b) / 2);
+      if (q.a < p.b - 1e-9 && p.a >= lo - 1e-9 && p.b <= hi + 1e-9) {
+        let a = Math.min(p.a, q.a), b = Math.max(p.b, q.b), m = build(a, b);
+        for (let g = 0; !m.held && m.peak > BANK_BAR && g < 12 && (a > lo || b < hi); g++) { const a2 = Math.max(lo, a - 0.1 * (b - a)), b2 = Math.min(hi, b + 0.1 * (b - a)), m2 = build(a2, b2); if (m2.held) break; a = a2; b = b2; m = m2; }
+        if (m.wild || m.held) windows.splice(k - 1, 2); else windows.splice(k - 1, 2, m);   // two that cannot be one without overshooting, or without re-laying a curve, are neither
+        k = Math.max(0, k - 2);
+      }
+    }
+    // the pieces' built bank: the window's quintic where a window covers s, else the carried bank
+    let pos = 0;
+    for (const i of run) {
+      const P = doc.pieces[i], p0 = pos, mine = windows.filter((w) => w.b > p0 && w.a < p0 + P.length); pos += P.length;
+      if (!mine.length) continue;
+      const g = f1[run.indexOf(i)];
+      out[i] = { fn: (s) => { const x = p0 + s; for (const w of mine) if (x >= w.a && x <= w.b) return quinticAt(w.c, (x - w.a) / (w.b - w.a)); return g(s); },
+        key: `${out[i].key}#${mine.map((w) => [w.a, w.b, ...w.c].join(',')).join(';')}` };
+    }
+  }
+  return out;
+}
+function quinticD2(c, u) {
+  const u2 = u * u, u3 = u2 * u, [y0, d0, c0, c1, d1, y1] = c;
+  return y0 * (-60 * u + 180 * u2 - 120 * u3) + d0 * (-36 * u + 96 * u2 - 60 * u3) + c0 * (1 - 9 * u + 18 * u2 - 10 * u3)
+    + c1 * (3 * u - 12 * u2 + 10 * u3) + d1 * (-24 * u + 84 * u2 - 60 * u3) + y1 * (60 * u - 180 * u2 + 120 * u3);
+}
 function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpeedKmh, cupRuns = true, cache = null } = {}) {
   D.checkDoc(doc);
   if (!doc.pieces.length) throw new D.CoreError('EMPTY', 'an empty track has no path');
@@ -396,6 +547,7 @@ function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpe
   const roadIdx = doc.pieces.map((P, i) => (P.type === 'road' ? i : -1)).filter((i) => i >= 0), firstRoad = roadIdx[0], lastRoad = roadIdx[roadIdx.length - 1];
   const seam = doc.closed && roadIdx.length > 1 && !!doc.pieces[firstRoad].cup !== !!doc.pieces[lastRoad].cup && cupRuns;
   const chan = (P, s) => D.valuesAt(P, s);
+  const plan = bankPlan(doc);   // the built bank: the roll carried through a joint, and its corners rounded (bankPlan above)
   // `segMFor(P, i)` may give one piece its own chord length (the preview's ghost while a handle is dragged: a piece of 1,000 m is 500 chords of 2 m, and every
   // move of the pointer rebuilds all of them). Absent, or answering undefined, a piece is cut by segM, exactly as before: nothing that is placed or exported passes it.
   const at0 = segMFor ? new Map(doc.pieces.map((P, i) => [P, i])) : null;
@@ -416,8 +568,17 @@ function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpe
       lastProfile = null; lastLegacy = false; lastKind = null; lastPlain = null;   // the landing's cross-section starts afresh: nothing morphs across the air
       return;
     }
-    const carried = carriedPhiOf(P, carryOf(doc, pi - 1), carryOf(doc, pi));   // the roll carried through either joint (carryOf above)
-    const n = nOf(P), at = !carried ? (s) => D.valuesAt(P, s) : (s) => { const v = D.valuesAt(P, s), c = carried(s); return c === null ? v : { ...v, phi: c }; };
+    const carried = plan[pi].fn;   // the built bank where it is not the document's (bankPlan above)
+    const n = nOf(P), at = !carried ? (s) => D.valuesAt(P, s) : (s) => ({ ...D.valuesAt(P, s), phi: carried(s) });
+    // the built bank's RATE at a segment's ends, so the geometry rolls through each 2 m segment by the cubic Hermite (src/geom/path.js) instead of its smoothstep,
+    // which brought the roll rate to rest at both ends of every segment: a small joint bump every 2 m wherever the bank changes (the user, 2026-11-03, "I notice
+    // it with my perception"). Where the plan re-laid the bank, the rate is read from it over 5 cm, one-sided at the piece's ends
+    const rateAt = !carried ? (s) => D.channelAt(P, 'phi', s).d1 : (s) => { const h = 0.05, lo = Math.max(0, s - h), hi = Math.min(P.length, s + h); return (carried(hi) - carried(lo)) / (hi - lo); };
+    // the roll's rate at a segment's ends, carried so path.js rolls through it (a cubic Hermite) and not to rest at every end (a smoothstep). Written only where
+    // the roll is moving: with both rates 0 the Hermite IS the smoothstep, so a segment that does not roll is built and serialised exactly as before
+    // (a piece whose bank is one value and is neither carried nor re-laid by the plan never rolls: no rate is read for it, which on a 20 km piece was 90 ms a build)
+    const rolls = !!carried || !constantPhi(P);
+    const rollRates = (s0, s1) => { if (!rolls) return {}; const r0 = rateAt(s0), r1 = rateAt(s1); return Math.abs(r0) > 1e-12 || Math.abs(r1) > 1e-12 ? { rollRate0: r0, rollRate1: r1 } : {}; };
     let a = at(0);
     if (pi === 0 || doc.pieces[pi - 1].type === 'flight') roll = a.phi;
     const kind = D.kindOf(P), xs = kind === 'tube' || !!P.edge || (kind === 'cup' && lastKind === 'tube');   // a tube, an edge, or a cup entering from a tube is built by xsecSegments
@@ -436,7 +597,7 @@ function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpe
     for (let j = 0; j < n; j++) {
       const s0 = (P.length * j) / n, s1 = (P.length * (j + 1)) / n, b = at(s1), mid = at((s0 + s1) / 2);
       const L = cup ? null : legacySeg(P.family, a, b, mid, s1 - s0), profile = cup ? cup[j].profile : L.profile;   // a legacy piece: today's profileAt, or a chord where the width or r changes
-      segs.push({ id: P.id, word: 'core', part: 'body', kind: 'road', ...(D.gripOf(P) !== D.GRIP_DEFAULT ? { grip: D.gripOf(P) } : {}), length: s1 - s0, k0: a.kh, k1: b.kh, kp0: a.kv, kp1: b.kv, roll0: a.phi, roll1: b.phi, heartline: 0, profile, blend: cup ? cup[j].blend : L.blend, speed: null, ...(cup ? (xs ? { chord: true, fractions: cup[j].fractions, ...(cup[j].heartline1 !== undefined ? { heartline: cup[j].heartline, heartline1: cup[j].heartline1, rollRate0: cup[j].rollRate0, rollRate1: cup[j].rollRate1 } : {}) } : { cup: true }) : L.chord ? { chord: true } : {}) });
+      segs.push({ id: P.id, word: 'core', part: 'body', kind: 'road', ...(D.gripOf(P) !== D.GRIP_DEFAULT ? { grip: D.gripOf(P) } : {}), length: s1 - s0, k0: a.kh, k1: b.kh, kp0: a.kv, kp1: b.kv, roll0: a.phi, roll1: b.phi, ...rollRates(s0, s1), heartline: 0, profile, blend: cup ? cup[j].blend : L.blend, speed: null, ...(cup ? (xs ? { chord: true, fractions: cup[j].fractions, ...(cup[j].heartline1 !== undefined ? { heartline: cup[j].heartline, heartline1: cup[j].heartline1, rollRate0: cup[j].rollRate0, rollRate1: cup[j].rollRate1 } : {}) } : { cup: true }) : L.chord ? { chord: true } : {}) });
       pitch += ((a.kv + b.kv) / 2) * (s1 - s0);   // the geometry's pitch: kp linear over the segment (src/geom/path.js)
       a = b; lastProfile = cup ? cup[j].end : L.end;
     }
@@ -447,12 +608,11 @@ function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpe
   // fade into the next piece), its role at the lap seam and the seam's two ends, the state carried in from the piece before, and the options.
   // Each entry is only as wide as `piece` reads it, so placing a piece after this one does not rebuild it: the next piece matters only as a cup's
   // tail target (a legacy road after a cup, `nextLegacy` below), and the first/last road roles only at a mixed lap seam (`seam`).
-  const carryKey = (i) => { const c = carryOf(doc, i); return c ? c.key : null; };
   const inputsOf = (pi) => {
     const P = doc.pieces[pi], nextP = doc.pieces[pi + 1];
     const tailTo = P.type === 'road' && P.cup && cupRuns && nextP && nextP.type === 'road' && !nextP.cup && !nextP.tube && !nextP.edge ? nextP : null;
-    // the first entry also carries the roll carried through either joint, which depends on the neighbour (carryOf): one entry, so every index after keeps its place
-    return [`${pi === 0}|${P.type === 'road' ? `${carryKey(pi - 1)}|${carryKey(pi)}` : ''}`, pi ? doc.pieces[pi - 1].type : null, tailTo, seam, seam && pi === firstRoad, seam && pi === lastRoad,
+    // the first entry also carries the piece's built bank (bankPlan: its carry and its rounded corners), which depends on its neighbours: one entry, so every index after keeps its place
+    return [`${pi === 0}|${plan[pi].key}`, pi ? doc.pieces[pi - 1].type : null, tailTo, seam, seam && pi === firstRoad, seam && pi === lastRoad,
       seam ? doc.pieces[firstRoad] : null, seam ? doc.pieces[lastRoad] : null, pitch, roll, lastProfile, lastLegacy, lastKind, lastPlain, mOf(P), tailTo ? mOf(tailTo) : null, seam ? mOf(doc.pieces[firstRoad]) : null, seam ? mOf(doc.pieces[lastRoad]) : null, designKmh, cupRuns,   // the chord length of every piece this one's segments read (a tail fade, the lap seam) is an input too
       P.type === 'flight' ? lipKey(doc.pieces[pi - 1]) : null];   // a flight takes off from the lip as built: the piece before it's offsets at its end
   };
@@ -555,4 +715,4 @@ function offsetPath(doc, segments, path) {
   return { ...path, samples, segEnd, head };
 }
 
-module.exports = { toSegments, toPath, carryOf, lipOf, profileAt, cupProfile, tubeProfile, edgeProfile, legacyEdgeDeg: D.legacyEdgeDeg, offsetPath, heartlineLift, heartlineOf, EDGE_MIN_N, TUBE_N, HEARTLINE_FROM };
+module.exports = { toSegments, toPath, carryOf, bankPlan, lipOf, profileAt, cupProfile, tubeProfile, edgeProfile, legacyEdgeDeg: D.legacyEdgeDeg, offsetPath, heartlineLift, heartlineOf, EDGE_MIN_N, TUBE_N, HEARTLINE_FROM };

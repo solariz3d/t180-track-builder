@@ -5,11 +5,11 @@
 // ribbon (250 m pieces banking -90° each) the built roll rate fell from 0.516 °/m mid-piece to 0.006 °/m at every joint. The ribbon here is laid as the panel lays
 // it (app/core/panel.js extendOptions, his values); its last three pieces' bank channels are his save's exactly. Rows:
 //   1  through each of the ribbon's rolling joints, the built roll rate stays at least half its mid-piece rate (before: about 1%)
-//   2  the carry moves nothing it should not: the bank at every joint (the straight's end and the ribbon's end among them) is the document's, and the run's
-//      outer halves (the first rolling piece's first half, the last one's second) are built as the document lays them
+//   2  the carry moves nothing it should not: the bank at every joint it carries is the document's (amended: the run's two ends are rounded corners now)
+//      (the run's outer halves are no longer checked here)
 //   3  the built roll stays C2 through the joints: from the first rolling piece's middle to the last one's, its rate moves by no more than 0.01 °/m from one
 //      2 m segment to the next (before: up to 0.07 °/m where a ramp eased into a joint)
-//   4  where the roll does not run on the same way across a joint it is the document's own, segment for segment: a roll that turns back, a bank held
+//   4  where the roll does not run on the same way across a joint the carry does not act (amended: those are rounded as corners now): a roll that turns back, a bank held
 //      between two rolls, and a ribbon whose next piece rolls the other way
 //   5  the per-piece cache: after the next piece is added, the piece before is built carried (the cached build equals a fresh one)
 'use strict';
@@ -42,11 +42,12 @@ test('row 1: through each of the ribbon\'s rolling joints, the built roll rate s
   }
 });
 
-test('row 2: the carry moves nothing it should not: the bank at every joint is the document\'s, and the run\'s outer halves are built as the document lays them', () => {
+// AMENDED BY NAME (2026-11-03, the bank's corners rounded as built, src/core/adapter.js bankPlan): the roll off the straight at s 100 and its stop at the ribbon's
+// end are corners now, rounded across their joints, so the bank there and the outer halves move; what the CARRY promises still holds: the bank at each joint it
+// carries is the document's (the targets and holds elsewhere are test/core_bank_corners.test.js row 3)
+test('row 2: the carry moves nothing it should not: the bank at every joint it carries is the document\'s', () => {
   const doc = lay(RIBBON), P = samples(doc), J = jointsOf(doc), near = (x, s) => Math.abs(x.s - s) < 1e-9;
-  const check = (x, what) => { const d = docRollAt(doc, x.s); assert.ok(Math.abs(x.roll / DEG - d) < 1e-6, `${what} at s ${x.s}: built ${(x.roll / DEG).toFixed(4)}°, the document ${d.toFixed(4)}°`); };
-  for (const j of J) check(P.find((x) => near(x, j)), 'a joint');
-  for (const x of P) if ((x.s >= J[0] && x.s <= J[0] + 125) || (x.s >= J[4] - 125 && x.s <= J[4])) check(x, 'an outer half');
+  for (const j of J.slice(1, 4)) { const x = P.find((q) => near(q, j)), d = docRollAt(doc, x.s); assert.ok(Math.abs(x.roll / DEG - d) < 1e-6, `a carried joint at s ${x.s}: built ${(x.roll / DEG).toFixed(4)}°, the document ${d.toFixed(4)}°`); }
 });
 
 test('row 3: the built roll stays C2 through the joints: its rate moves by at most 0.01 °/m from one sample to the next', () => {
@@ -56,16 +57,12 @@ test('row 3: the built roll stays C2 through the joints: its rate moves by at mo
   assert.ok(worst <= 0.01, `the roll rate jumps ${worst.toFixed(4)} °/m between samples at s ${at.toFixed(1)}`);
 });
 
-test('row 4: where the roll does not run on the same way across a joint, the built roll is the document\'s own, segment for segment', () => {
+// AMENDED BY NAME (2026-11-03, the bank's corners rounded as built): a roll that turns back or a bank held is now rounded as a corner (test/core_bank_corners.test.js),
+// so its built roll is no longer the document's; what this row keeps is the carry's own scope: it does not act at those joints
+test('row 4: where the roll does not run on the same way across a joint, the carry does not act there', () => {
   for (const [name, banks] of [['a roll that turns back', [-30, 0]], ['a bank held between two rolls', [-30, -30, -60]], ['a ribbon whose next piece rolls the other way', [-90, 0]]]) {
-    const doc = lay(banks), segs = A.toSegments(doc), J = [0, ...jointsOf(doc)];
-    let s = 0, worst = 0;
-    for (const g of segs) {
-      const pi = doc.pieces.findIndex((P) => P.id === g.id), base = J[pi], P = doc.pieces[pi];
-      worst = Math.max(worst, Math.abs(g.roll0 - D.valuesAt(P, s - base).phi), Math.abs(g.roll1 - D.valuesAt(P, s + g.length - base).phi));
-      s += g.length;
-    }
-    assert.ok(worst < 1e-12, `${name}: the built roll differs from the document by ${worst} rad`);
+    const doc = lay(banks), carried = doc.pieces.map((P, i) => A.carryOf(doc, i)).filter(Boolean);
+    assert.equal(carried.length, 0, `${name}: the carry acts at ${carried.length} joint(s)`);
   }
 });
 

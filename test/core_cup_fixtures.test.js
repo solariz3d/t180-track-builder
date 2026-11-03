@@ -55,6 +55,11 @@
 // fewer triangles (and, as the export's chunks start where they now start, their chunk names moved), and no material record changed.
 // test/fixtures/manifest.lighthull.json records it against 6f0969e (whose kn5 is the D609 record's after); its row builds F1 F2 NOW, and the D593, D604 and D609
 // rows leave the skins to it.
+// AMENDED BY NAME (2026-11-03, the user, 2026-11-03: "EVERYTIME there is a banked piece that tries to bank back towards center or another banking there are rank
+// bumps"): wherever a piece's bank changes faster than 3 g at a wheel 10 m out at 170 m/s, the built bank rounds that corner within its piece (src/core/adapter.js
+// bankPlan), and a segment whose roll moves carries its roll rate. F3 and F5 bank faster than that, so their segs, path and mesh change and NOTHING ELSE: no
+// centre-line position moves, no segment changes in anything but its roll, and the other seven are unchanged in every digest (they do not bank fast enough).
+// test/fixtures/manifest.bankcorners.json records F3 F5's digests before (the seal's: neither was in an earlier record) and after, with the measure.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -101,6 +106,9 @@ const LEAN_CHANGED = ['F1-bowl-default-lap-closed', 'F2-halfpipe-default-lap-clo
 // the light hull: F1 F2's kn5, and nothing else, change; manifest.lighthull.json records it, mesh by mesh
 const AMEND14 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.lighthull.json'), 'utf8'));
 const LIGHT_CHANGED = ['F1-bowl-default-lap-closed', 'F2-halfpipe-default-lap-closed'];
+// THE BANK'S CORNERS (2026-11-03, rounded within each piece): F3 F5's segs, path and mesh, and nothing else, change; manifest.bankcorners.json records it
+const AMEND15 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.bankcorners.json'), 'utf8'));
+const BANK_CHANGED = ['F3-bowl-narrow-12m-cap-binds', 'F5-flat-20m-bank-30'];
 const { kn5Nodes } = require('./fixtures/kn5nodes.js');
 /** The seal's manifest with the D196 digests put in for the three amended fixtures, and the D222 digests for the two closed ones (a deep copy). */
 function amendedManifest() {
@@ -119,6 +127,7 @@ function amendedManifest() {
   for (const [k, v] of Object.entries(AMEND12.fixtures)) { const { kn5Bytes, ...digests } = v.after_d604; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // D604
   for (const [k, v] of Object.entries(AMEND13.fixtures)) { const { kn5Bytes, ...digests } = v.after_d609; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // D609
   for (const [k, v] of Object.entries(AMEND14.fixtures)) { const { kn5Bytes, ...digests } = v.after_light; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // the light hull
+  for (const [k, v] of Object.entries(AMEND15.fixtures)) man.fixtures[k].render = JSON.parse(JSON.stringify(v.after_bank));   // the bank's corners
   return man;
 }
 
@@ -164,18 +173,24 @@ test('the fixture kit is the seal\'s: fixtures.js and manifest.json carry the sh
   assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.lighthull.json'))), 'b5b7a6babf7ba70c5b30f3ec6cb2926dd3f60325b27cbf02f93bd26eac52f460');   // the light hull
   assert.deepEqual(Object.keys(AMEND14.fixtures), LIGHT_CHANGED);
   assert.deepEqual([...AMEND14.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !LIGHT_CHANGED.includes(k)).sort());
+  assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.bankcorners.json'))), '883d92a68d480a27536eb59649a5b79a30b37a4c277fe29b2a86b3cf0981bf04');   // the bank's corners
+  assert.deepEqual(Object.keys(AMEND15.fixtures), BANK_CHANGED);
+  assert.deepEqual([...AMEND15.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !BANK_CHANGED.includes(k)).sort());
 });
 // CHANGED D258: F7 (the old jump, now a free flight to the end of its old ramp) differs in segs, path and mesh; the path is byte-identical in every OTHER fixture
 test('row 5a (amended D196, D222, D258): against the SEAL\'s manifest (c964c2d) F4, F6, F8 differ in segs and mesh only, F1, F2 in kn5 only, F7 in segs, path and mesh, and the three others are identical', () => {
+  // AMENDED BY NAME (2026-11-03): F3 F5's bank is rounded now, so they differ from the seal in segs, path and mesh (meshParts the same): 8 of 9 differ, F9 alone is
+  // identical, and the path differs in F3 F5 F7 (was 6 of 9, three identical, the path in F7 alone)
   const r = check(FX); assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.match(r.stdout, /\n6 of 9 differ\n?$/);
+  assert.match(r.stdout, /\n8 of 9 differ\n?$/);
+  for (const k of BANK_CHANGED) assert.ok(r.stdout.includes(`${k}: DIFFERS in segs, path, mesh\n`), `${k} should differ in segs, path, mesh only:\n${r.stdout}`);
   for (const k of JUMP_CHANGED) assert.ok(r.stdout.includes(`${k}: DIFFERS in segs, path, mesh, meshParts\n`), `${k} should differ in segs, path, mesh, meshParts:\n${r.stdout}`);
   for (const k of CHANGED) assert.ok(r.stdout.includes(`${k}: DIFFERS in segs, mesh, meshParts\n`), `${k} should differ in segs, mesh, meshParts only:\n${r.stdout}`);
   // CHANGED D460: F1's lap seam is zipped by lateral position now, so F1 differs from the seal in its mesh as well as its kn5; F2 (whose seam rows are equal) in its kn5 only
   for (const k of KN5_CHANGED) { const want = SEAM_CHANGED.includes(k) ? 'mesh, kn5' : 'kn5'; assert.ok(r.stdout.includes(`${k}: DIFFERS in ${want}\n`), `${k} should differ in ${want} only:\n${r.stdout}`); }
-  for (const k of Object.keys(MANIFEST.fixtures).filter((n) => !CHANGED.includes(n) && !KN5_CHANGED.includes(n) && !JUMP_CHANGED.includes(n))) assert.ok(r.stdout.includes(`${k}: identical`), `${k} should be byte-identical to c964c2d`);
-  assert.equal((r.stdout.match(/: identical/g) || []).length, 3, r.stdout);
-  assert.equal((r.stdout.match(/DIFFERS in [^\n]*path/g) || []).length, 1, 'the geometry (path) changed outside F7');
+  for (const k of Object.keys(MANIFEST.fixtures).filter((n) => !CHANGED.includes(n) && !KN5_CHANGED.includes(n) && !JUMP_CHANGED.includes(n) && !BANK_CHANGED.includes(n))) assert.ok(r.stdout.includes(`${k}: identical`), `${k} should be byte-identical to c964c2d`);
+  assert.equal((r.stdout.match(/: identical/g) || []).length, 1, r.stdout);
+  assert.equal((r.stdout.match(/DIFFERS in [^\n]*path/g) || []).length, 3, 'the geometry (path) changed outside F3 F5 F7');
 });
 test('row 5a (amended D196): against the D196 baseline every fixture renders identically: "0 of 9 differ"', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-cup-fx-'));
@@ -294,6 +309,19 @@ test('D196 amendment record: every changed fixture keeps its path digest, its se
     assert.ok((v.measure.after.sameFamilyJointGapMm ?? v.measure.after.jointGapMm) <= 1, `${k}: a same-family joint steps more than 1 mm`);
   }
 });
+test('the bank\'s corners amendment record: only F3 F5 changed, in segs, path and mesh, "before" is the seal\'s, and the measure says only the roll moved: no centre-line position, no other field of a segment', () => {
+  for (const [k, v] of Object.entries(AMEND15.fixtures)) {
+    assert.deepEqual(v.before_bank, MANIFEST.fixtures[k].render, `${k}: "before" is the seal's (it was in no earlier record)`);
+    for (const d of ['segs', 'path', 'mesh']) assert.notEqual(v.after_bank[d], v.before_bank[d], `${k}: ${d} did not change`);
+    assert.equal(v.after_bank.meshParts, v.before_bank.meshParts, `${k}: the mesh's part count changed`);
+    const m = v.measure;
+    assert.equal(m.segments_count_after, m.segments, `${k}: the segment count changed`);
+    assert.equal(m.segments_changed_in_anything_but_roll, 0, `${k}: a segment changed in more than its roll`);
+    assert.equal(m.largest_centreline_move_m, 0, `${k}: the centre line moved`);
+    assert.ok(m.segments_whose_roll_changed > 0 && m.largest_roll_change_deg > 0 && m.largest_roll_change_deg < 5, `${k}: the roll moved by ${m.largest_roll_change_deg}°`);
+  }
+});
+
 test('D460 amendment record: only F1 F4 F6 F8 changed, only their mesh digest (and F1\'s kn5), "before" is the record each was last amended by, and the measure says only seam index arrays changed', () => {
   assert.deepEqual(Object.keys(AMEND9.fixtures), SEAM_CHANGED);
   for (const [k, v] of Object.entries(AMEND9.fixtures)) {

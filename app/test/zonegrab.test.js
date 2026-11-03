@@ -209,8 +209,16 @@ test('row 14m (D522, decision 2): a 30 m grab on 20 m knots is sharp: the road c
   const moved = after.map((x, i) => ({ s: x.s, m: Math.max(...x.p.map((p, k) => gap(p, before[i].p[k]))) }));
   const reach = (tol) => Math.max(0, ...moved.filter((x) => x.m > tol).map((x) => Math.abs(x.s - S0)));
   assert.equal(rUsed, 30, 'the band shows 30 m: the radius used is the radius asked');
-  assert.ok(reach(1e-4) <= 30, `more than 0.1 mm reaches ${reach(1e-4)} m from the press`);
-  assert.ok(Math.max(...moved.filter((x) => Math.abs(x.s - S0) > 30).map((x) => x.m)) <= 1e-4, 'outside the 30 m, under 0.1 mm (Sharp\'s declared spill)');
+  // AMENDED BY NAME (2026-11-03, the bank's corners rounded within each piece, src/core/adapter.js bankPlan; the ruling of 2026-11-02 on the carried roll, "his ride wins over the sealed
+  // locality"; for his look): on this 60°-banked road the grab changes the bank too, faster than the 3 g bar at its edges, and that corner is rounded inside the
+  // piece. So the CENTRE LINE keeps Sharp's declared spill (measured when amended: 29 m), and past 30 m the rims move only by that roll (it was: every point under
+  // 0.1 mm past 30 m; measured: the roll at most 0.45°, a rim at most 126 mm, out to 53.5 m from the press)
+  const centre = (tol) => Math.max(0, ...after.map((x, i) => ({ s: x.s, m: gap(x.p[1], before[i].p[1]) })).filter((x) => x.m > tol).map((x) => Math.abs(x.s - S0)));
+  assert.ok(centre(1e-4) <= 30, `on the centre line more than 0.1 mm reaches ${centre(1e-4)} m from the press`);
+  const rb = toPath(doc).path.samples, ra = toPath(sh.getState().history.present).path.samples; let roll = 0;
+  ra.forEach((x, i) => { if (Math.abs(x.s - S0) > 30) roll = Math.max(roll, Math.abs(x.roll - rb[i].roll)); });
+  assert.ok(roll < 0.5 * DEGR, `outside the 30 m the rims move only by the bank's rounding: the roll moved ${(roll / DEGR).toFixed(3)}°`);
+  assert.ok(reach(1e-4) <= 60, `more than 0.1 mm reaches ${reach(1e-4)} m from the press (the rims, by the rounded bank)`);
 });
 
 test('row 14e (D520, plan item 2, "a rim, sideways"): on a flat road the touched edge moves and the far edge stays: w += side·e, l += e/2, as the plan checks it', async () => {

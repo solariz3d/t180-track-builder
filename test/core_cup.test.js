@@ -300,14 +300,17 @@ test('row 5 (amended D196): a /2 file loads as LEGACY pieces (no cup flag, no c 
   const back = D.parse(old); assert.equal(back.schema, 't180b.core/4');   // D225: the schema is /4 (the edge and tube channels); a /2 file still loads as legacy pieces assert.ok(back.pieces.every((P) => P.cup === undefined));
   assert.equal(D.serialize(back), text, 'a /2 file saves as the same /3 text');
   const KEYS = ['blend', 'heartline', 'id', 'k0', 'k1', 'kind', 'kp0', 'kp1', 'length', 'part', 'profile', 'roll0', 'roll1', 'speed', 'word'];
+  // AMENDED BY NAME (2026-11-03): a segment whose roll MOVES also carries its roll rate (rollRate0, rollRate1: src/core/adapter.js, so path.js rolls through it, not to
+  // rest at its ends); a segment that does not roll carries neither, and its keys are KEYS as before. This document's second piece rolls 0.3 rad, so some do
+  const keysOf = (g) => { if (!('rollRate0' in g)) return [...KEYS]; assert.ok(g.roll0 !== g.roll1 || g.rollRate0 !== 0 || g.rollRate1 !== 0, 'a segment carries a roll rate only where its roll moves'); return [...KEYS, 'rollRate0', 'rollRate1']; };
   let chords = 0, constants = 0, s0 = 0; const segs = A.toSegments(back);
   for (const g of segs) {
     const P = back.pieces.find((p) => p.id === g.id), a = s0 - back.pieces.slice(0, back.pieces.indexOf(P)).reduce((t, p) => t + p.length, 0), b = a + g.length; s0 += g.length;
     if (g.chord) {
-      chords++; assert.ok(g.blend, 'a chord carries its blend'); assert.deepEqual(Object.keys(g).sort(), [...KEYS, 'chord'].sort());
+      chords++; assert.ok(g.blend, 'a chord carries its blend'); assert.deepEqual(Object.keys(g).sort(), [...keysOf(g), 'chord'].sort());
       assert.deepEqual(g.profile, A.profileAt(P.family, D.channelAt(P, 'w', b).v, D.channelAt(P, 'r', b).v), 'a chord\'s profile is the one at its END');
       assert.deepEqual(g.blend.from, A.profileAt(P.family, D.channelAt(P, 'w', a).v, D.channelAt(P, 'r', a).v), 'and it blends from the one at its START');
-    } else { constants++; assert.equal(g.blend, null); assert.deepEqual(Object.keys(g).sort(), KEYS); }
+    } else { constants++; assert.equal(g.blend, null); assert.deepEqual(Object.keys(g).sort(), keysOf(g).sort()); }
   }
   assert.ok(chords > 0 && constants > 0, `chords ${chords}, constants ${constants}: the document has both a constant piece and a width change`);
   assert.deepEqual(segs[0].profile, A.profileAt('half-pipe', D.channelAt(back.pieces[0], 'w', 1).v, D.channelAt(back.pieces[0], 'r', 1).v));

@@ -1,0 +1,66 @@
+{
+ "amends": "the D190 seal, row 5a, as already amended by every earlier record in test/fixtures (manifest.*.json); F3 F5 only, their segs, path and mesh digests only",
+ "made_at": "2026-11-03, the bank's corners rounded within each piece (src/core/adapter.js bankPlan): one script measuring F3 F5 with test/fixtures/fixtures.js's own digests() in two trees, 4e6398c (before) and the change (after), in one process",
+ "reason": "Wherever a piece's bank changes faster than 3 g at a wheel 10 m out at 170 m/s, the built bank now rounds that corner within its piece (never across a joint or a turning point of the bank, never moving a turning road's bank by more than 4°), and a segment whose roll moves carries its roll rate so the roll runs through it instead of resting at every 2 m (the user, 2026-11-03: the bumps where a bank turns back or changes). F3 and F5 bank faster than that bar, so their built roll changes and with it their segs, path and mesh; no centre-line position moves and no segment changes in anything but its roll; the other seven fixtures do not bank fast enough to be rounded and are unchanged in every digest.",
+ "fixtures": {
+  "F3-bowl-narrow-12m-cap-binds": {
+   "before_bank": {
+    "segs": "e4a0344fbaa24967b100880fe34b510c253624f977cb6aa32e6ce356575279e2",
+    "path": "70907e693b630ed51e7ba0718d687ed5d42f7fdfc6c22435a95fd54b7cdd0501",
+    "mesh": "26d5916b9c173962a8bdb41b28f075d74984ddbdaa1ea3ef2371810fec19c69e",
+    "meshParts": 1050
+   },
+   "after_bank": {
+    "segs": "baa7b7e7f596340b2ec518b6732f84be76c756a778bb000e6a7d59229de1fa9a",
+    "path": "69dcd33fc7f88965a6b404cb08984f706b3ffa67ead09be7a6c1445ca5aba720",
+    "mesh": "36a8eddd5f5d19e77a4035d690942f7e0502f6f3a71e4cf4621c1ba070921e1f",
+    "meshParts": 1050
+   },
+   "measure": {
+    "segments": 210,
+    "segments_count_after": 210,
+    "segments_whose_roll_changed": 92,
+    "segments_carrying_a_roll_rate": 150,
+    "segments_changed_in_anything_but_roll": 0,
+    "largest_roll_change_deg": 3.2846,
+    "path_samples": 841,
+    "path_samples_whose_roll_changed": 539,
+    "largest_centreline_move_m": 0
+   }
+  },
+  "F5-flat-20m-bank-30": {
+   "before_bank": {
+    "segs": "f37ef9665d37d73002a463129c01f97eeeaf8fa4fea44e25ac44861d7b91d2d4",
+    "path": "e9a962198f3441169a9ad48dae3450287c736a1a61940be78d4c3abff5260669",
+    "mesh": "829a4449e68f5697b4b2c124df942a390829ccd2151941e09d985703bf884a3a",
+    "meshParts": 600
+   },
+   "after_bank": {
+    "segs": "319596740536575c6b9d7ee3a5572e54e7ffd4a19874ca87bdecfa6e33d1f63c",
+    "path": "7bc3055874a87f715e568a0d468ca34166dd72fc05629f6e99251f2b8d65bbbf",
+    "mesh": "9a49457777b3a8d68c727f6f604f9cdd2b461bd606c486ccddabef2cb1dd310a",
+    "meshParts": 600
+   },
+   "measure": {
+    "segments": 120,
+    "segments_count_after": 120,
+    "segments_whose_roll_changed": 52,
+    "segments_carrying_a_roll_rate": 80,
+    "segments_changed_in_anything_but_roll": 0,
+    "largest_roll_change_deg": 2.1053,
+    "path_samples": 481,
+    "path_samples_whose_roll_changed": 291,
+    "largest_centreline_move_m": 0
+   }
+  }
+ },
+ "unchanged": [
+  "F1-bowl-default-lap-closed",
+  "F2-halfpipe-default-lap-closed",
+  "F4-halfpipe-width-31.5-to-12-along-s",
+  "F6-bowl-r-brushed",
+  "F7-hill-then-jump",
+  "F8-mixed-families",
+  "F9-empty"
+ ]
+}

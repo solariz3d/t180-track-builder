@@ -50,7 +50,8 @@ const MUTANTS = [
   { id: 'KE4-6 the chords do not share one fraction array', file: 'core', pattern: 'E4 \\(vi', edits: [[C + 'adapter.js', 'const fractions = commonFractions(prof),', 'const fractions = null, fractionsFor = (p) => commonFractions([p]),']] },
   // ── E5, E6, E7 ──
   { id: 'KE5-1 the csp-off steep check is dropped', file: 'val', pattern: 'E5 ', edits: [[V + 'index.js', 'if (opts.csp === false) { const up', 'if (false) { const up']] },
-  { id: 'KE6-2 e is fed into the roll', file: 'core', pattern: 'E6', edits: [[C + 'adapter.js', 'roll0: a.phi, roll1: b.phi, heartline: 0, profile, blend: cup', 'roll0: a.phi + a.e * 1e-3, roll1: b.phi + b.e * 1e-3, heartline: 0, profile, blend: cup']] },
+  // AMENDED BY NAME (2026-11-03): the anchored line moved (a rolling road segment now carries ...rollRates(s0, s1) between roll1 and heartline); the same mutation, re-anchored
+  { id: 'KE6-2 e is fed into the roll', file: 'core', pattern: 'E6', edits: [[C + 'adapter.js', 'roll0: a.phi, roll1: b.phi, ...rollRates(s0, s1), heartline: 0, profile, blend: cup', 'roll0: a.phi + a.e * 1e-3, roll1: b.phi + b.e * 1e-3, ...rollRates(s0, s1), heartline: 0, profile, blend: cup']] },
   { id: 'KE7-1 edgeToDeg reads the start of the piece', file: 'core', pattern: 'READOUT', edits: [[C + 'readout.js', "edgeToDeg: P.edge ? D.channelAt(P, 'e', P.length).v : 0", "edgeToDeg: P.edge ? D.channelAt(P, 'e', 0).v : 0"]] },
   { id: 'KE7-3 a plain piece reads the wrong default slice', file: 'core', pattern: 'READOUT', edits: [[C + 'readout.js', 'sliceFrom: P.edge ? D.channelAt(P, \'s\', 0).v : D.S_DEFAULT', 'sliceFrom: P.edge ? D.channelAt(P, \'s\', 0).v : 0.7']] },
   // ── the tube (KT*) ──

@@ -48,7 +48,10 @@ const GOLDEN_CASES = [
 ];
 // sha256 (first 16) of JSON.stringify(toSegments) at b7c7676; cases 1 and 2 (a bank target in their words) RE-PINNED at D459 (2026-10-25): the bank is laid by the C2
 // quintic now (src/core/extend.js), so those two documents and their segments changed by design; cases 0 and 3 are b7c7676's bytes still
-const GOLDEN = ['faba667241f3eaf3', '0efd64f163e97415', '428cefd0ab5166b2', '756a4327f1ef626f'];
+// AMENDED BY NAME (2026-11-03, the bank's corners rounded within each piece, src/core/adapter.js bankPlan, and a rolling segment carrying its roll rate): cases 1 and 2 RE-PINNED
+// (they were 0efd64f163e97415 and 428cefd0ab5166b2). They bank 0.3 and 0.2 rad over 60 m, faster than the 3 g bar, so the plan rounds their corner and their rolling
+// segments carry rollRate0/1; cases 0 and 3 do not roll and are b7c7676's bytes still
+const GOLDEN = ['faba667241f3eaf3', 'ee3ce77050935b80', '88c6b13348f01f08', '756a4327f1ef626f'];
 GOLDEN_CASES.forEach((steps, i) => test(`1 · constant width and r (or an r that does not bind the cap): case ${i} draws exactly the segments it drew at b7c7676, byte for byte`, () => {
   const segs = A.toSegments(run(steps));
   assert.ok(segs.every((g) => !g.chord && g.blend === null), 'no chord, no blend');
