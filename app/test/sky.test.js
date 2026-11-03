@@ -196,7 +196,9 @@ test('D393: A\'s probe forms: the dot-less and the via-variable sin hash and exp
 test('D398: the shared sky pass dithers every style by one 8-bit step (an ordered 4x4 pattern on the pixel), and its own code keeps the GLSL rules', () => {
   for (const style of SKY.STYLES.filter((s) => s !== 'none')) {
     const fs = R.skyFS(SKY.patternSource(style)), main = fs.slice(fs.indexOf('void main()'));
-    assert.match(main, /\(\s*pass_bayer4\(gl_FragCoord\.xy\)\s*-\s*0\.5\s*\)\s*\/\s*255\.0/, `${style}: main() adds the pattern's offset, half a step either way of one 8-bit step`);
+    // AMENDED BY NAME (2026-11-03, the view's vignette): under the vignette the pass adds the pattern a second time (renderer.js, the pass's dither), so the offset
+    // is looked for where every pixel gets it, in the colour the pass writes; a pass that dropped it there still had the vignette's own term to match
+    assert.match(main, /gl_FragColor = vec4\(clamp\(c \+ \(\s*pass_bayer4\(gl_FragCoord\.xy\)\s*-\s*0\.5\s*\)\s*\/\s*255\.0/, `${style}: main() adds the pattern's offset to the colour it writes, half a step either way of one 8-bit step`);
     assert.match(fs, /float pass_bayer4\(vec2 a\)/, `${style}: the pattern is the pass's own, not a style's`);
   }
   assert.deepEqual(SKY.contractProblems('pass', R.skyFS('')), [], 'the pass\'s own code breaks neither GLSL rule');

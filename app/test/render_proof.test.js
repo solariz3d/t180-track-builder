@@ -22,6 +22,8 @@ function fakeGL() {
     VERTEX_SHADER: 1, FRAGMENT_SHADER: 2, COMPILE_STATUS: 3, LINK_STATUS: 4, ARRAY_BUFFER: 5, ELEMENT_ARRAY_BUFFER: 6, STATIC_DRAW: 7,
     COLOR_BUFFER_BIT: 8, DEPTH_BUFFER_BIT: 16, DEPTH_TEST: 9, CULL_FACE: 10, TRIANGLES: 11, FLOAT: 12, UNSIGNED_SHORT: 13,
     BLEND: 14, LINES: 15, SRC_ALPHA: 17, ONE_MINUS_SRC_ALPHA: 18, depthMask() {}, blendFunc() {}, disableVertexAttribArray() {},
+    // the view's vignette (app/preview/renderer.js THE VIGNETTE, 2026-11-02): its pass over the drawn road is depth-tested GREATER and blends with blendFuncSeparate
+    GREATER: 19, LESS: 20, ZERO: 21, ONE: 22, depthFunc() {}, blendFuncSeparate() {},
     createShader: () => ({}), shaderSource() {}, compileShader() {}, getShaderParameter: () => true, getShaderInfoLog: () => '',
     createProgram: () => ({}), attachShader() {}, linkProgram() {}, getProgramParameter: () => true, getProgramInfoLog: () => '',
     getAttribLocation: () => 0, getUniformLocation: (p, n) => n, useProgram() {}, viewport(x, y, w, h) { calls.viewport.push([w, h]); }, clearColor() {}, clear() {}, enable() {}, disable() {},
