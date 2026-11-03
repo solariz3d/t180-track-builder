@@ -43,9 +43,10 @@ async function menu() {
   const prevDoc = global.document, prevCE = global.CustomEvent;
   global.document = doc; global.CustomEvent = win.CustomEvent;   // textures.js builds its own elements and events from the page globals
   const shell = await createCoreShell({ brushFn: null });
-  shell.extend({ length: 300, family: 'bowl' });
-  for (let i = 0; i < 4; i++) shell.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  shell.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(shell.getState().history.present, { length: 300, family: 'bowl' });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  shell.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); }
   shell.close();
   const ctx = { shell, document: doc, window: win };
   const track = TM.items(ctx);

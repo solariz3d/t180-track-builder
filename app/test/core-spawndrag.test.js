@@ -58,9 +58,10 @@ async function mounted({ build = null, pose = null, hAbove = 60, at = 250 } = {}
   stage.setPointerCapture = () => { win.captured = (win.captured || 0) + 1; };
   const root = doc.createElement('div'), s = await createCoreShell({ brushFn: null, exporter: EX });
   if (build) build(s); else {
-    s.extend({ length: 300, family: 'bowl' });
-    for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-    s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+    // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+    { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' });
+    for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+    s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); }
     s.close();
   }
   const P0 = s.spawnsPath(), view = { pose: pose || poseOver(P0, at, hAbove) };
@@ -152,7 +153,8 @@ test('row 4: a drag that moved nothing leaves no undo step; a second drag cannot
 });
 
 test('row 5: the automatic start on a LATER piece cannot be grabbed (a hand-placed line goes on the first piece): the press is taken, says why in words, and nothing changes', async () => {
-  const T = await mounted({ at: 300, build: (s) => { s.extend({ length: 30, family: 'bowl' }); s.extend({ length: 300 }); for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 60, transition: 40, targets: { kh: 0 } }); s.close(); } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  const T = await mounted({ at: 300, build: (s) => { s.extend({ length: 30, family: 'bowl' }); { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 300 }); for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } }); s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); } s.close(); } });
   const P = T.P(); assert.match(P.error || '', /automatic start is on piece p2/, 'this track has its automatic start on the second piece: ' + JSON.stringify(P.error));
   assert.equal(T.spawns(), undefined); const n0 = T.past(); T.bubbled.length = 0;
   const down = T.fire('pointerdown', gate(T).x, gate(T).y);

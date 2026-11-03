@@ -30,8 +30,10 @@ const sameAsFresh = (segs, d, what) => {
 };
 const TRACKS = {
   open: (s) => { s.extend({ length: 200, family: 'bowl' }); for (let i = 1; i < 12; i++) s.extend({ length: 200, transition: 40, targets: { kh: (Math.floor(i / 3) % 2 ? 1 : -1) / 2000 } }); return 1100; },
-  closed: (s) => { s.extend({ length: 200, family: 'bowl' }); for (let k = 0; k < 2; k++) { for (let i = 0; i < 4; i++) s.extend({ length: 200, transition: 40, targets: { kh: 0 } }); for (let i = 0; i < 5; i++) s.extend({ length: 200, transition: 40, targets: { kh: Math.PI / 1000 } }); } s.close(); return 700; },
-  tube: (s) => { s.extend({ length: 300, first: { w: 31, t: 360 } }); for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 60, transition: 40, targets: { kh: 0 } }); s.close(); return 150; },
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this oval's last turn comes back onto its own start before the Close, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt), then closed
+  closed: (s) => { const TB = require('../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 200, family: 'bowl' }); for (let k = 0; k < 2; k++) { for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: 200, transition: 40, targets: { kh: 0 } }); for (let i = 0; i < 5; i++) d = TB.extendCorner(d, { length: 200, transition: 40, targets: { kh: Math.PI / 1000 } }); } s.adopt(d); s.close(); return 700; },
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  tube: (s) => { { const TB = require('../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 300, first: { w: 31, t: 360 } }); for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } }); s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); } s.close(); return 150; },
 };
 /** A copy of `d` with piece i's channels changed by f (its interior control points), frozen as the core's documents are: a new piece object, the same id. */
 function withChannels(d, i, changes, more = {}) {

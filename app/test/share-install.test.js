@@ -28,9 +28,10 @@ const R = 180, Q = Math.PI * R / 2;
 /** The plain bowl lap of app/test/core-shell.test.js: a 300 m straight, four quarter turns, a straightening; closed when asked. */
 async function lap({ closed = false, ...opts } = {}) {
   const s = await createCoreShell({ brushFn: null, storage: mem(), ...opts });
-  s.extend({ length: 300, family: 'bowl' });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); }
   if (closed) { s.close(); assert.equal(s.getState().history.present.closed, true, s.getState().message); }
   return s;
 }

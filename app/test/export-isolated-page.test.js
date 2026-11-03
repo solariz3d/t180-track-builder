@@ -39,15 +39,17 @@ const get = (p) => fetch('/' + p).then((r) => { if (!r.ok) throw new Error(r.sta
 const R = 180, Q = Math.PI * R / 2, AUTHOR = () => 'D437b test';
 window.boot = async () => {
   const shim = (await loadCjs('app/export/node-shim.js', get)).createShim(), co = { builtins: shim.builtins, globals: { Buffer: shim.Buffer } };
-  window.T = { C: await loadCjs('app/core/coreshell.js', get, co), TX: await loadCjs('app/core/textures.js', get, co), D: await loadCjs('src/core/document.js', get, co),
+  window.T = { C: await loadCjs('app/core/coreshell.js', get, co), TX: await loadCjs('app/core/textures.js', get, co), D: await loadCjs('src/core/document.js', get, co), TB: await loadCjs('src/core/turnby.js', get, co),
     EX: await loadCjs('app/export/export.js', get), RN: await loadCjs('app/export/exportrunner.js', get) };
   return 'booted';
 };
 window.pitLap = async (opts) => {
   const s = await T.C.createCoreShell({ brushFn: null, autosaveMs: 0, ...opts });
-  s.extend({ length: 600, family: 'bowl' });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): as export-isolated.test.js's pitLap, the fourth turn comes back onto the first straight, which the builder
+  // now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); made with the core's pieces and opened (adopt)
+  let d = T.TB.extendCorner(s.getState().history.present, { length: 600, family: 'bowl' });
+  for (let i = 0; i < 4; i++) d = T.TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.adopt(T.TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } }));
   s.close();
   s.setPitLane({ ...T.D.PIT_DEFAULT, side: 'R', leave: { word: 'p1', along: 60 }, rejoin: { word: 'p1', along: 540 } });
   return s;

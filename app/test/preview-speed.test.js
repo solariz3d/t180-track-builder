@@ -63,7 +63,8 @@ test('row 2b: a change of detail on an OPEN track is a full rebuild, not an incr
   assert.equal(tm.update(s.getState().resolved).how, 'extend', 'control: appending is incremental');
   tm.setDetail(FACTOR); assert.equal(tm.update(s.getState().resolved).how, 'full', 'a detail change is a full rebuild');
   s.extend({ length: 100 }); assert.notEqual(tm.update(s.getState().resolved).how, 'full', 'at a steady coarse detail the open track grows incrementally again');
-  const lap = await createCoreShell({ brushFn: null }); lap.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) lap.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); lap.extend({ length: 60, transition: 40, targets: { kh: 0 } }); lap.close();
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  const lap = await createCoreShell({ brushFn: null }); { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(lap.getState().history.present, { length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } }); lap.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); } lap.close();
   assert.equal(lap.getState().history.present.closed, true, lap.getState().message);
   const t = createTrackModel(), closedDoc = lap.getState().resolved, first = t.update(closedDoc); assert.equal(first.how, 'full'); const again = t.update(closedDoc); assert.equal(again.how, 'same'); assert.equal(again.mesh, first.mesh, 'a closed loop is not rebuilt for the same document');
   assert.equal(t.update({ ...closedDoc }).how, 'full', 'a NEW resolved object is still rebuilt (a closed loop always was)');
@@ -169,9 +170,10 @@ const gq = Math.PI * 180 / 2;
 /** A CLOSED lap of ~750 m: `first` is the first piece's own cross-section (a cup, a tube) or null for the legacy bowl; `brushFn` is the height brush (a hill, so the document carries a lift). */
 async function closedLap(first, opts = {}, len0 = 300) {
   const s = await createCoreShell({ brushFn: null, ...opts });
-  s.extend({ length: len0, ...(first ? { first } : { family: 'bowl' }) });
-  for (let i = 0; i < 4; i++) s.extend({ length: gq, transition: 40, targets: { kh: 1 / 180 } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: len0, ...(first ? { first } : { family: 'bowl' }) });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: gq, transition: 40, targets: { kh: 1 / 180 } });
+  s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); }
   assert.equal(s.getState().message, null, s.getState().message); s.close(); assert.equal(s.getState().history.present.closed, true, s.getState().message); return s;
 }
 const LAPS = { 'a closed CUP lap': { c: 60 }, 'a closed TUBE lap': { w: 31, t: 360 }, 'a closed PLAIN (legacy) lap': null };

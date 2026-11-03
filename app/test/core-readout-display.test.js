@@ -602,8 +602,10 @@ test('a lap whose first piece was typed (width 40, cup 30) closes, and exports t
   const P = await mountPanel();
   placeFirst(P, { 'length m': 300, 'width m': 40, 'cup °': 30 });
   const R = 180, Q = (Math.PI * R) / 2;
-  for (let i = 0; i < 4; i++) P.shell.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  P.shell.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and committed as one edit (commitDoc), after the typed first piece
+  { const TB = require('../../src/core/turnby.js'); let d = P.shell.getState().history.present;
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  P.shell.commitDoc(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); }
   P.shell.close();
   const doc = P.shell.getState().history.present;
   assert.equal(doc.closed, true, P.shell.getState().message || 'closed');

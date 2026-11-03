@@ -487,7 +487,8 @@ test('row 31 (D467 bar): part 1 alone: a red the lap before the drag already had
 /** A lap with no straight at all (its start pieces curve, and so does everything else). */
 async function curvedNoStraight() {
   const s = await createCoreShell({ autosaveMs: 0 });
-  s.extend({ length: 300, family: 'bowl', targets: { kh: 1 / 600 } }); for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 200, transition: 40, targets: { kh: 1 / 600 } });
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl', targets: { kh: 1 / 600 } }); for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } }); s.adopt(TB.extendCorner(d, { length: 200, transition: 40, targets: { kh: 1 / 600 } })); }
   s.close(); assert.equal(s.getState().history.present.closed, true, s.getState().message); return s;
 }
 
@@ -537,7 +538,8 @@ test('row 34 (D467 bar): a Bend that makes the open lap cross itself, which the 
 // out would pass a result whose only large move is in the window. Built from whole laps the shell made: two laps that share their start straight and differ in their
 // turns (180 m against 200 m), the turns given as the window, and an open lap (182 m turns) that moved the track 8.2 m.
 test('row 35 (D467 bar): part 3 counts the window\'s pieces too: a result that moves only the window further than the drag moved the track misses', async () => {
-  const lapOf = async (Rq) => { const t = await createCoreShell({ autosaveMs: 0 }), q = (Math.PI * Rq) / 2; t.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) t.extend({ length: q, transition: 40, targets: { kh: 1 / Rq } }); t.extend({ length: 60, transition: 40, targets: { kh: 0 } }); t.close(); return t.getState().history.present; };
+  // AMENDED BY NAME (2026-11-03, the pass clearance): this lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces made with the core (turnby.js extendCorner) and opened (adopt)
+  const lapOf = async (Rq) => { const t = await createCoreShell({ autosaveMs: 0 }), q = (Math.PI * Rq) / 2; { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(t.getState().history.present, { length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: q, transition: 40, targets: { kh: 1 / Rq } }); t.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); } t.close(); return t.getState().history.present; };
   const base = await lapOf(180), result = await lapOf(200), near = await lapOf(182), win = base.pieces.map((_, i) => i).filter((i) => i > 0);
   const moves = CJ.displacementOf(base, result), drag = Math.max(...CJ.displacementOf(base, { ...near, closed: false }).map((x) => x.maxM));
   assert.ok(moves[0].maxM < drag && Math.max(...moves.slice(1).map((x) => x.maxM)) > drag, `control: outside the window the result moves ${moves[0].maxM.toFixed(2)} m, inside it more than the drag's ${drag.toFixed(2)} m`);
