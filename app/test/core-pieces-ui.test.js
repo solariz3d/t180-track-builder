@@ -259,7 +259,9 @@ test('row 8: delete in the MIDDLE is previewed (displacement, overlap check); Ap
 
 test('row 8b: the delete preview\'s overlap check finds a road running into itself (a two-circle coil, as TEST 1 stacked) and reports where', async () => {
   const s = await createCoreShell({ brushFn: null, autosaveMs: 0 });
-  s.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 8; i++) s.extend({ length: Q, transition: 40, targets: { kh: TURN } }); s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-02, the pass clearance): the builder now refuses to lay the second circle on the first (the user: "forbid building the track a little
+  // closer because of the bulk of the underside"), so the coil is made with the core's own pieces (turnby.js extendCorner) and opened as a saved track is (adopt)
+  { const TB = require('../../src/core/turnby.js'); let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' }); for (let i = 0; i < 8; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: TURN } }); s.adopt(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); }
   s.selectPiece(1); s.deleteSelection();   // one quarter of the coil goes: three of the eight remain, so it does not overlap...
   const a = s.getState().deleteProposal; assert.ok(a, s.getState().message);
   s.cancelDelete(); s.selectPiece(0); s.deleteSelection(); const b = s.getState().deleteProposal; assert.ok(b, s.getState().message);   // ...and the straight at the start going leaves both circles

@@ -48,9 +48,13 @@ const tick = () => new Promise((r) => setImmediate(r));
 
 async function openLap({ turns = 4, lastLen = 200, runner = null } = {}) {
   const s = await createCoreShell({ brushFn: null, autosaveMs: 0, overlapRunner: runner });
-  s.extend({ length: 300, family: 'bowl' });
-  for (let i = 0; i < turns; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: lastLen, transition: Math.min(40, lastLen), targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-02, the pass clearance): the lap's circle comes back onto its own first straight (and the coil's second circle onto its first), which the
+  // builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces from the core's own
+  // extendCorner (what the shell's extend runs), committed as one edit (commitDoc)
+  const TB = require('../../src/core/turnby.js');
+  let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' });
+  for (let i = 0; i < turns; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.commitDoc(TB.extendCorner(d, { length: lastLen, transition: Math.min(40, lastLen), targets: { kh: 0 } }));
   assert.equal(s.getState().message, null, s.getState().message); return s;
 }
 /** A NEAR lap, 8.87 m from closing (as in core-close-preview.test.js), optionally with a runner. */

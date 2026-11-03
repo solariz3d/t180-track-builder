@@ -29,9 +29,12 @@ const R = 180, Q = (Math.PI * R) / 2;
 /** An open track: a 300 m straight, four quarter turns, a 60 m straight; the core's brush unless given. */
 async function lap(opts = {}) {
   const s = await createCoreShell({ autosaveMs: 0, ...opts });
-  s.extend({ length: 300, family: 'bowl' });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  // AMENDED BY NAME (2026-11-02, the pass clearance): the lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid
+  // building the track a little closer because of the bulk of the underside"); the same pieces from the core's own extendCorner, committed as one edit (commitDoc)
+  const TB = require('../../src/core/turnby.js');
+  let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.commitDoc(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } }));
   assert.equal(s.getState().message, null, s.getState().message);
   return s;
 }

@@ -49,6 +49,7 @@ const { createRenderer, themeFrom } = require('./renderer.js');
 const { tokensOf } = require('../lib/tokens.js');
 const { gridLines, headMarker, linesFor, tangentsFor } = require('./look.js');
 const { guidePlan, MODES: GRID_MODES, MIRRORS } = require('./guides.js');
+const { PALETTE, LEVEL } = require('../validate-ui/colour.js');   // the checker's red, for its reds drawn on the road (redMarks)
 const { resolveLook } = require('./aclook.js');
 const { flowCell, flowDeps, sameDeps } = require('../../src/texture/flow.js');
 const { previewTextures } = require('../../src/texture/set.js');
@@ -128,6 +129,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   // THE SIGIL SURFACE (2026-10-14): until a picture is chosen for the road, the preview draws every batch with ONE material, a dark warm surface that the
   // AC lighting shades (so turns, banks and walls still read) under the bone edge lines. Only the preview: the export writes the chosen surface as ever
   let sigil = false;
+  let reds = null;   // the track checker's red ranges ([{ s0, s1 }]), drawn on the road (redMarks); set by the page from the checker's t180:validation
   const lookFor = (scene) => { if (resolvedFor !== scene.materials) { resolved = sigil ? SIGIL_LOOK : resolveLook(scene, set, images); resolvedFor = scene.materials; } return resolved; };
   // a textured EQUATION-CORE cell's coordinates run on the path's own arc length (src/texture/flow.js), the same coordinates the export writes.
   // Batches whose uvs are unchanged keep the very same array (the renderer keeps a GPU buffer per array), so an edit re-uploads only the new pieces.
@@ -411,7 +413,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       }
       shownPose = rig.update(c, dt);
       const L = look === 'ac' && track && track.mesh ? lookFor(track.mesh.scene) : null;
-      renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay: overlayOf(plan, track, sculptCues(track, hoverNow(), startMovedOf(shell.getState()))), depthLines: plan ? plan.depth : null,
+      renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay: overlayOf(plan, track, withReds(sculptCues(track, hoverNow(), startMovedOf(shell.getState())), redMarks(track, reds))), depthLines: plan ? plan.depth : null,
         look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null, lod: true, time: skyTime(t) });   // lod: the placed road is drawn coarser far from the eye (renderer.js LOD_NEAR); the export, the checker and the readouts never see it
       if (layer) layer.update({ plan, pose: shownPose, aspect: w / h, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight });
     }
@@ -465,6 +467,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
      * Show a place on the track: the camera goes to free mode above and behind the station at `s` (m along the placed track; a closed lap's s
      * wraps), looking at it. A click on a red in a list calls this. Returns false when there is no track to look at.
      */
+    /** The track checker's red ranges ([{ s0, s1 }], its result's red list), drawn on the road as lines across it in red; null or [] draws none. */
+    setReds(list) { reds = Array.isArray(list) && list.length ? list.map((x) => ({ s0: Number.isFinite(x.s0) ? x.s0 : x.s, s1: Number.isFinite(x.s1) ? x.s1 : Number.isFinite(x.s0) ? x.s0 : x.s })).filter((x) => Number.isFinite(x.s0) && Number.isFinite(x.s1)) : null; },
     focus(s) {
       const p = track && track.path; if (!p || !Number.isFinite(s) || !p.samples.length) return false;
       const L = p.lengthM || p.samples[p.samples.length - 1].s, x = p.closed && L > 0 ? ((s % L) + L) % L : Math.max(0, Math.min(L, s)), m = sampleAt(p, x);
@@ -489,6 +493,31 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   };
 }
 
+// THE CHECKER'S REDS ON THE ROAD (the user, 2026-11-02, the pass clearance: each place must show on both passes' road). Every station of the shared path inside a red range
+// gets a line across the road, a little over it, in the checker's red (app/validate-ui/colour.js PALETTE): on the 2 m stations a solid band. Built once per path and list.
+const RED_LINE = Object.freeze(PALETTE[LEVEL.RED].slice(0, 3)), RED_ALPHA = 0.9, redMemo = new WeakMap();
+function redMarks(track, list) {
+  if (!track || !track.path || !Array.isArray(track.segments) || !list || !list.length) return null;
+  const path = track.path, was = redMemo.get(path); if (was && was.list === list && was.segments === track.segments) return was.out;
+  const out = [];
+  for (let j = 0; j < track.segments.length; j++) {
+    const hw = halfWidth(track.segments[j]); if (!(hw > 0)) continue;
+    const i1 = j + 1 < path.segFirst.length ? path.segFirst[j + 1] : path.samples.length;
+    for (let i = path.segFirst[j]; i < i1; i++) {
+      const x = path.samples[i]; if (!list.some((r) => x.s >= r.s0 - 1e-9 && x.s <= r.s1 + 1e-9)) continue;
+      for (const k of [1, -1]) for (let d = 0; d < 3; d++) out.push(x.pos[d] + k * hw * x.L[d] + LINE_LIFT * x.U[d]);
+    }
+  }
+  const res = out.length ? [{ positions: Float32Array.from(out), colour: RED_LINE, alpha: RED_ALPHA, blend: true }] : null;
+  redMemo.set(path, { list, segments: track.segments, out: res }); return res;
+}
+/** the sculpt cues with the checker's reds after them (one list object per pair, so the overlay's memo holds) */
+const withRedsMemo = new WeakMap();
+function withReds(cues, marks) {
+  if (!marks) return cues; if (!cues) return marks;
+  let m = withRedsMemo.get(marks); if (!m || m.cues !== cues) { m = { cues, list: [...cues, ...marks] }; withRedsMemo.set(marks, m); }
+  return m.list;
+}
 /** The lines drawn over the track: the guides' (the mirror ghost), while a sculpt drag leaves a closed lap open the line across its gap, and the sculpt cues (`cues`). Null when none. */
 const overMemo = new WeakMap();
 function overlayOf(plan, track, cues = null) {

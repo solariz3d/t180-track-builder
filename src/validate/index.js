@@ -27,6 +27,7 @@ const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const len = (a) => Math.hypot(a[0], a[1], a[2]);
 const DEG = Math.PI / 180;
 const { rayGaps } = require('./raygap.js');
+const { passClearance, CAR_MARGIN_M } = require('./passclear.js');
 
 // THE ROLL RATE: the angle between the surface normal U at s − 10 m and at s + 10 m, both projected onto the plane normal to T(s), over the 20 m chord (°/m).
 // The bar is MEASURED, not derived: RED above 1.2144°/m (the maximum over the whole track B lap, 8,585 windows, a lap the user says "flows so smooth … at max speed"),
@@ -137,6 +138,7 @@ const SRC = Object.freeze({
   'leaves-surface': 'the load on the centreline is below zero: the car leaves the road; an open track is checked here, a closed one in the lap proof',
   'holds-above': 'the centreline faces the ground here and holds the car only above this speed (km/h), from fN(v) = (κ⃗·n)v²/(1 − κ⃗·o) + g(n·ŷ)',
   'no-speed-holds': 'the centreline faces the ground and nothing curves it toward the car, so no speed holds the car on it',
+  'pass-clearance': `a road passing over another must keep its underside ${CAR_MARGIN_M} m over the lower road and its apron: the car's box rode up to 2.42 m over its road on a measured lap, and the camera behind the car has its eye 3 m up`,
   'jump-gap-not-forward': 'a jump check needs a gap: here the landing lip is not ahead of the take-off lip, so there is no flight to check; a warning on the free jump, because the landing was placed there',
 });
 
@@ -445,6 +447,13 @@ function core(path, segments, opts, from, carried, upto) {
   } else notChecked.push('downforce-ray-gap: needs the built physics road (src/validate/raygap.js); pass opts.roadMesh');
   for (const p of raw.pts) if (p.kind === 'red') red.push(p);
   for (const r of raw.segReds) red.push(r);
+  // THE PASS CLEARANCE (D623, src/validate/passclear.js): a road over another closer than its underside's depth plus CAR_MARGIN_M is RED, worst the metres short. On request
+  // (opts.passClearance: the live checker and the builder ask; the export does not, it warns on its own), with the track's apron width (opts.apronM, doc.edgeApronM).
+  // A whole-track read like the roll rate, so revalidate equals validate; during a drag's window only the settled stations keep theirs (as the folds above): a settled
+  // station under road the drag moved is red at once, never a stale clean (app/test/validate-ui-incval.test.js)
+  if (opts.passClearance) {
+    for (const f of passClearance(path, segments, { apronM: opts.apronM })) if (end === n || f.s < S[end].s) red.push({ s: f.s, u: f.u, reason: 'pass-clearance', worst: f.shortM });
+  }   // (not asked, it is not listed as unchecked: the export does not ask, and its warnings are the user's words; it warns on the rule itself)
   // the roll rate: a whole-track check read from the path (a station's chord reaches 10 m each side, so it is recomputed every call and revalidate equals validate)
   const rollAmber = [];
   // the core's own segments only (word 'core', src/core/adapter.js): the paused piece builder's word documents are not newly judged by a bar the track B lap measured for the equation core's roads (their lap seams step the roll)

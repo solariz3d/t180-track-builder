@@ -31,10 +31,14 @@ function storage({ autosave = null, failSave = false } = {}) {
 }
 /** Timers the test runs by hand. */
 function handTimers() { const t = { due: [] }; t.setTimeout = (fn) => { t.due.push(fn); return t.due.length; }; t.clearTimeout = () => { t.due = []; }; t.run = async () => { const d = t.due; t.due = []; for (const f of d) await f(); }; return t; }
+// AMENDED BY NAME (2026-11-02, the pass clearance): the lap's circle comes back onto its own first straight, which the builder now refuses to lay (the user: "forbid
+// building the track a little closer because of the bulk of the underside"); the same pieces are made with the core's own extendCorner (what the shell's extend runs)
+// and committed as one edit (commitDoc), so the track is the same and still unsaved
 const extendLap = (s) => {
-  s.extend({ length: 300, family: 'bowl' });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  const TB = require('../../src/core/turnby.js');
+  let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' });
+  for (let i = 0; i < 4; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.commitDoc(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } }));
 };
 const text = (s) => D.serialize(s.getState().history.present);
 

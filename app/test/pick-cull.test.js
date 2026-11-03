@@ -23,8 +23,12 @@ async function resolvedOf(text) {
   await s.open('T'); const r = s.getState().resolved; assert.ok(r, `the track resolves: ${s.getState().message}`); return r;
 }
 async function long100() {
-  const s = await createCoreShell({ autosaveMs: 0 }), R = 400, Q = (Math.PI * R) / 2; let m = 0, i = 0;
-  while (m < 100000) { if (i % 4 === 3) { s.extend({ length: Q, transition: 60, targets: { kh: (i % 8 === 3 ? 1 : -1) / R } }); m += Q; } else { s.extend({ length: 800, ...(i === 0 ? { family: 'bowl' } : {}) }); m += 800; } i++; }
+  // AMENDED BY NAME (2026-11-02, the pass clearance): each 800 m piece keeps the turn before it, so this 100 km track circles back over itself again and again, which
+  // the builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces from the core's own
+  // extendCorner (what the shell's extend runs), opened as a saved track is (adopt)
+  const s = await createCoreShell({ autosaveMs: 0 }), R = 400, Q = (Math.PI * R) / 2, TB = require('../../src/core/turnby.js'); let m = 0, i = 0, d = s.getState().history.present;
+  while (m < 100000) { if (i % 4 === 3) { d = TB.extendCorner(d, { length: Q, transition: 60, targets: { kh: (i % 8 === 3 ? 1 : -1) / R } }); m += Q; } else { d = TB.extendCorner(d, { length: 800, ...(i === 0 ? { family: 'bowl' } : {}) }); m += 800; } i++; }
+  s.adopt(d);
   return s.getState().resolved;
 }
 /** the path the preview reads: the track model's (step 2, its start, closed or not, lifted by the offsets) */

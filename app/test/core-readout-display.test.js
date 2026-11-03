@@ -711,9 +711,13 @@ test('no water: the panel has no Water section, the shell no pour and no water s
 
 // ── An amendment (the user lost TEST 1 to one Close, with no copy from before it): Close keeps a copy FIRST ──────────
 // Close is ONE press (no preview, no Apply): the press writes the copy before it commits the close
-const closeLap = (s) => { const R = 180, Q = Math.PI * R / 2; s.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 60, transition: 40, targets: { kh: 0 } }); };
+// AMENDED BY NAME (2026-11-02, the pass clearance): these laps' circles come back onto their first straight (and the coil's second circle onto its first), which the
+// builder now refuses to lay (the user: "forbid building the track a little closer because of the bulk of the underside"); the same pieces from the core's own
+// extendCorner (what the shell's extend runs), committed as one edit (commitDoc), so the track is the same and still unsaved
+const lapOf = (s, turns) => { const TB = require('../../src/core/turnby.js'), R = 180, Q = Math.PI * R / 2; let d = TB.extendCorner(s.getState().history.present, { length: 300, family: 'bowl' }); for (let i = 0; i < turns; i++) d = TB.extendCorner(d, { length: Q, transition: 40, targets: { kh: 1 / R } }); s.commitDoc(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); };
+const closeLap = (s) => lapOf(s, 4);
 /** A coil (two circles on one another): no way of closing it proves, so a press refuses. */
-const coilLap = (s) => { const R = 180, Q = Math.PI * R / 2; s.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 8; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 60, transition: 40, targets: { kh: 0 } }); };
+const coilLap = (s) => lapOf(s, 8);
 /** Press Close the loop and wait until the press has landed (its work runs on a timer, and the copy and the close after it are awaited). */
 const pressClose = async (P) => {
   P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop').onclick(); P.flush();
@@ -742,7 +746,10 @@ test('Close says it is working at once, and a refusal shows in the Close box, in
   const refused = P.root.all().find((e) => e.attrs['aria-label'] === 'close refused');
   assert.ok(refused, `no refusal in the box: "${box().textContent}" / ${P.shell.getState().message}`);
   assert.match(refused.textContent, /^not closed, nothing changed: /); assert.equal(refused.attrs.style, 'color: var(--bad)', 'in red');
-  P.shell.extend({ length: 50 }); assert.equal(P.root.all().find((e) => e.attrs['aria-label'] === 'close refused'), undefined, 'gone once the track changes');
+  // AMENDED BY NAME (2026-11-02, the pass clearance): any change of the track will do; 50 m more laid road along the coil's first circle where it leaves the straight,
+  // which the builder now refuses (the user: "forbid building the track a little closer because of the bulk of the underside"), so the change is the last piece taken off
+  const was = P.shell.getState().history.present; P.shell.removeHead(); assert.notEqual(P.shell.getState().history.present, was, 'control: the track changed');
+  assert.ok(!P.root.all().some((e) => e.attrs['aria-label'] === 'close refused'), 'gone once the track changes');
   P.panel.unmount();
 });
 test('if that copy cannot be written, the press changes nothing and says why', async () => {

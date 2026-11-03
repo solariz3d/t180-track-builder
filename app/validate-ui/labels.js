@@ -38,6 +38,7 @@ function reasonText(reason, car = MACH6) {
     'joint-step': 'the road steps between two pieces here (the cup and the piece next to it do not meet)',
     // THE CROSS-SECTION reds: the ids are the design's (`tube-too-narrow`, `roll-rate`; the
     // core may name them otherwise, and then these lines follow it). Plain words here, the id in the tooltip, as every reason above
+    'pass-clearance': `another pass of the road is too close over this one here: the road above needs its underside's depth plus ${require('../../src/validate/passclear.js').CAR_MARGIN_M} m for a car under it`,
     'tube-too-narrow': 'this closed tube is narrower than 9.74 m across the road: the chase camera and a T-180 do not fit inside it',
     'roll-rate': 'the road rolls about its own direction faster than any measured track (red over 1.21°/m, amber over 0.93°/m, read over 20 m): lengthen the roll',
     // the core's third red (checked against src/validate/index.js SRC): the ids above are the core's too, unchanged
@@ -87,7 +88,7 @@ function findingGroups(kind, items) {
   }
   const place = (x) => (x.s1 != null && x.s1 !== x.s0 ? `${x.s0.toFixed(0)}–${x.s1.toFixed(0)}` : `${x.s0.toFixed(0)}`);
   const list = (ps) => (ps.length < 2 ? ps.join('') : `${ps.slice(0, -1).join(', ')} and ${ps[ps.length - 1]}`);
-  return out.map(({ line, group: g }) => line || { text: `${kind}: ${reasonText(g.reason)}, at ${list(g.xs.map(place))} m`, title: `${g.reason}${g.sources.size ? ` · ${[...g.sources].join(', ')}` : ''}` });
+  return out.map(({ line, group: g }) => line || { places: g.xs.map((x) => x.s0), text: `${kind}: ${reasonText(g.reason)}, at ${list(g.xs.map(place))} m`, title: `${g.reason}${g.sources.size ? ` · ${[...g.sources].join(', ')}` : ''}` });
 }
 
 /** stop: { at, reasons: [id], sources: [src] } from handles.js clamp; the value the drag stopped at is at. */
