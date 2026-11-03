@@ -115,9 +115,12 @@ test('the skin names its sky with --sky-style, and its sky colours with --sky-a/
   assert.equal(R.themeFrom(tokens({ '--sky-style': ' "aurora" ' })).skyStyle, 'aurora', 'quotes and spaces are not part of the name');
   const css = fs.readFileSync(path.join(ADIR, 'themes', 'skyline.css'), 'utf8');
   assert.match(css, /\[data-theme="skyline"\]\s*\{[^}]*--sky-style:\s*sun;/, 'Skyline names the sun');
-  // the screen-pinned haze is gone; the rule that stays only keeps the base's dark lens vignette off a light sky, as an earlier change did
+  // the screen-pinned haze is gone; the dark lens vignette stays off a light sky, as an earlier change did.
+  // AMENDED (2026-11-02, the vignette's banding): the vignette is the renderer's own pass now (renderer.js THE VIGNETTE), not the page's #preview::after,
+  // so Skyline keeps it off with --vignette: none instead of an ::after rule (app/test/vignette.test.js row 4 checks the token is read)
   const after = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/#preview::after\s*\{([^}]*)\}/g)].map((m) => m[1].trim());
-  assert.deepEqual(after, ['background: none;'], 'Skyline\'s screen-pinned sky overlay is gone: its view overlay draws nothing');
+  assert.deepEqual(after, [], 'Skyline draws nothing over the view: no screen-pinned overlay');
+  assert.match(css, /\[data-theme="skyline"\]\s*\{[^}]*--vignette:\s*none;/, 'Skyline keeps the vignette off its light sky');
 });
 
 test('D405: Skyline Night names the city sky, a built style that keeps the GLSL rules', () => {
@@ -193,7 +196,9 @@ test('D393: A\'s probe forms: the dot-less and the via-variable sin hash and exp
 test('D398: the shared sky pass dithers every style by one 8-bit step (an ordered 4x4 pattern on the pixel), and its own code keeps the GLSL rules', () => {
   for (const style of SKY.STYLES.filter((s) => s !== 'none')) {
     const fs = R.skyFS(SKY.patternSource(style)), main = fs.slice(fs.indexOf('void main()'));
-    assert.match(main, /\(\s*pass_bayer4\(gl_FragCoord\.xy\)\s*-\s*0\.5\s*\)\s*\/\s*255\.0/, `${style}: main() adds the pattern's offset, half a step either way of one 8-bit step`);
+    // AMENDED BY NAME (2026-11-03, the view's vignette): under the vignette the pass adds the pattern a second time (renderer.js, the pass's dither), so the offset
+    // is looked for where every pixel gets it, in the colour the pass writes; a pass that dropped it there still had the vignette's own term to match
+    assert.match(main, /gl_FragColor = vec4\(clamp\(c \+ \(\s*pass_bayer4\(gl_FragCoord\.xy\)\s*-\s*0\.5\s*\)\s*\/\s*255\.0/, `${style}: main() adds the pattern's offset to the colour it writes, half a step either way of one 8-bit step`);
     assert.match(fs, /float pass_bayer4\(vec2 a\)/, `${style}: the pattern is the pass's own, not a style's`);
   }
   assert.deepEqual(SKY.contractProblems('pass', R.skyFS('')), [], 'the pass\'s own code breaks neither GLSL rule');

@@ -191,14 +191,18 @@ test('preview: a frame draws the grid and the head marker as lines (the grid onl
   const cells = p.view().track.batches.filter((b) => !b.seam).length, chunks = p.renderer.stats().chunks;
   assert.ok(p.view().grid > 0); assert.ok(chunks >= 1 && chunks < cells, `${chunks} chunks for ${cells} cells`);
   assert.equal(p.renderer.stats().lines, 1 + 1 + 2 * chunks, 'the grid, the head marker, and the edges and ties of each chunk');
-  assert.equal(calls.drawArrays, 1 + 1 + 2 * chunks);
+  // AMENDED (2026-11-02, the vignette's banding): the view's vignette is the renderer's now (renderer.js THE VIGNETTE): with no sky, a backdrop strip
+  // first and a strip over the drawn road last
+  assert.equal(calls.drawArrays, 1 + 1 + 2 * chunks + 2);
 });
 test('preview: by default there is no ground grid, only the track and the head marker', () => {
   const shell = { getState: () => ({ resolved: { segments: words(3), closed: false } }), subscribe: () => () => {} };
   const { calls, win, canvas } = fake(), p = P.createPreview({ canvas, shell, win }); win.step();
   const chunks = p.renderer.stats().chunks;
   assert.equal(p.view().grid, 0); assert.ok(chunks >= 1);
-  assert.equal(calls.drawArrays, 1 + 2 * chunks, 'the head marker and each chunk of road, no grid');
+  // AMENDED (2026-11-02, the vignette's banding): plus the vignette's two full-screen strips (renderer.js THE VIGNETTE: the backdrop, with no sky, and
+  // the pass over the drawn road)
+  assert.equal(calls.drawArrays, 1 + 2 * chunks + 2, 'the head marker and each chunk of road, no grid, and the vignette\'s two strips');
 });
 
 // ── grid and marker ──

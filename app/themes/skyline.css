@@ -16,6 +16,8 @@
   --sky: color(srgb 0.36 0.62 0.93); --fog: color(srgb 0.74 0.86 0.98); --road-edge: color(srgb 1 1 1); --road-tie: color(srgb 0.05 0.16 0.33); --ground-grid: color(srgb 0.85 0.93 1);
   /* the sky at infinity behind the track (app/preview/sky/sun.js): deep zenith, pale horizon, the sun's white */
   --sky-style: sun; --sky-a: color(srgb 0.12 0.43 0.84); --sky-b: color(srgb 0.78 0.89 1); --sky-c: color(srgb 1 1 0.97);
+  /* no lens vignette over a light sky (the renderer's, app/preview/renderer.js THE VIGNETTE; it was first replaced by a sunlit haze pinned to the screen) */
+  --vignette: none;
   --glass: rgba(255, 255, 255, .8); --glow: rgba(120, 190, 255, .55);
   --pill: linear-gradient(180deg, #ffffff 0%, #eaf5ff 49%, #cfe6ff 51%, #e6f3ff 100%);
   --pill-on: linear-gradient(180deg, #2a78d8 0%, #1a63c9 49%, #0b4fa8 51%, #1659b8 100%);
@@ -85,8 +87,6 @@
 [data-theme="skyline"] #camera p { color: var(--text) !important; background: rgba(255, 255, 255, .92); border-radius: 9px; text-shadow: none; box-shadow: none; }
 [data-theme="skyline"] .preview-hud { color: var(--text) !important; background: rgba(255, 255, 255, .78) !important; border-radius: 6px; }
 
-/* the view: no lens vignette over a light sky (it was first replaced by a sunlit haze pinned to the screen; the sun is now in the 3D sky) */
-[data-theme="skyline"] #preview::after { background: none; }
 
 /* the guide card (onboarding/index.js) as a white pane; its "look here" outline is the accent (the page's own rule) */
 [data-theme="skyline"] .guide-card { border-radius: 14px; box-shadow: inset 0 1px 0 #fff; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }

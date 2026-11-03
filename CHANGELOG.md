@@ -5,6 +5,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The 3D view's soft darkening toward its edges no longer shows rings.** Over the dark skins (the space and underwater ones most of all) the vignette showed as faint concentric steps across the lower view that followed the camera wherever it went. It was a gradient laid over the view by the page, which draws it in 8 bits with nothing to break the steps. It is now drawn by the 3D view itself, with the same shape and strength, inside the sky as the sky is drawn (or a plain backdrop on a skin with no sky), before the sky's fine dither, which is twice as strong where the vignette darkens, so the steps break up into a pattern too fine to see. The track and its lines are darkened by a separate pass that never touches the sky. Skyline still has no vignette over its light sky. It costs nothing measurable: the 100 km track still draws in under 2 ms a frame.
+
 ## [0.4.38] - 2026-11-02
 
 ### Added

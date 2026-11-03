@@ -92,7 +92,7 @@
 [data-theme="aurora"] .preview-hud { color: var(--text) !important; background: rgba(4, 5, 16, .72) !important; border-radius: 6px; }
 
 /* THE CURTAINS are the 3D view's own sky now (--sky-style above, app/preview/sky/aurora.js), drawn at infinity so they stay put as the camera
-   turns; their drift stops under prefers-reduced-motion there. #preview::after is the page's own vignette again. */
+   turns; their drift stops under prefers-reduced-motion there. the view's vignette is the renderer's own (app/preview/renderer.js THE VIGNETTE). */
 
 /* the guide card, the piece values, the question in the page */
 [data-theme="aurora"] .guide-card { border-radius: 14px; box-shadow: inset 0 1px 0 rgba(111, 245, 192, .2); }

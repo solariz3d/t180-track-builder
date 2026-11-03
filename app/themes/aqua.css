@@ -126,7 +126,7 @@
 /* THE 3D VIEW: water. The sky, the fog, the road's edges and ties and the ground grid are this skin's 3D tokens (above); the WebGL view draws them
    itself, so the earlier stand-in overlays are gone. */
 /* The soft caustic light is the 3D view's own sky now (--sky-style above, app/preview/sky/caustics.js), drawn at infinity so it stays put as
-   the camera turns; its drift stops under prefers-reduced-motion there. #preview::after is the page's own vignette again. */
+   the camera turns; its drift stops under prefers-reduced-motion there. the view's vignette is the renderer's own (app/preview/renderer.js THE VIGNETTE). */
 [data-theme="aqua"] .preview-hud { color: #e6fbfe !important; text-shadow: none; }
 
 /* the dialogs and the onboarding card: rounded water-glass */
