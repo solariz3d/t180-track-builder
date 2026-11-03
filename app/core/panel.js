@@ -288,7 +288,9 @@ function mount(root, shell, mountOpts = {}) {
   // (the user, 18:21-18:24: the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way"). The bank keeps
   // within ONE turn and keeps its sign, shown AND applied (HD.wrapTurn: 370 -> 10, -370 -> -10, 300 stays 300, 400 -> 40): the field shows it (HEAD above), a drag
   // writes it, and a typed value is sent wrapped and otherwise as typed (absolute, as the core keeps its winding; extendOptions unchanged). No nearest-equivalent rewrite.
-  const bankTarget = () => { const t = asTyped('bank'); if (t === '') return t; const T = Number(t); return Number.isFinite(T) ? String(HD.wrapTurn(T)) : t; };
+  // (the user, 2026-11-02: "when you make the track go all the way around say -360 degrees, it only hits 359.99 and then glitches out"): exactly one turn is
+  // a full turn of roll, sent as typed; wrapTurn read it as 0, so after -270 the piece rolled 270° back to upright. Past one turn it wraps as above.
+  const bankTarget = () => { const t = asTyped('bank'); if (t === '') return t; const T = Number(t); return !Number.isFinite(T) ? t : Math.abs(T) === 360 ? String(T) : String(HD.wrapTurn(T)); };
   // "at start": one small box per field, off by default (off = ease to the value over the whole piece, as always). It is kept from
   // piece to piece, like a preference; it does nothing for a field left as shown, which has no target
   // (the user, 2026-10-31: the boxes "need a more informative name and a hover that explains them"): the box reads "early", and its tooltip is EARLY_TITLE's

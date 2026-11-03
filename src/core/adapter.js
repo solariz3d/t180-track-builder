@@ -336,6 +336,56 @@ function lipOf(R, p0) {
 /** What a flight's segment reads of the piece before it (lipOf's inputs), as one string for the segment cache's key. */
 const lipKey = (R) => (R && R.type === 'road' ? ['h', 'l'].map((ch) => { const v = D.channelAt(R, ch, R.length); return `${v.v},${v.d1}`; }).join(';') + `;${D.valuesAt(R, R.length).kh}` : '');
 
+/**
+ * THE ROLL CARRIED THROUGH A JOINT, as built (the user, 2026-11-02, RIBBON CORKSCREW TEST: "on some turns there are bumps from connecting different banking, it is
+ * shown completely with the telemetry going through the last straight ribbon section that goes banked 90 degrees all the way around 360 degrees"). Every bank ramp
+ * starts and ends at rest (src/core/extend.js), so where the next piece rolls on the same way the roll stopped at the joint and started again: on his 250 m pieces
+ * banking -90° each, from 0.516 °/m mid-piece to 0.006 °/m at every joint, a surge of roll at a wheel off the centre each time.
+ * A joint is CARRIED where two road pieces meet with the roll at rest and both roll the same way at their middles (at least CARRY_MIN). The bank at the joint stays
+ * the document's; the roll passes through it at the two pieces' joint rate, their bank changes added over their lengths added, with no roll acceleration. Each side
+ * of a carried joint is built as a quintic that keeps the bank, its rate and its roll acceleration at both of its ends, so the built roll is C2 throughout:
+ *   - a piece carried at both ends: one quintic over the whole piece, joint rate to joint rate (his equal -90° pieces: exactly constant, 0.36 °/m);
+ *   - a piece carried at one end only: its other half is built as it was, and the carried half runs from its middle (as built there) to the joint.
+ * Only the BUILT roll moves, and only on such pieces; the document is not rewritten, so his saved track is carried as it is. Not across a flight (the pieces are
+ * adjacent roads), into or out of a tube (its roll axis is the heartline), at the lap's seam, or where a carried half's rate would turn back.
+ *   carryOf(doc, i) -> the carry across the joint between pieces i and i + 1, or null: { r, key }, r the roll rate through the joint, rad/m
+ */
+const CARRY_MIN = 0.02 * Math.PI / 180;   // rad/m: a piece rolling slower than this at its middle is holding its bank
+const CARRY_REST = 0.002 * Math.PI / 180;   // rad/m: the roll at the joint counts as at rest under this
+const deltaOf = (P) => D.channelAt(P, 'phi', P.length).v - D.channelAt(P, 'phi', 0).v;
+function carryOf(doc, i) {
+  const A = doc.pieces[i], B = doc.pieces[i + 1];
+  if (!A || !B || A.type !== 'road' || B.type !== 'road' || A.tube || B.tube) return null;
+  const mA = D.channelAt(A, 'phi', A.length / 2), mB = D.channelAt(B, 'phi', B.length / 2);
+  if (Math.abs(D.channelAt(A, 'phi', A.length).d1) > CARRY_REST || Math.abs(D.channelAt(B, 'phi', 0).d1) > CARRY_REST) return null;
+  if (!(Math.abs(mA.d1) >= CARRY_MIN && Math.abs(mB.d1) >= CARRY_MIN) || Math.sign(mA.d1) !== Math.sign(mB.d1)) return null;
+  const r = (deltaOf(A) + deltaOf(B)) / (A.length + B.length);
+  if (Math.sign(r) !== Math.sign(mA.d1)) return null;
+  // each side's half on its own (its far end as built), so the rate never turns back: the whole-piece quintic of a piece carried at both ends lies between them
+  const halfA = [mA.v, mA.d1 * A.length / 2, mA.d2 * (A.length / 2) ** 2, 0, r * A.length / 2, D.channelAt(A, 'phi', A.length).v];
+  const halfB = [D.channelAt(B, 'phi', 0).v, r * B.length / 2, 0, mB.d2 * (B.length / 2) ** 2, mB.d1 * B.length / 2, mB.v];
+  for (const c of [halfA, halfB]) for (let k = 0; k <= 64; k++) if (Math.sign(quinticD1(c, k / 64)) !== Math.sign(r)) return null;
+  return { r, key: String(r) };
+}
+// the quintic Hermite on u in [0, 1] through value, slope and second derivative at both ends: c = [y0, d0, c0, c1, d1, y1], slopes and seconds scaled by the span
+function quinticAt(c, u) {
+  const u2 = u * u, u3 = u2 * u, u4 = u3 * u, u5 = u4 * u, [y0, d0, c0, c1, d1, y1] = c;
+  return y0 * (1 - 10 * u3 + 15 * u4 - 6 * u5) + d0 * (u - 6 * u3 + 8 * u4 - 3 * u5) + c0 * (0.5 * u2 - 1.5 * u3 + 1.5 * u4 - 0.5 * u5)
+    + c1 * (0.5 * u3 - u4 + 0.5 * u5) + d1 * (-4 * u3 + 7 * u4 - 3 * u5) + y1 * (10 * u3 - 15 * u4 + 6 * u5);
+}
+function quinticD1(c, u) {
+  const u2 = u * u, u3 = u2 * u, u4 = u3 * u, [y0, d0, c0, c1, d1, y1] = c;
+  return y0 * (-30 * u2 + 60 * u3 - 30 * u4) + d0 * (1 - 18 * u2 + 32 * u3 - 15 * u4) + c0 * (u - 4.5 * u2 + 6 * u3 - 2.5 * u4)
+    + c1 * (1.5 * u2 - 4 * u3 + 2.5 * u4) + d1 * (-12 * u2 + 28 * u3 - 15 * u4) + y1 * (30 * u2 - 60 * u3 + 30 * u4);
+}
+/** The built bank of piece P given the carries through its first joint (left) and its last (right): a function of s, or null where nothing is carried. */
+function carriedPhiOf(P, left, right) {
+  if (!left && !right) return null;
+  const L = P.length, h = L / 2, v0 = D.channelAt(P, 'phi', 0).v, v1 = D.channelAt(P, 'phi', L).v, m = D.channelAt(P, 'phi', h);
+  if (left && right) { const c = [v0, left.r * L, 0, 0, right.r * L, v1]; return (s) => quinticAt(c, s / L); }
+  if (right) { const c = [m.v, m.d1 * h, m.d2 * h * h, 0, right.r * h, v1]; return (s) => (s >= h ? quinticAt(c, (s - h) / h) : null); }
+  const c = [v0, left.r * h, 0, m.d2 * h * h, m.d1 * h, m.v]; return (s) => (s <= h ? quinticAt(c, s / h) : null);
+}
 function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpeedKmh, cupRuns = true, cache = null } = {}) {
   D.checkDoc(doc);
   if (!doc.pieces.length) throw new D.CoreError('EMPTY', 'an empty track has no path');
@@ -366,7 +416,8 @@ function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpe
       lastProfile = null; lastLegacy = false; lastKind = null; lastPlain = null;   // the landing's cross-section starts afresh: nothing morphs across the air
       return;
     }
-    const n = nOf(P), at = (s) => D.valuesAt(P, s);
+    const carried = carriedPhiOf(P, carryOf(doc, pi - 1), carryOf(doc, pi));   // the roll carried through either joint (carryOf above)
+    const n = nOf(P), at = !carried ? (s) => D.valuesAt(P, s) : (s) => { const v = D.valuesAt(P, s), c = carried(s); return c === null ? v : { ...v, phi: c }; };
     let a = at(0);
     if (pi === 0 || doc.pieces[pi - 1].type === 'flight') roll = a.phi;
     const kind = D.kindOf(P), xs = kind === 'tube' || !!P.edge || (kind === 'cup' && lastKind === 'tube');   // a tube, an edge, or a cup entering from a tube is built by xsecSegments
@@ -396,10 +447,12 @@ function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpe
   // fade into the next piece), its role at the lap seam and the seam's two ends, the state carried in from the piece before, and the options.
   // Each entry is only as wide as `piece` reads it, so placing a piece after this one does not rebuild it: the next piece matters only as a cup's
   // tail target (a legacy road after a cup, `nextLegacy` below), and the first/last road roles only at a mixed lap seam (`seam`).
+  const carryKey = (i) => { const c = carryOf(doc, i); return c ? c.key : null; };
   const inputsOf = (pi) => {
     const P = doc.pieces[pi], nextP = doc.pieces[pi + 1];
     const tailTo = P.type === 'road' && P.cup && cupRuns && nextP && nextP.type === 'road' && !nextP.cup && !nextP.tube && !nextP.edge ? nextP : null;
-    return [pi === 0, pi ? doc.pieces[pi - 1].type : null, tailTo, seam, seam && pi === firstRoad, seam && pi === lastRoad,
+    // the first entry also carries the roll carried through either joint, which depends on the neighbour (carryOf): one entry, so every index after keeps its place
+    return [`${pi === 0}|${P.type === 'road' ? `${carryKey(pi - 1)}|${carryKey(pi)}` : ''}`, pi ? doc.pieces[pi - 1].type : null, tailTo, seam, seam && pi === firstRoad, seam && pi === lastRoad,
       seam ? doc.pieces[firstRoad] : null, seam ? doc.pieces[lastRoad] : null, pitch, roll, lastProfile, lastLegacy, lastKind, lastPlain, mOf(P), tailTo ? mOf(tailTo) : null, seam ? mOf(doc.pieces[firstRoad]) : null, seam ? mOf(doc.pieces[lastRoad]) : null, designKmh, cupRuns,   // the chord length of every piece this one's segments read (a tail fade, the lap seam) is an input too
       P.type === 'flight' ? lipKey(doc.pieces[pi - 1]) : null];   // a flight takes off from the lip as built: the piece before it's offsets at its end
   };
@@ -502,4 +555,4 @@ function offsetPath(doc, segments, path) {
   return { ...path, samples, segEnd, head };
 }
 
-module.exports = { toSegments, toPath, lipOf, profileAt, cupProfile, tubeProfile, edgeProfile, legacyEdgeDeg: D.legacyEdgeDeg, offsetPath, heartlineLift, heartlineOf, EDGE_MIN_N, TUBE_N, HEARTLINE_FROM };
+module.exports = { toSegments, toPath, carryOf, lipOf, profileAt, cupProfile, tubeProfile, edgeProfile, legacyEdgeDeg: D.legacyEdgeDeg, offsetPath, heartlineLift, heartlineOf, EDGE_MIN_N, TUBE_N, HEARTLINE_FROM };

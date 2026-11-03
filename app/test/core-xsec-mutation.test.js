@@ -44,6 +44,8 @@ const MUTATIONS = [
   //  when this one is changed the other already shows its head value; putting it back is a defence with no reachable effect in a browser)
   { id: 'X27 a new document leaves a field disabled', file: 'core/panel.js', from: "for (const [k, f] of [['cup', cup], ['tube', tube]]) { f.disabled = false;", to: "for (const [k, f] of [['cup', cup], ['tube', tube]]) {", caughtBy: 'xsec panel: a piece is a cup OR a tube' },
   { id: 'X28 the cup-or-tube rule is never wired', file: 'core/panel.js', from: 'f.oninput = f.onchange = () => { exclusive(f); ghost(); };', to: 'f.oninput = f.onchange = ghost;', caughtBy: 'xsec panel: a piece is a cup OR a tube' },
+  // a typed full turn (the spiral on RIBBON CORKSCREW TEST, 2026-11-02): kept a full turn, not read as none
+  { id: 'X32 a typed full turn is wrapped to none again', file: 'core/panel.js', from: 'Math.abs(T) === 360 ? String(T) :', to: 'false ? String(T) :', caughtBy: 'xsec panel: a spiral of -90° pieces typed on to -360' },
 ];
 
 function runMutant(m) {

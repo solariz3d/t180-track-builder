@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('./core_helpers.js');
 const D = require('../src/core/document.js');
-const { toPath } = require('../src/core/adapter.js');
+const AD = require('../src/core/adapter.js'), { toPath } = AD;
 const S = require('../src/core/sculpt.js');
 
 const BASE = H.docFrom(H.gen()[0]);
@@ -45,7 +45,15 @@ for (const ch of Object.keys(DELTA)) for (const frac of [0.25, 0.5, 0.75]) for (
     for (const x of NEW) if (x.s < loP || x.s > hiP) for (const c of D.CHANNELS) assert.ok(same(chAt(doc, c, x.s).v, chAt(BASE, c, x.s).v), `${c} value at s ${x.s}`);
     // 3a · geometry
     if (ch === 'phi' || ch === 'w' || ch === 'r') {
-      NEW.forEach((x, i) => { if (x.s >= loP && x.s <= hiP) return; for (const f of FIELDS) { const a = x[f], b = OLD[i][f]; assert.ok(Array.isArray(a) ? sameVec(a, b) : same(a, b), `${f} at s ${x.s}`); } });
+      // AMENDED BY NAME (2026-11-02, the roll carried through a joint, src/core/adapter.js carryOf): where two pieces roll on the same way through a rest, the built
+      // roll runs as one curve from the first piece's middle to the next one's, so a brush that changes that carry (its pieces' middles or ends) changes the
+      // built ROLL over that whole span, even beyond W⁺. There, and only there, the roll-made fields (L, U, roll, bankG) may differ; the route (pos, T, kvec,
+      // grade) and the document's channels above stay bit for bit. Everywhere else outside W⁺ every field is bit for bit, as sealed. (A carry kept within W⁺
+      // would leave the roll dipping to about half its rate at the joint, which is most of the bump this carry takes away.) Ruled 2026-11-02: the ride through
+      // the joint outweighs the sealed locality here; the route and the document stay local as sealed.
+      const carried = []; doc.pieces.forEach((P, j) => { const a = AD.carryOf(BASE, j), b = AD.carryOf(doc, j); if ((a || b) && !(a && b && a.key === b.key)) carried.push([OFF[j] + P.length / 2, OFF[j + 1] + doc.pieces[j + 1].length / 2]); });
+      const ROLLED = new Set(['L', 'U', 'roll', 'bankG']), inCarry = (s) => carried.some(([a, b]) => s >= a && s <= b);
+      NEW.forEach((x, i) => { if (x.s >= loP && x.s <= hiP) return; for (const f of FIELDS) { if (ch === 'phi' && ROLLED.has(f) && inCarry(x.s)) continue; const a = x[f], b = OLD[i][f]; assert.ok(Array.isArray(a) ? sameVec(a, b) : same(a, b), `${f} at s ${x.s}`); } });
     } else {
       NEW.forEach((x, i) => { if (x.s < loP) for (const f of FIELDS) { const a = x[f], b = OLD[i][f]; assert.ok(Array.isArray(a) ? sameVec(a, b) : same(a, b), `before: ${f} at s ${x.s}`); } });
       const after = []; NEW.forEach((x, i) => { if (x.s > hiP && Math.abs(x.s / 10 - Math.round(x.s / 10)) < 1e-9) after.push(i); });
