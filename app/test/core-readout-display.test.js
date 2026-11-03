@@ -850,8 +850,10 @@ test('D242: after a 30°/100m turn, Straight extends a piece whose turn and clim
   P.type('length m', 150); button('Straight').onclick();
   const d = P.shell.getState().history.present, S = d.pieces[d.pieces.length - 1];
   assert.equal(d.pieces.length, 2, P.shell.getState().message); assert.equal(S.length, 150);
-  for (let s = 20; s <= S.length; s += 1) for (const ch of ['kh', 'kv']) assert.ok(Math.abs(Dm.channelAt(S, ch, s).v) < 1e-12, `${ch} at ${s} m is ${Dm.channelAt(S, ch, s).v}: straight from 20 m on`);
-  assert.ok(Math.abs(Dm.channelAt(S, 'kh', 0).v - 30 * Math.PI / 180 / 100) < 1e-6, 'control: it starts where the turn ended (C1), so the first 20 m are the ease');
+  // AMENDED BY NAME (2026-11-03, a turn or climb reached early is sized to its change, app/core/panel.js routeStartM; Straight is that tick on turn 0 and climb 0):
+  // from 30°/100m to 0 is a ramp of 3 × 5.24e-3 / bar = 154 m, held to half this 150 m piece, so the piece is straight from 75 m on (it was: from 20 m on)
+  for (let s = 75; s <= S.length; s += 1) for (const ch of ['kh', 'kv']) assert.ok(Math.abs(Dm.channelAt(S, ch, s).v) < 1e-12, `${ch} at ${s} m is ${Dm.channelAt(S, ch, s).v}: straight from 75 m on`);
+  assert.ok(Math.abs(Dm.channelAt(S, 'kh', 0).v - 30 * Math.PI / 180 / 100) < 1e-6, 'control: it starts where the turn ended (C1), so the first 75 m are the ease');
   for (const k of ['turn', 'climb']) assert.equal(P.root.all().find((e) => e.attrs['aria-label'] === `${k} at the start`).checked, false, `the ${k} box is put back as it was`);
   P.panel.unmount();
 });

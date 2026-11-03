@@ -55,7 +55,8 @@ const MUTATIONS = [
   { id: 'V1 the at-start boxes are ignored', file: 'core/panel.js', from: 'if (Object.keys(transition).length) out.transition = transition;', to: '', caughtBy: 'extendOptions "at start"' },
   { id: 'V2 an untouched field is sent at start', file: 'core/panel.js', from: 'if (atStart[f] && targets[ch] !== undefined) {', to: 'if (atStart[f]) {', caughtBy: 'extendOptions "at start"' },   // re-anchored: the at-start line now opens a block
   // re-anchored: the at-start line now picks a cross-section ramp first; the turn, climb and width span is the line's last term
-  { id: 'V3 the span is not held to the piece', file: 'core/panel.js', from: ': Math.min(AT_START_M, out.length);', to: ': AT_START_M;', caughtBy: 'extendOptions "at start"' },
+  // AMENDED BY NAME (2026-11-03): a turn or climb at start now takes routeStartM, whose cap holds a short piece to its own length; the same mutation, re-anchored there
+  { id: 'V3 the span is not held to the piece', file: 'core/panel.js', from: 'cap = Math.max(Math.min(AT_START_M, length), length / 2);', to: 'cap = Math.max(AT_START_M, length / 2);', caughtBy: 'extendOptions "at start"' },
   { id: 'V4 transition sent as one number for all channels', file: 'core/panel.js', from: 'if (Object.keys(transition).length) out.transition = transition;', to: 'if (Object.keys(transition).length) out.transition = AT_START_M;', caughtBy: 'extendOptions "at start"' },
   { id: 'V5 a field sent on the wrong channel', file: 'core/panel.js', from: "bank: 'phi', width: 'w'", to: "bank: 'w', width: 'phi'", caughtBy: 'extendOptions "at start"' },
   { id: 'V6 the panel never passes the boxes', file: 'core/panel.js', from: 'atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),', to: '', caughtBy: 'the panel: an "at start" box' },

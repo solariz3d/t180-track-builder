@@ -84,7 +84,8 @@ test('swell: the bank with its box off, a cup or edge at start, and turn and wid
     'cup 40 at start, bank 20 box off': ['d48e1846ddb8591777f891d652ec4fc6d4e1566455b6958b2cb2ffddfc817efb', { length: 600, bank: '20', cup: '40', atStart: { ...NONE, cup: true } }],
     'edge 30 at start': ['a4fe367294a6b66a2869adebb87e6106d387a66fe4caeaa7806640597e7e5ef2', { length: 600, edge: '30', atStart: { ...NONE, edge: true } }],
     // AMENDED (the rule changed, 2026-10-30 22:23, the user: "the start should work the same for the width as well": a width at start is candidate F, a 20 m rise as laid then a fade over a 300 m ramp, capped at half the piece, app/core/panel.js): the width moves; the turn keeps its 20 m
-    'width 30 and turn 10 at start': ['ce11ad255c2d7fafc74aa510c21c458e5e98dc19ae457364d0b7b8753390ac96', { length: 400, width: '30', turn: '10', atStart: { ...NONE, width: true, turn: true } }],
+    // AMENDED BY NAME (2026-11-03, a turn or climb reached early is sized to its change, app/core/panel.js routeStartM; checked when re-pinned: with every early turn held to 20 m again (ROUTE_SPREAD 0) this row's old pin holds, so the turn's ramp is the only change): the turn of 10°/100m from straight now eases in over 51.5 m, not 20 (it was ce11ad25…)
+    'width 30 and turn 10 at start': ['2d031db91c9c331235f78d80763ec94cb486751d0668f0bb9c5b74abbe51866c', { length: 400, width: '30', turn: '10', atStart: { ...NONE, width: true, turn: true } }],
   };
   const base = flat('golden');
   for (const [k, [sha, f]] of Object.entries(GOLD)) assert.equal(crypto.createHash('sha256').update(D.serialize(lay(base, f).doc)).digest('hex'), sha, k);

@@ -69,11 +69,12 @@ test('at start: the cup and the edges come in no faster than the roll amber eith
 });
 
 // AMENDED (the rule changed, 2026-10-30 22:23, the user: "the start should work the same for the width as well": a width at start is candidate F, a 20 m rise as laid then a fade over a 300 m ramp, capped at half the piece, app/core/panel.js): the width leaves this row (test/core_width_at_start_f.test.js has it); turn and climb keep 20 m
-test('at start: turn and climb keep exactly 20 m, the width takes F (half this 400 m piece, 200 m); nothing ticked sends no transition, and the bytes Extend lays are as before', () => {
+// AMENDED BY NAME (2026-11-03, a turn or climb reached early is sized to its change, app/core/panel.js routeStartM; checked when re-pinned: with every early turn held to 20 m again (ROUTE_SPREAD 0) this row's old pin holds, so the turn's ramp is the only change): a turn of 10°/100m from straight is a ramp of 3 × 1.745e-3 / bar = 51.5 m; a climb of 2°/100m is small enough to keep 20 m (it was { kh: 20, kv: 20 })
+test('at start: the turn is sized to its change (51.5 m), the small climb keeps 20 m, the width takes F (half this 400 m piece, 200 m); nothing ticked sends no transition, and the bytes Extend lays are as asked', () => {
   const d = straight(), h = headOf(d);
   const o = extendOptions({ length: 400, turn: '10', climb: '2', width: '30', atStart: { ...NONE, turn: true, climb: true, width: true }, head: h });
-  assert.deepEqual(o.transition, { kh: 20, kv: 20, w: 200 });
-  assert.equal(D.serialize(extend(d, o)), D.serialize(extend(d, { length: 400, targets: o.targets, transition: { kh: 20, kv: 20, w: 200 }, startShapes: o.startShapes })));
+  assert.deepEqual(o.transition, { kh: 51.5, kv: 20, w: 200 });
+  assert.equal(D.serialize(extend(d, o)), D.serialize(extend(d, { length: 400, targets: o.targets, transition: { kh: 51.5, kv: 20, w: 200 }, startShapes: o.startShapes })));
   const plain = extendOptions({ length: 400, bank: '20', width: '30', atStart: NONE, head: h });
   assert.equal(plain.transition, undefined, 'no box ticked: no transition');
   assert.equal(D.serialize(extend(d, plain)), D.serialize(extend(d, { length: 400, targets: plain.targets, bankShape: 'rounded' })));

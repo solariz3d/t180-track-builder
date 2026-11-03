@@ -88,6 +88,18 @@ function crossStartM(from, to, length, spread = SWELL_SPREAD, bends = false) {
   const cap = bends && swellPeak(to - from, half) > START_RATE ? length : half;
   return Math.min(Math.ceil(want * 10 - 1e-9) / 10, cap);
 }
+// A TURN OR CLIMB AT THE START, SIZED TO ITS CHANGE (the user, 2026-11-03, on ELYSIUM NEW's mega drop: "the bump with the climb that is where the new piece then starts
+// climbing back up with banking"; and "almost wish we could just make the generation system one shot this problem on its own"). Reached within AT_START_M whatever its
+// size, a pull-out of a −87° dive (0 → −2.513e-3 /m) changed the curvature 3.18 times faster than ROUTE_BAR, its turn 5.49 times: the bump at the joint. ROUTE_BAR is
+// the load at 170 m/s changing by 3 g over 10 m of road, κ′ ≤ 29.4 / (10 · 170²) /m². Extend lays a ramp in about half its length (src/core/extend.js rampControl), so
+// the ramp is ROUTE_SPREAD × |change| / ROUTE_BAR, at least AT_START_M, at most half the piece (never below AT_START_M or a shorter piece's own length), as the cross
+// section and the width already are. ROUTE_SPREAD is measured, as START_SPREAD was: 2.35 laid his p33 at 1.25 times the bar, 3 under it
+// (test/core_early_turn_climb.test.js). The change is measured from the head's own value (`head`, coreshell headState: kh and kv in rad/m).
+const ROUTE_BAR = 29.4 / (10 * 170 * 170), ROUTE_SPREAD = 3;
+function routeStartM(from, to, length) {
+  const want = Math.max(AT_START_M, (ROUTE_SPREAD * Math.abs(to - from)) / ROUTE_BAR), cap = Math.max(Math.min(AT_START_M, length), length / 2);
+  return Math.min(Math.ceil(want * 10 - 1e-9) / 10, cap);
+}
 const FIELD_CHANNEL = Object.freeze({ turn: 'kh', climb: 'kv', bank: 'phi', width: 'w', cup: 'c', edge: XS.CHANNEL.edge, edgeR: 'er', start: XS.CHANNEL.start, tube: XS.CHANNEL.tube });
 // THE "EARLY" BOX'S WORDS, ONE PER ROW, each what extendOptions does with that field ticked:
 //   bank, cup, left and right edge: F (crossStartM): F_RAMP_M laid in three quarters, 225 m, done by 234.5 m on the user's piece (the comment above), so "about 235 m";
@@ -148,7 +160,8 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
   const fromDeg = (ch) => { const v = head && Number.isFinite(head[ch]) ? head[ch] : 0; return ch === 'phi' ? v / DEG : v; };
   for (const [f, ch] of Object.entries(FIELD_CHANNEL)) if (atStart[f] && targets[ch] !== undefined) {
     transition[ch] = XS_START.has(ch) ? crossStartM(fromDeg(ch), ch === 'phi' ? targets.phi / DEG : targets[ch], out.length, SWELL_SPREAD, ch === 'phi')
-      : ch === 'w' ? Math.min(F_RAMP_M, Math.max(Math.min(AT_START_M, out.length), out.length / 2)) : Math.min(AT_START_M, out.length);
+      : ch === 'w' ? Math.min(F_RAMP_M, Math.max(Math.min(AT_START_M, out.length), out.length / 2))
+      : ch === 'kh' || ch === 'kv' ? routeStartM(fromDeg(ch), targets[ch], out.length) : Math.min(AT_START_M, out.length);
     if (!XS_START.has(ch) && ch !== 'w') continue;
     if (ch === 'phi') out.bankShape = startShapeOf(transition.phi);
     else (out.startShapes = out.startShapes || {})[ch] = startShapeOf(transition[ch]);
@@ -425,7 +438,7 @@ function mount(root, shell, mountOpts = {}) {
   // STRAIGHT IN ONE CLICK (the user: "impossible to create a perfect straight"): Extend at turn 0 eases to it over the WHOLE piece unless the turn's
   // "at start" box is ticked. This button extends with turn 0 and climb 0, both reached within the first AT_START_M metres and held there, then puts the boxes back
   // as they were (they are a kept preference, not this button's to change)
-  const straightBtn = el('button', { text: 'Straight', title: `a straight piece of the length above: turn 0 and climb 0, reached within its first ${AT_START_M} m and held exactly`, onclick: () => {
+  const straightBtn = el('button', { text: 'Straight', title: `a straight piece of the length above: turn 0 and climb 0, reached early (over ${AT_START_M} m, or longer for a sharp turn or climb, up to half the piece) and held exactly`, onclick: () => {
     const was = { turn: atStart.turn.checked, climb: atStart.climb.checked };
     turn.value = '0'; climb.value = '0'; atStart.turn.checked = true; atStart.climb.checked = true;
     send('t180-ghost-clear'); extendHere();

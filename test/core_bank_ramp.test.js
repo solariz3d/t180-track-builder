@@ -86,7 +86,8 @@ const UNMOVED = [
   ['cup at start, bank box-off', () => panel({ bank: '-20', cup: '15.5' }, { cup: true }), 'b5aa4467014c819f0047e2e0a843f3b3f4ede50cdc55f4bcddd581c51e34b5f3'],
   ['edge at start', () => panel({ edge: '30' }, { edge: true }), '364c924828beebeb08e37066a701185eb97c9878263abbca20f5c62fdb7c0cfc'],
   // AMENDED (the rule changed, 2026-10-30 22:23, the user: "the start should work the same for the width as well": a width at start is candidate F, a 20 m rise as laid then a fade over a 300 m ramp, capped at half the piece, app/core/panel.js): the width and turn at start move; the turn keeps its 20 m
-  ['width and turn at start', () => panel({ width: '20', turn: '20' }, { width: true, turn: true }), '86306014d634df0a0cdf9e56545c47efb54777ab60b067c8bd7fef33c883deb7'],
+  // AMENDED BY NAME (2026-11-03, a turn or climb reached early is sized to its change, app/core/panel.js routeStartM; checked when re-pinned: with every early turn held to 20 m again (ROUTE_SPREAD 0) this row's old pin holds, so the turn's ramp is the only change): the turn of 20°/100m from straight now eases in over 103 m, not 20 (it was 86306014…)
+  ['width and turn at start', () => panel({ width: '20', turn: '20' }, { width: true, turn: true }), '22477ab5834b51d545e33b2a280ec2e40cb1f6a883a212ec625df8b6e5e3fb58'],
   ['a bank at start with no shape', () => extend(base(), { length: 1000, targets: { phi: -0.5 }, transition: { phi: 150 } }), '4e1eb450b81b66f9383a79baa34810b73dcd7ed2648c42087e65b35b94959076'],
   ['the swell over the whole piece', () => extend(base(), { length: 300, targets: { phi: 0.6 }, bankShape: 'swell' }), '0bde7db3c1cdf0d8fa6b81590acd73fb4796fa80cceb8877266b4fce7794f27c'],
   ['the quintic bank, no shape', () => extend(base(), { length: 300, targets: { phi: 0.6 } }), 'cf8e2094802f8b4f1ac66cbdd647f3c429a4f302e4aed810dcf084236a773716'],
