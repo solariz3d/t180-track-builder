@@ -5,6 +5,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **One piece can bank twice.** Under the bank field there are now two more: **then bank °** and **from (m)**. With a bank typed, the piece banks to it as before, holds it, and from the mark you set banks again to the second value by its end, steeper, back the other way, or back to level. So a turn can exit steeper or level in the same piece, where before it took a second piece just to flatten it. The mark starts at 85% of the piece's length and follows the length until you type one; a small tick on the preview shows where it is. The second bend eases in and out like the first (it starts without a jolt where the hold ends and ends flat, so the next piece carries on as before), and with "early" ticked it is the gentle swell. A mark before the first bank has finished, or at or past the piece's end, is refused and says the range it can take. Mirror flips both bends, undo brings both fields back, and a track saved with a second bend opens with it. Only the bank can do this for now; the same for turn, climb and width is planned.
+
 ## [0.4.39] - 2026-11-03
 
 ### Added
