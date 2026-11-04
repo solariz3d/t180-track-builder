@@ -29,6 +29,7 @@ const SPD = require('./spawndrag.js');
 const GT = require('../../src/core/gridturn.js');   // 2026-10-12: Turn to grid, and the end heading line    // and dragged there
 const VO = require('./valuesoverlay.js');   // the values of the piece being edited, large over the 3D view   // the free jump's landing: where its handles are, and its number boxes
 const FL = require('./flightlayer.js');   // the flights drawn as a dashed line across the air
+const ST = require('./secondtick.js');   // the second bank's tick on the ghost (L135)
 const ZG = require('./zonegrab.js');   // Sculpt grabs the road itself (the zone at the press, the drag's axis, the dot rows)
 const SL = require('./selectionlayer.js');   // pieceSpan, the piece under a station (Stretch's glyph stands at its far joint)
 
@@ -50,6 +51,10 @@ const DEG = Math.PI / 180;
 // if that is shorter: the core needs a transition no longer than the piece), then held for the rest of the piece. Unticked, it blends over
 // the whole piece as before. The core takes `transition` as a number OR a per-channel map in metres.
 const AT_START_M = 20;
+// THE SECOND BANK'S DEFAULT START (L135): 85% of the piece, the user's drawing ("EXTRA BANK FUNCTION FOR END OF PIECE.png", on D) marks about the last 15% of a 750 m
+// turn. In metres to two decimals, as the field shows it, so a from left as shown and a blank one send the same number
+const SECOND_FROM_SHARE = 0.85;
+const secondFromOf = (length) => { const L = Number(length); return Number.isFinite(L) && L > 0 ? Math.round(L * SECOND_FROM_SHARE * 100) / 100 : null; };
 // The CROSS-SECTION at the start (the user, 2026-10-29, a 20° bank at start over 20 m: "keep what it does, but make the transition a lot more smoother gradient"): a
 // ticked bank, cup or edge comes in no faster than the checker's own roll amber (src/validate/index.js ROLL_AMBER_DEG_M, read at a 20 m chord), so its ramp is
 // START_SPREAD × |change| / that rate, at least AT_START_M. START_SPREAD is measured, not derived: Extend lays a short ramp's change inside about three quarters of it,
@@ -128,7 +133,7 @@ const EARLY_TITLE = Object.freeze({
 // change, ending at a climb rate of 0 (a steady pitch, level only when it ends at pitch 0).
 // `head`: the head's end values as coreshell headState gives them (phi in rad; c, e, er in degrees), which a cross-section ramp at the start is measured from;
 // without one (an empty track, or a caller that has none) the change is measured from 0
-function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null }) {
+function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null, thenBank = '', bankFrom = '' }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
   const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup), corner = turnAs === 'corner' && t !== null && t !== 0, climbCorner = turnAs === 'corner' && c !== null && c !== 0;
   if (turnAs !== 'rate' && turnAs !== 'corner') throw new Error(`BAD_TURN_AS: the turn is read as 'rate' or 'corner', got ${turnAs}`);
@@ -151,6 +156,12 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
   if (tb !== null) targets[XS.CHANNEL.tube] = tb;
   const out = { length: Number(length), targets };
   if (b !== null) out.bankShape = 'rounded';   // the bank Extend lays starts banking at the joint (src/core/extend.js roundedLinear); Close and Finish keep theirs
+  // THE SECOND BANK (L135, the user 2026-11-04: "another mark towards the end you can bank again ... instead of having to place it, then flatten it with the next
+  // piece"): with a bank target AND a then bank, the piece banks again from `from` m to end at the then bank (the contract, exo_memory/loop/plan_l135_second_bank_2026-11-04.md:
+  // second: { phi: { from, target } }, target in rad as the bank's). A blank from is SECOND_FROM_SHARE of the length. NOT clamped: the core refuses a from out of
+  // range by name (BAD_SECOND, with the allowed range), and a clamp here would hide it. No then bank: no `second`, so the options are as before, byte for byte
+  const tb2 = num(thenBank);
+  if (b !== null && tb2 !== null) { const f = num(bankFrom); out.second = { phi: { from: f !== null ? f : secondFromOf(out.length), target: tb2 * DEG } }; }
   // a bank, cup or edge at start is candidate F (crossStartM, startShapeOf): set below, with its ramp
   if (corner) out.turnDeg = t;
   if (climbCorner) out.climbDeg = c;   // the climb too (plan :387-399): the exact pitch change, ending at a climb rate of 0
@@ -281,7 +292,7 @@ function mount(root, shell, mountOpts = {}) {
       shown[k] = cornerMode() ? '' : show(HEAD[k][1](h)); f.value = shown[k]; lab.textContent = cornerMode() ? `${unit} °` : `${unit} °/100m`; f.setAttribute('title', title[turnAs.value]);
     }
   };
-  const showHead = () => { const h = shell.headState(); for (const [k, [input, of]] of Object.entries(HEAD)) { shown[k] = show(of(h)); input.value = shown[k]; } showTurnHead(h); for (const [k, f] of [['cup', cup], ['tube', tube]]) { f.disabled = false; f.setAttribute('title', baseTitle[k]); } fillWidthLike(); };   // (baseTitle is set below, before the first draw)
+  const showHead = () => { const h = shell.headState(); for (const [k, [input, of]] of Object.entries(HEAD)) { shown[k] = show(of(h)); input.value = shown[k]; } showTurnHead(h); for (const [k, f] of [['cup', cup], ['tube', tube]]) { f.disabled = false; f.setAttribute('title', baseTitle[k]); } fillWidthLike(); clearSecond(); };   // (baseTitle and clearSecond are set below, before the first draw; the head has no second bank)
   // A PIECE IS A CUP OR A TUBE, never both (contract: `c` and `t` targets together are refused BAD_TARGET). CHOSEN: the field changed
   // LAST wins. Changing one puts the other back to what it shows (so it sends no target) and DISABLES it, with a tooltip saying why; putting
   // the changed one back to its shown value enables the other again, and so does every new document (showHead).
@@ -304,6 +315,17 @@ function mount(root, shell, mountOpts = {}) {
   // (the user, 2026-11-02: "when you make the track go all the way around say -360 degrees, it only hits 359.99 and then glitches out"): exactly one turn is
   // a full turn of roll, sent as typed; wrapTurn read it as 0, so after -270 the piece rolled 270° back to upright. Past one turn it wraps as above.
   const bankTarget = () => { const t = asTyped('bank'); if (t === '') return t; const T = Number(t); return !Number.isFinite(T) ? t : Math.abs(T) === 360 ? String(T) : String(HD.wrapTurn(T)); };
+  // THE SECOND BANK (L135; extendOptions above): "then bank °", the bank the piece ends at, and "from (m)", where along the piece the second ramp starts. Both are OFF
+  // until the bank field has a target (bankTarget), since the second ramp starts from the first one's target. `from` shows SECOND_FROM_SHARE of the length and
+  // follows the length until a value is typed; cleared, it follows again. The then bank keeps within one turn as the bank does. A new document clears both
+  // (the bank field shows the head again, so there is no target); Undo gives back the undone piece's own (fieldsNow, putBack)
+  const thenBank = num('', 1, 'then bank: the bank this piece ENDS at, in degrees (+ = left side up). From "from" on, the road banks again from the bank above to this one, in the same piece: steeper, or back to level (0). Blank: the piece holds the bank above to its end. Needs a bank target above'),
+    bankFrom = num('', 1, 'from: metres from the start of this piece where the second bank begins (a tick on the next-piece ghost marks it). It follows 85% of the length until you type one; clear it to follow again');
+  let fromTyped = false;
+  const thenTarget = () => { const t = thenBank.value, T = Number(t); return t === '' || !Number.isFinite(T) || Math.abs(T) === 360 ? t : String(HD.wrapTurn(T)); };   // as bankTarget: one full turn as typed
+  const followLength = () => { if (fromTyped) return; const f = secondFromOf(len.value); bankFrom.value = f === null ? '' : show(f); };
+  const showSecond = () => { const off = bankTarget() === ''; thenBank.disabled = bankFrom.disabled = off; followLength(); };
+  const clearSecond = () => { thenBank.value = ''; fromTyped = false; showSecond(); };
   // "at start": one small box per field, off by default (off = ease to the value over the whole piece, as always). It is kept from
   // piece to piece, like a preference; it does nothing for a field left as shown, which has no target
   // (the user, 2026-10-31: the boxes "need a more informative name and a hover that explains them"): the box reads "early", and its tooltip is EARLY_TITLE's
@@ -328,12 +350,14 @@ function mount(root, shell, mountOpts = {}) {
   const rightTarget = () => { const r = asTyped('edgeR'); return r !== '' || asTyped('edge') === '' ? r : String(HEAD.edgeR[1](shell.headState())); };
   const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), edgeR: rightTarget(), start: asTyped('start'), tube: asTyped('tube'),
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
-    empty: !shell.getState().history.present.pieces.length, turnAs: turnAs.value, head: shell.headState() });
+    empty: !shell.getState().history.present.pieces.length, turnAs: turnAs.value, head: shell.headState(),
+    ...(thenBank.disabled ? {} : { thenBank: thenTarget(), bankFrom: bankFrom.value }) });
   // (the user, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
   // document it made; when Undo steps from that document back to the one it was made from, the fields are put back (the length, every field as typed or left as
   // shown, the at-start ticks), so Extend again rebuilds the same piece. Redo, a brush and open show the head, as before
   const madeWith = new WeakMap();
-  const fieldsNow = () => ({ len: len.value, values: Object.fromEntries(Object.keys(HEAD).map((k) => [k, HEAD[k][0].value])), ticks: Object.fromEntries(Object.entries(atStart).map(([k, b]) => [k, b.checked])), turnAs: turnAs.value });
+  const fieldsNow = () => ({ len: len.value, values: Object.fromEntries(Object.keys(HEAD).map((k) => [k, HEAD[k][0].value])), ticks: Object.fromEntries(Object.entries(atStart).map(([k, b]) => [k, b.checked])), turnAs: turnAs.value,
+    second: { then: thenBank.value, from: bankFrom.value, typed: fromTyped } });
   // (the user, 2026-10-18: a piece after a turn goes straight "because the pieces dont retain the same values"): AS CORNERS, after an Extend the turn and climb fields
   // KEEP the degrees typed for the piece just placed (the new document's draw has just shown the head, blank), so Extend again places the same corner, each ending straight.
   // A blank or a typed 0 is not carried (the field stays blank, as before). Only Extend carries (and Straight, whose 0 never is): Jump, Level, To floor, Turn by, Turn to grid
@@ -346,7 +370,8 @@ function mount(root, shell, mountOpts = {}) {
   };
   const extendHere = () => { const before = shell.getState().history.present, made = fieldsNow(); shell.extend(opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) { madeWith.set(after, { before, made }); carryCorner(made); } };
   //: the mode Undo gives back is saved through S too, or the hidden box and the Settings menu would read two different modes
-  const putBack = (m) => { if (m.turnAs && m.turnAs !== turnAs.value) { turnAs.value = m.turnAs; showTurnHead(shell.headState()); S.set('turnClimbAs', m.turnAs); } len.value = appliedLen = m.len; for (const k of Object.keys(HEAD)) HEAD[k][0].value = m.values[k]; for (const [k, b] of Object.entries(atStart)) b.checked = !!m.ticks[k]; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube); };
+  const putBack = (m) => { if (m.turnAs && m.turnAs !== turnAs.value) { turnAs.value = m.turnAs; showTurnHead(shell.headState()); S.set('turnClimbAs', m.turnAs); } len.value = appliedLen = m.len; for (const k of Object.keys(HEAD)) HEAD[k][0].value = m.values[k]; for (const [k, b] of Object.entries(atStart)) b.checked = !!m.ticks[k]; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube);
+    if (m.second) { thenBank.value = m.second.then; fromTyped = !!m.second.typed; bankFrom.value = m.second.from; } showSecond(); };
   // the ghost: a candidate the shell cannot build, or the preview cannot draw, says why (it used to vanish without a word)
   // THE READOUT of the piece the fields describe: 16 px bold rows, so its ink is at least 11 device px tall
   // cup reads from → to: the DOCUMENT's values (cupFromDeg / cupToDeg, which for a legacy piece are its rendered edge), never
@@ -397,6 +422,7 @@ function mount(root, shell, mountOpts = {}) {
   let releasing = false;   // true while a drag's LAST position is typed in, just before end(): its ghost(RELEASE) builds the exact ghost, so the cheap one between is not built
   const ghost = () => {
     if (releasing) return;
+    showSecond();   // the second bank's fields follow the bank field (on with a target) and the length (an untyped from)
     hintNow();   // the straight hint follows the turn field and its box
     readout();   // first, and synchronously: the numbers follow the fields with no timer and no frame wait
     let why = null;
@@ -408,6 +434,8 @@ function mount(root, shell, mountOpts = {}) {
   // (the cup's handler is the cup-or-tube one below, the cup is not in this list, where its handler would only be replaced)
   for (const f of [len, turn, climb, bank, width, ...Object.values(atStart)]) f.oninput = f.onchange = ghost;
   for (const f of [edge, edgeR, start, tube]) f.oninput = f.onchange = ghost;   // the cross-section fields follow the same way
+  thenBank.oninput = thenBank.onchange = ghost;
+  bankFrom.oninput = bankFrom.onchange = () => { fromTyped = bankFrom.value !== ''; ghost(); };   // typed: it stays; cleared: it follows the length again
   for (const f of [cup, tube]) f.oninput = f.onchange = () => { exclusive(f); ghost(); };   // cup OR tube: the rule first, then the ghost
   tube.oninput = tube.onchange = () => { exclusive(tube); ghost(); fillWidthLike(); };   // a tube's entries read round and across
   width.oninput = width.onchange = () => { ghost(); showTubeNote(); };
@@ -959,7 +987,8 @@ function mount(root, shell, mountOpts = {}) {
     info,   // the track line first, directly under the bar (no heading above it)
     el('div', { class: 'actions' }, extendBtn, straightBtn, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
     sculptStrip,
-    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), turnField, climbField, fieldAt('bank °', bank, 'bank'), ...shapeFields),
+    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), turnField, climbField, fieldAt('bank °', bank, 'bank'),
+      el('label', { class: 'picker inline' }, el('span', { text: 'then bank °' }), thenBank), el('label', { class: 'picker inline' }, el('span', { text: 'from (m)' }), bankFrom), ...shapeFields),
     roBox,
     jumpNote, landingBox,
     el('div', { class: 'actions' }, cancelBtn), proposalBox,
@@ -1035,6 +1064,16 @@ function mount(root, shell, mountOpts = {}) {
   if (spawnDrag) spawnDrag.late();   // (the start drag's hover and move listener goes after the handles': they set the cursor on every move)
   if (labels && handles) labels.setAvoid(() => handles.handles().concat(handles.dots()).filter((h) => h.screen).map((h) => h.screen).concat(handles.tips ? handles.tips() : []));   // the road labels keep clear of the handles drawn over them
   const flights = stage ? FL.mount(stage, win) : null;   // the flights as dashed arcs
+  // THE SECOND BANK'S TICK (L135): where on the ghost the second bank begins, with the road's half width there (the head's width to the field's, as the handles read
+  // it); null while there is no second bank (the fields off, or no then bank)
+  const secondAt = () => {
+    if (thenBank.disabled || thenTarget() === '') return null;
+    const from = bankFrom.value === '' ? secondFromOf(len.value) : Number(bankFrom.value), L = Number(len.value);
+    if (!Number.isFinite(from)) return null;
+    const f = L > 0 ? Math.min(1, Math.max(0, from / L)) : 1, w1 = fieldNum(width), w0 = fieldNum({ value: shown.width }) ?? w1;
+    return { from, half: ((w0 ?? 0) + ((w1 ?? w0 ?? 0) - (w0 ?? 0)) * f) / 2 };
+  };
+  const secondTick = stage ? ST.mount(stage, win, secondAt) : null;
   // 't180:handles-request' { detail: { reply(list) } }: where the handles are on screen now ([{ id, kind, side, x, y, dx, dy }], css px of the preview), read only, for the window proof as the other requests are
   const onHandlesRequest = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(handles ? handles.handles().filter((h) => h.screen).map((h) => ({ id: h.id, kind: h.kind, side: h.side, x: h.screen.x, y: h.screen.y, dx: h.screen.dx, dy: h.screen.dy })) : []); };
   doc.addEventListener('t180:handles-request', onHandlesRequest);
@@ -1049,7 +1088,7 @@ function mount(root, shell, mountOpts = {}) {
   const offSettings = Object.entries(SETTINGS).map(([k, apply]) => { apply(S.get(k, undefined)); return S.on(k, apply); });
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, flights, pieces, gripLayer, spawnsLayer, spawnDrag, values, sculptStrip, lend, options: opts, unmount() { unsub(); doc.removeEventListener('t180:build-request', onBuildRequest); doc.removeEventListener('t180-sculpt-key', onSculptKey); doc.removeEventListener('t180:sculpt-hover', onSculptHover); doc.removeEventListener('keydown', onAltKey); doc.removeEventListener('keyup', onAltKey); if (winEvents) win.removeEventListener('blur', onBlur); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); stage.removeEventListener('pointerleave', leave); stage.removeEventListener('wheel', wheel, { capture: true }); } root.replaceChildren(); } };
+  return { labels, handles, flights, secondTick, secondAt, pieces, gripLayer, spawnsLayer, spawnDrag, values, sculptStrip, lend, options: opts, unmount() { unsub(); if (secondTick) secondTick.unmount(); doc.removeEventListener('t180:build-request', onBuildRequest); doc.removeEventListener('t180-sculpt-key', onSculptKey); doc.removeEventListener('t180:sculpt-hover', onSculptHover); doc.removeEventListener('keydown', onAltKey); doc.removeEventListener('keyup', onAltKey); if (winEvents) win.removeEventListener('blur', onBlur); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); stage.removeEventListener('pointerleave', leave); stage.removeEventListener('wheel', wheel, { capture: true }); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };
