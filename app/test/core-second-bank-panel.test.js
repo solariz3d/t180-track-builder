@@ -170,3 +170,26 @@ test('L135 C10: the layer draws the tick from the preview\'s own answers (ghost,
   at = null; assert.equal(layer.drawNow(), null, 'no second bank: nothing drawn');
   layer.unmount();
 });
+
+// AFTER THE REBASE ONTO B's CORE (l135-second-bank 0085910): the panel's options drive the real second bank, end to end
+const D = require('../../src/core/document.js');
+const msgText = (p) => p.root.all().filter((e) => e.attrs && e.attrs.class === 'message').map((e) => e.textContent).join(' | ');
+
+test('L135 C11: with B\'s core, his case is built: 750 m, bank 30 then 0 from 637.5, the piece holds about 30° at from and ends level', async () => {
+  const p = await mountPanel();
+  p.type('length m', 750); p.type('bank °', 30); p.type('then bank °', 0);
+  const n = p.shell.getState().history.present.pieces.length; p.extend();
+  const d = p.shell.getState().history.present; assert.equal(d.pieces.length, n + 1, `one piece placed (${msgText(p)})`);
+  const P = d.pieces[d.pieces.length - 1], at = (s) => D.channelAt(P, 'phi', s).v / DEG;
+  near(at(637.5), 30, 0.1, 'the bank at from'); near(at(750), 0, 1e-6, 'level at the end'); near(D.channelAt(P, 'phi', 750).d1, 0, 1e-9, 'ending with slope 0');
+  p.panel.unmount();
+});
+
+test('L135 C12: with B\'s core, a from past the piece is the core\'s refusal by name, shown in the panel; Extend adds nothing', async () => {
+  const p = await mountPanel();
+  p.type('length m', 750); p.type('bank °', 30); p.type('then bank °', 0); p.type('from (m)', 800);
+  assert.match(msgText(p), /no preview of this piece: .*second bank/i, `the ghost says why (${msgText(p)})`);
+  const n = p.shell.getState().history.present.pieces.length; p.extend();
+  assert.equal(p.shell.getState().history.present.pieces.length, n, 'nothing placed');
+  p.panel.unmount();
+});
