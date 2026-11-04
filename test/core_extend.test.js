@@ -174,3 +174,28 @@ test('L135 8: mirror on insert negates both banks: a saved piece that banks +30�
   assert.equal(D.serialize(D.parse(D.serialize(src))), D.serialize(src), 'the document with a second bank saves and opens unchanged');
   assert.equal(PC.serialize(PC.parse(PC.serialize(run))), PC.serialize(run), 'and so does the saved piece');
 });
+
+// ── L135 ROW-6 FIX (E's review §2c and §2d, exo_memory/handback/p-l135-E_2026-11-04.md in the lighthouse repo): a second ramp too short for the road AS BUILT is refused.
+// The adapter re-rounds every roll corner past its acceleration bar (src/core/adapter.js bankPlan), so a short second ramp is spread back over the hold: the document holds
+// to `from` but the road the preview, the checker and the export use does not. Measured (B's scratch minscan2.js / kcheck.js, 1,000 m piece, hold before from, built path
+// against the same piece built with no second bank): the shortest second ramp that keeps the built path within 0.5° of the hold grows as the square root of the change,
+// 15 m × √(change in degrees) (30 m for 5°, 82 m for 30°, 142 m for 90°). Under ~0.57 m the document itself drops early too (§2c: no knot of its own survives the filter).
+const minSecondM = (deg) => 15 * Math.sqrt(Math.abs(deg));
+test('L135 6b: a second ramp of 0.5 m (from 749.5 on a 750 m piece) is refused by name, and the message names the shortest it may be', () => {
+  assert.throws(() => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second: { phi: { from: 749.5, target: 0 } } }),
+    (e) => e.code === 'BAD_SECOND' && e.message.includes(minSecondM(30).toFixed(1)), 'BAD_SECOND, naming 82.2 m');
+});
+test('L135 6c: a second ramp just under the shortest (82.0 m for a 30° change, the minimum 82.2 m) is refused; at the minimum it is laid', () => {
+  const at = (L2) => () => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second: { phi: { from: 750 - L2, target: 0 } } });
+  assert.throws(at(82.0), (e) => e.code === 'BAD_SECOND' && e.message.includes('82.2'), 'just under: refused, naming the minimum');
+  assert.doesNotThrow(at(Math.ceil(minSecondM(30) * 10) / 10), 'at the minimum: laid');
+});
+test('L135 6d (a guard): a second ramp at the minimum is laid and the BUILT road holds within 0.5° of the hold up to from (30° and 90° changes)', () => {
+  const rollOf = (doc) => { const S = toPath(doc).path.samples; return (s) => { let lo = 0, hi = S.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S[m].s <= s) lo = m; else hi = m; } const a = S[lo], b = S[hi], t = b.s > a.s ? (s - a.s) / (b.s - a.s) : 0; return (a.roll + (b.roll - a.roll) * t) / DEG; }; };
+  for (const [T1, T2] of [[30, 0], [20, -70]]) {
+    const L2 = Math.ceil(minSecondM(T2 - T1)), F = 1000 - L2, base = { length: 1000, targets: { phi: T1 * DEG }, transition: 120 };
+    const c = rollOf(extend(flat135(), base)), p = rollOf(extend(flat135(), { ...base, second: { phi: { from: F, target: T2 * DEG } } }));
+    let dev = 0; for (let s = 1000 + Math.max(370, F - 250); s <= 1000 + F; s += 0.5) dev = Math.max(dev, Math.abs(p(s) - c(s)));
+    assert.ok(dev <= 0.5, `${T1}° -> ${T2}° over ${L2} m: the built road leaves the hold by ${dev.toFixed(3)}°`);
+  }
+});

@@ -132,7 +132,9 @@ test('L135 2: the steeper case, 30° then 50° from 85%: holds 30° from the fir
 test('L135 5: the roll rate, read by the checker (src/validate rollRates over its 20 m chord): his 750 m case stays under the 0.9338 °/m amber on both ramps; a second bank squeezed into 20 m goes over it, so the checker\'s warning fires', () => {
   const A = require('../src/core/adapter.js'), V = require('../src/validate/index.js');
   const worst = (doc) => { const { segments, path } = A.toPath(doc), S = path.samples; let m = 0; for (const q of V._internal.rollRates(S, (i) => segments[S[i].seg].kind !== 'gap', false, path.lengthM)) if (q.s >= 1000 && q.s <= 1750) m = Math.max(m, q.rate); return m; };
-  const his = worst(twice()), fast = worst(twice({ second: { phi: { from: 730, target: 0 } } }));
+  // AMENDED (L135 row-6 fix): the fast case was 30° undone in 20 m, which the shortest-second-ramp rule now refuses (BAD_SECOND, 82.2 m for 30°: core_extend 'L135 6b/6c').
+  // The fastest roll the rule still allows is a large change at its minimum, 15·√90 = 142.3 m for 90°, whose quintic peaks at 1.875·90/145 ≈ 1.16 °/m: the checker must warn on it
+  const his = worst(twice()), fast = worst(twice({ second: { phi: { from: 750 - 145, target: -60 * DEG } } }));
   assert.ok(his > 0.2 && his < V.ROLL_AMBER_DEG_M, `his piece rolls at most ${his.toFixed(4)} °/m (amber ${V.ROLL_AMBER_DEG_M}; over 0.2 means the second ramp is there)`);
-  assert.ok(fast > V.ROLL_AMBER_DEG_M, `30° undone in 20 m rolls at ${fast.toFixed(4)} °/m: over the amber, so the checker warns`);
+  assert.ok(fast > V.ROLL_AMBER_DEG_M, `30° to -60° in 145 m rolls at ${fast.toFixed(4)} °/m: over the amber, so the checker warns`);
 });

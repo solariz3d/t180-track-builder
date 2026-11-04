@@ -279,6 +279,16 @@ function fitWithHold(piece, ch, f, Lt, target, keep = null) {
  * (test/core_bank_ramp.test.js 'L135'). Then endC2 makes the end's curvature exactly 0, so the next piece, which continues value and slope by a line, meets it C2.
  */
 const SECOND_SUB = 8;
+/**
+ * THE SHORTEST SECOND RAMP (L135 row-6 fix; E's review §2c and §2d): K metres × √(the change in degrees). The adapter re-rounds every roll corner past its acceleration bar
+ * (src/core/adapter.js bankPlan, BANK_BAR), so a short second ramp is spread back over the hold in the road AS BUILT (the preview, the checker, the export), though the
+ * document holds to `from`. Measured on a 1,000 m piece, the built path against the same piece built with no second bank, over the 250 m before `from`: the shortest ramp
+ * that keeps it within 0.5° of the hold is about 30 m for a 5° change, 50 m for 15°, 80 m for 30°, 100–130 m for 60–90° (a square root, as an acceleration bound is), and
+ * K = 15 kept every one of 2,440 checked cases (Δ 0.5° to 135°, every whole metre to 60 m past the minimum, both shapes, an open head and a following straight) within it,
+ * except at a few isolated lengths where bankPlan's own rounding spikes (147 m: about 0.019° per degree of change, while 146.5 m and 147.5 m are clean), which no minimum
+ * removes. It also keeps the knot filter of secondRamp (k < L − 0.5) from ever meeting a ramp it would leave without knots (§2c), except for a change under ~0.0015°.
+ */
+const SECOND_MIN_K = 15;
 function endC2(piece, ch) {   // the end curvature 2(qₑ − q_d)/(L − U[n−1]) set to 0 by P[n−3] alone (continuity.js endDerivatives' closed form): q_d = qₑ
   const P = piece.channels[ch], n = P.length, L = piece.length, U = D.knotVector(piece), dec = D.DEC[ch];
   if (n < 5) return;
@@ -362,6 +372,9 @@ function extend(doc, opts = {}) {
       if (!Number.isFinite(T2)) throw new D.CoreError('BAD_TARGET', `the second bank's target must be a finite number, got ${T2}`);
       const R1 = Lof0('phi'), whole = R1 >= length - 1e-9, lo = whole ? 0 : R1;
       if (!(Number.isFinite(F) && F > 0 && F >= lo && F < length)) throw new D.CoreError('BAD_SECOND', `the second bank starts ${whole ? 'inside the piece' : `at or after the first bank's end (${lo} m)`} and before the piece's end (${length} m): from in ${whole ? `(0, ${length})` : `[${lo}, ${length})`}, got ${F}`);
+      // L135 row-6 fix (E's review §2c, §2d): a second ramp too short for the road AS BUILT is refused, by the measured minimum (SECOND_MIN_K)
+      const dDeg = Math.abs(T2 - targets.phi) / (Math.PI / 180), minM = SECOND_MIN_K * Math.sqrt(dDeg);
+      if (length - F < minM - 1e-9) throw new D.CoreError('BAD_SECOND', `a second bank of ${dDeg.toFixed(1)}° needs at least ${minM.toFixed(1)} m before the piece's end (the built road rounds a shorter one back over the hold): from at most ${(length - minM).toFixed(1)}, got ${F}`);
       sec = { from: F, target: T2, whole };
     }
   }
