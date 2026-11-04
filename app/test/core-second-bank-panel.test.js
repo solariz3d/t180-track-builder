@@ -123,7 +123,9 @@ test('L135 C5: Undo gives back both fields as they were for the undone piece (an
 test('L135 C6: extendOptions is pure: no second without a bank; from left blank is 85% of the length; values are sent as typed (the core refuses by name)', () => {
   const base = { length: 200, turn: '', climb: '', width: '', cup: '' };
   assert.equal('second' in extendOptions({ ...base, bank: '', thenBank: '10', bankFrom: '' }), false, 'no bank target: no second');
-  assert.deepEqual(extendOptions({ ...base, bank: '30', thenBank: '-10', bankFrom: '' }).second, { phi: { from: 170, target: -10 * DEG } }, 'blank from: 85% of 200');
+  // AMENDED (the default-from clamp, B's row-6 fix: a second ramp under 15·√Δ° is refused): 30 → −10 is a 40° change, so 85% of 200 (170, a 30 m ramp) would be
+  // refused; the blank from is clamped to 200 − 15·√40 = 105.13. The row's rule (a blank from is the panel's default) is unchanged
+  assert.deepEqual(extendOptions({ ...base, bank: '30', thenBank: '-10', bankFrom: '' }).second, { phi: { from: 105.13, target: -10 * DEG } }, 'blank from: the default, clamped to 200 − 15·√40');
   assert.deepEqual(extendOptions({ ...base, bank: '30', thenBank: '0', bankFrom: '250' }).second, { phi: { from: 250, target: 0 } }, 'a from past the length is sent: the core refuses it (BAD_SECOND), not the panel');
   assert.equal('second' in extendOptions({ ...base, bank: '30' }), false, 'no then bank: the options are as before');
 });
@@ -191,5 +193,25 @@ test('L135 C12: with B\'s core, a from past the piece is the core\'s refusal by 
   assert.match(msgText(p), /no preview of this piece: .*second bank/i, `the ghost says why (${msgText(p)})`);
   const n = p.shell.getState().history.present.pieces.length; p.extend();
   assert.equal(p.shell.getState().history.present.pieces.length, n, 'nothing placed');
+  p.panel.unmount();
+});
+
+// THE DEFAULT-FROM CLAMP (B's row-6 fix, l135-second-bank 36f4e48: a second ramp shorter than 15·√Δ° is BAD_SECOND, src/core/extend.js SECOND_MIN_K). The default
+// from (85% of the length) is clamped to length − 15·√Δ where 85% would be refused; a typed from stays as typed. Against the REAL core: the clamped default is
+// laid, and the panel's own copy of 15 is pinned by the core (1 cm past the clamp is refused), so a changed K turns this row red
+test('L135 C13: on a 300 m piece, 30° then 0, the default from is clamped to 300 − 15·√30 = 217.84 (85% would be refused); typed, it stays', async () => {
+  const p = await mountPanel();
+  p.type('length m', 300); p.type('bank °', 30); p.type('then bank °', 0);
+  assert.equal(p.field('from (m)').value, '217.84', 'the default, clamped (85% = 255 leaves 45 m, under the 82.16 m minimum)');
+  assert.deepEqual(p.opts().second, { phi: { from: 217.84, target: 0 } }, 'and sent as shown');
+  assert.equal(extendOptions({ length: 300, turn: '', climb: '', width: '', cup: '', bank: '30', thenBank: '0', bankFrom: '' }).second.phi.from, 217.84, 'a blank from in the pure options: the same clamp');
+  assert.equal(extendOptions({ length: 750, turn: '', climb: '', width: '', cup: '', bank: '30', thenBank: '0', bankFrom: '' }).second.phi.from, 637.5, 'where 85% is allowed it is still 85%');
+  const n = p.shell.getState().history.present.pieces.length; p.extend();
+  assert.equal(p.shell.getState().history.present.pieces.length, n + 1, `the clamped default is laid by the core (${msgText(p)})`);
+  p.shell.undo();
+  p.type('from (m)', 217.85);   // 1 cm past the clamp: the core's own minimum refuses it, so the panel's 15 is the core's
+  assert.match(msgText(p), /no preview of this piece: .*82\.2/, `1 cm past the clamp the core refuses, naming its minimum (${msgText(p)})`);
+  p.type('from (m)', 255);
+  assert.equal(p.field('from (m)').value, '255', 'a typed from stays as typed'); assert.equal(p.opts().second.phi.from, 255, 'and is sent as typed (the core refuses it by name)');
   p.panel.unmount();
 });

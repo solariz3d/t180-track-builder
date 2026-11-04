@@ -54,7 +54,15 @@ const AT_START_M = 20;
 // THE SECOND BANK'S DEFAULT START (L135): 85% of the piece, the user's drawing ("EXTRA BANK FUNCTION FOR END OF PIECE.png", on D) marks about the last 15% of a 750 m
 // turn. In metres to two decimals, as the field shows it, so a from left as shown and a blank one send the same number
 const SECOND_FROM_SHARE = 0.85;
-const secondFromOf = (length) => { const L = Number(length); return Number.isFinite(L) && L > 0 ? Math.round(L * SECOND_FROM_SHARE * 100) / 100 : null; };
+// CLAMPED to the core's shortest second ramp (B's L135 row-6 fix: src/core/extend.js SECOND_MIN_K, 15 m × √ of the change in degrees, or BAD_SECOND): where 85% would
+// leave less, the default is length − 15·√Δ, floored to the field's two decimals so it never shows past the largest allowed. A copy of the core's 15 (it is not
+// exported); app/test/core-second-bank-panel.test.js C13 pins it to the core's own refusal. A typed from is never clamped. dDeg: |then bank − bank| in degrees
+const SECOND_MIN_K = 15;
+const secondFromOf = (length, dDeg = 0) => {
+  const L = Number(length); if (!(Number.isFinite(L) && L > 0)) return null;
+  const share = Math.round(L * SECOND_FROM_SHARE * 100) / 100, d = Math.abs(Number(dDeg));
+  return Number.isFinite(d) && L - share < SECOND_MIN_K * Math.sqrt(d) ? Math.floor((L - SECOND_MIN_K * Math.sqrt(d)) * 100) / 100 : share;
+};
 // The CROSS-SECTION at the start (the user, 2026-10-29, a 20° bank at start over 20 m: "keep what it does, but make the transition a lot more smoother gradient"): a
 // ticked bank, cup or edge comes in no faster than the checker's own roll amber (src/validate/index.js ROLL_AMBER_DEG_M, read at a 20 m chord), so its ramp is
 // START_SPREAD × |change| / that rate, at least AT_START_M. START_SPREAD is measured, not derived: Extend lays a short ramp's change inside about three quarters of it,
@@ -161,7 +169,7 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
   // second: { phi: { from, target } }, target in rad as the bank's). A blank from is SECOND_FROM_SHARE of the length. NOT clamped: the core refuses a from out of
   // range by name (BAD_SECOND, with the allowed range), and a clamp here would hide it. No then bank: no `second`, so the options are as before, byte for byte
   const tb2 = num(thenBank);
-  if (b !== null && tb2 !== null) { const f = num(bankFrom); out.second = { phi: { from: f !== null ? f : secondFromOf(out.length), target: tb2 * DEG } }; }
+  if (b !== null && tb2 !== null) { const f = num(bankFrom); out.second = { phi: { from: f !== null ? f : secondFromOf(out.length, tb2 - b), target: tb2 * DEG } }; }
   // a bank, cup or edge at start is candidate F (crossStartM, startShapeOf): set below, with its ramp
   if (corner) out.turnDeg = t;
   if (climbCorner) out.climbDeg = c;   // the climb too (plan :387-399): the exact pitch change, ending at a climb rate of 0
@@ -323,7 +331,8 @@ function mount(root, shell, mountOpts = {}) {
     bankFrom = num('', 1, 'from: metres from the start of this piece where the second bank begins (a tick on the next-piece ghost marks it). It follows 85% of the length until you type one; clear it to follow again');
   let fromTyped = false;
   const thenTarget = () => { const t = thenBank.value, T = Number(t); return t === '' || !Number.isFinite(T) || Math.abs(T) === 360 ? t : String(HD.wrapTurn(T)); };   // as bankTarget: one full turn as typed
-  const followLength = () => { if (fromTyped) return; const f = secondFromOf(len.value); bankFrom.value = f === null ? '' : show(f); };
+  const secondChangeDeg = () => { const a = Number(bankTarget()), z = Number(thenTarget()); return thenBank.value === '' || bankTarget() === '' || !Number.isFinite(a) || !Number.isFinite(z) ? 0 : z - a; };   // for the clamp
+  const followLength = () => { if (fromTyped) return; const f = secondFromOf(len.value, secondChangeDeg()); bankFrom.value = f === null ? '' : show(f); };
   const showSecond = () => { const off = bankTarget() === ''; thenBank.disabled = bankFrom.disabled = off; followLength(); };
   const clearSecond = () => { thenBank.value = ''; fromTyped = false; showSecond(); };
   // "at start": one small box per field, off by default (off = ease to the value over the whole piece, as always). It is kept from
@@ -1068,7 +1077,7 @@ function mount(root, shell, mountOpts = {}) {
   // it); null while there is no second bank (the fields off, or no then bank)
   const secondAt = () => {
     if (thenBank.disabled || thenTarget() === '') return null;
-    const from = bankFrom.value === '' ? secondFromOf(len.value) : Number(bankFrom.value), L = Number(len.value);
+    const from = bankFrom.value === '' ? secondFromOf(len.value, secondChangeDeg()) : Number(bankFrom.value), L = Number(len.value);
     if (!Number.isFinite(from)) return null;
     const f = L > 0 ? Math.min(1, Math.max(0, from / L)) : 1, w1 = fieldNum(width), w0 = fieldNum({ value: shown.width }) ?? w1;
     return { from, half: ((w0 ?? 0) + ((w1 ?? w0 ?? 0) - (w0 ?? 0)) * f) / 2 };
