@@ -129,3 +129,48 @@ test('D521 row 5: the rounding is a quarter of a short ramp, so a 24 m bank stil
   // the shape's own second derivative goes to 0 at both ends (6u/(a²(1 − a)): 0.067 at u = 1e-4 for a = 0.1, where a rate rising linearly would hold 1/(a(1 − a)) = 11.1) (the rate rises on the Bloss cubic, so the bank is C2 by its shape, not only by the spline's end pinning)
   for (const a of [0.1, 0.25]) { const h = 1e-4, d2 = (u) => (roundedLinear(u + h, a) - 2 * roundedLinear(u, a) + roundedLinear(u - h, a)) / (h * h); assert.ok(Math.abs(d2(h)) < 1 && Math.abs(d2(1 - h)) < 1, `S'' at the ends: ${d2(h)}, ${d2(1 - h)}`); assert.ok(Math.abs(d2(0.5) ) < 1e-6, 'none on the plateau'); }
 });
+
+// ── L135, THE SECOND BANK (src/core/extend.js `second`; plan exo_memory/loop/plan_l135_second_bank_2026-11-04.md, in the lighthouse repo): the contract's edges.
+const DEG = Math.PI / 180;
+const flat135 = () => extend(D.createDoc('g'), { length: 1000, family: 'bowl' });
+
+test('L135 6: a second bank is refused by name where the contract says: from at or before 0, before the first ramp ends, at or past the end; a second change on any channel but the bank; a second bank with no first', () => {
+  const ask = (second, extra = {}) => () => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second, ...extra });
+  for (const from of [0, -10, 299, 750, 800, NaN]) assert.throws(ask({ phi: { from, target: 0 } }), (e) => e.code === 'BAD_SECOND' && /300/.test(e.message) && /750/.test(e.message), `from ${from} is refused, naming the range 300..750`);
+  assert.throws(ask({ kh: { from: 600, target: 0 } }), (e) => e.code === 'BAD_TARGET' && /bank only/.test(e.message), 'a second turn is refused');
+  assert.throws(ask({ phi: { from: 600, target: NaN } }), (e) => e.code === 'BAD_TARGET', 'a target that is not a number is refused');
+  assert.throws(() => extend(flat135(), { length: 750, second: { phi: { from: 600, target: 0 } } }), (e) => e.code === 'BAD_SECOND', 'a second bank with no first bank target is refused');
+  assert.doesNotThrow(ask({ phi: { from: 300, target: 0 } }), 'from at the first ramp\'s end is allowed (the contract: at or after it)');
+  assert.doesNotThrow(() => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, second: { phi: { from: 1, target: 0 } } }), 'with the first bank easing over the whole piece, any from inside the piece is allowed');
+});
+
+// The bytes of a spread of extend calls at the base d10eacf (sha256 of JSON.stringify(doc), scratch golden.js, run on the unchanged tree before this lap's code): with
+// no `second`, `second: undefined` or `second: null`, every one is the same document as before.
+const GOLDEN_135 = [
+  ['bank default ease', () => extend(flat135(), { length: 750, targets: { phi: 30 * DEG } }), 'e31a13adf9c8b1055f1eab4e88269bd9584dea6dd110c6faa5d03364385aef40'],
+  ['bank rounded', () => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, bankShape: 'rounded' }), '23c3efd420e69293acfdc66c63d0742e37c34e7abfea1f80838db6370d17151a'],
+  ['bank swell', () => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, bankShape: 'swell' }), '894e5d1bc09cf969260205d0edc64105bd049ccb8bbcdb4e6a59b44f421ebcd4'],
+  ['bank shares at start', () => extend(flat135(), { length: 750, targets: { phi: -41.38 * DEG, c: 15.5 }, transition: { phi: 300 }, bankShape: { rise: 0.1, fall: 0.9 } }), '7233fa51de615d38f821d0d1d7edd4188b077ba36dc4cee10ffffece77557686'],
+  ['bank numeric transition', () => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300 }), '7f62551529ffee88cc5ed641691c2ed4f636bd701dfb093d9c8d34db080be579'],
+  ['bank start map', () => extend(flat135(), { length: 400, targets: { phi: 20 * DEG, w: 25 }, transition: { phi: 'start' } }), '58bd3348472fbf9027438f906edb2cd8bc6c8fbefcdfc924dec4a99fd7e00394'],
+  ['cup and edge', () => extend(flat135(), { length: 300, targets: { c: 40, e: 20 } }), 'de2401817557d141029cd6b182c2d68a3faa87edae204471addde9f7562f1c9c'],
+  ['turn only', () => extend(flat135(), { length: 500, targets: { kh: 1 / 300 } }), 'c144288b9917fc979abaf4f0a71826bdb911c18b8994a8226f70dfbbb1e00f20'],
+];
+test('L135 7: no second bank, the same bytes as before: eight extend calls equal their base documents, and `second: undefined` / `second: null` change nothing', () => {
+  const crypto = require('crypto'), sha = (d) => crypto.createHash('sha256').update(JSON.stringify(d)).digest('hex');
+  for (const [what, make, want] of GOLDEN_135) assert.equal(sha(make()), want, what);
+  const base = { length: 750, targets: { phi: 30 * DEG } };
+  for (const second of [undefined, null]) assert.equal(sha(extend(flat135(), { ...base, second })), GOLDEN_135[0][2], `second: ${second}`);
+});
+
+test('L135 8: mirror on insert negates both banks: a saved piece that banks +30° and then +10° from 637.5 m goes in mirrored at −30° and −10°', () => {
+  const PC = require('../src/core/piece.js');
+  const src = extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second: { phi: { from: 637.5, target: 10 * DEG } } });
+  const run = PC.saveRun(src, 1, 1, { name: 'twice' }), into = PC.insert(flat135(), run, { mirror: true }), P = into.pieces[1];
+  const at = (Q, s) => D.channelAt(Q, 'phi', s).v / DEG;
+  for (const s of [300, 500, 637.5, 700, 750]) assert.ok(Math.abs(at(P, s) + at(src.pieces[1], s)) <= 1e-6, `at ${s} m: ${at(P, s)} mirrored from ${at(src.pieces[1], s)}`);
+  assert.ok(Math.abs(at(P, 500) + 30) <= 0.1 && Math.abs(at(P, 750) + 10) <= 1e-6, `the hold at -30 and the end at -10: ${at(P, 500)}, ${at(P, 750)}`);
+  // a piece holds no "fields" to remember (piece.js ROAD_KEYS): the second bank IS its bank channel, so save and open round-trip it as they do every channel
+  assert.equal(D.serialize(D.parse(D.serialize(src))), D.serialize(src), 'the document with a second bank saves and opens unchanged');
+  assert.equal(PC.serialize(PC.parse(PC.serialize(run))), PC.serialize(run), 'and so does the saved piece');
+});

@@ -79,3 +79,16 @@ test('at start: the turn is sized to its change (51.5 m), the small climb keeps 
   assert.equal(plain.transition, undefined, 'no box ticked: no transition');
   assert.equal(D.serialize(extend(d, plain)), D.serialize(extend(d, { length: 400, targets: plain.targets, bankShape: 'rounded' })));
 });
+
+// ── L135 3: THE SECOND BANK with "at start" ticked (the plan's row 3): the first ramp is the panel's at-start ramp, then the hold, then the second ramp.
+test('L135 3: bank 30° "at start" on his 750 m piece, then back to level from 637.5 m: the at-start ramp reaches 30° at its end, holds to 637.5, falls to 0 at the end with slope 0, no curvature either side of from', () => {
+  const o = extendOptions({ length: '750', turn: '', climb: '', bank: '30', width: '', cup: '', edge: '', start: '', tube: '', atStart: { ...NONE, bank: true }, turnAs: 'rate', head: headOf(straight()) });
+  const R = o.transition.phi, F = 637.5;
+  assert.ok(Number.isFinite(R) && R < F, `the panel's at-start ramp is a short one, before from: ${R}`);
+  const doc = extend(straight(), { ...o, second: { phi: { from: F, target: 0 } } }), P = doc.pieces[1];
+  const at = (s) => D.channelAt(P, 'phi', s).v / DEG;
+  for (let s = R; s <= F; s += 0.5) assert.ok(Math.abs(at(s) - 30) <= 0.1, `the hold at ${s} m: ${at(s)}`);
+  assert.ok(Math.abs(at(750)) <= 1e-6 && Math.abs(D.channelAt(P, 'phi', 750).d1 / DEG) <= 1e-6, `level and still at the end: ${at(750)}`);
+  const c = (dir) => { const g = (k) => at(F + dir * k * 0.5); return (2 * g(0) - 5 * g(1) + 4 * g(2) - g(3)) / 0.25; };
+  assert.ok(Math.abs(c(-1)) <= 1e-3 && Math.abs(c(1)) <= 1e-3, `curvature at from: ${c(-1).toFixed(5)} before, ${c(1).toFixed(5)} after (°/m²)`);
+});

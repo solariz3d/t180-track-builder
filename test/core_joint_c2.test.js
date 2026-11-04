@@ -213,3 +213,18 @@ test("row 10: through Finish and through bankLap, the added bank is C2: the bank
   for (const e of steps) if (Math.abs(e.dkDeg) > Cn.TOL_K) bad.push(`the banked lap ${e.joint}: phi'' steps by ${e.dkDeg.toFixed(4)} °/m²`);
   assert.deepEqual(bad, [], `the added bank is C2 at every joint (bar ${Cn.TOL_K} °/m²)`);
 });
+
+// ── L135 4a: THE SECOND BANK ends C2. A piece that banks twice ends at its second target with slope 0 and curvature 0, so the piece after it continues with no
+// curvature step (continuity.js c2Breaks reads every joint's step from the control points, closed form) and no value or slope step.
+// Both the core's default ease and the panel's rounded bank (app/core/panel.js extendOptions sends bankShape 'rounded'): unpinned, the fitted second ramp ended at 0.00093 °/m²
+// on the first (under the bar) and 0.0058 on the second (5.8 times over it), measured with endC2 removed (L135 mutant SB2's first run)
+for (const [how, extra] of [['default ease', {}], ['the panel\'s rounded bank', { bankShape: 'rounded' }]]) {
+  test(`L135 4a: after a piece that banks 30° and back to level from 637.5 m (${how}), the next piece continues with no bank step: value, slope and curvature continuous at both joints`, () => {
+    let doc = extend(D.createDoc('twice'), { length: 1000, family: 'bowl' });
+    doc = extend(doc, { length: 750, targets: { phi: 30 * DEG }, second: { phi: { from: 637.5, target: 0 } }, ...extra });
+    doc = extend(doc, { length: 300 });
+    assert.ok(Math.abs(at(doc.pieces[1], 'phi', 750)) <= 1e-6, `the piece ends level (its second bank): ${at(doc.pieces[1], 'phi', 750)}°`);
+    assert.deepEqual(Cn.c2Breaks(doc, { channels: ['phi'], tol: TOL_D2 }).map((e) => `${e.joint} ${e.dkDeg}`), [], 'no curvature step in the bank at any joint');
+    for (const e of Cn.jointSteps(doc, { channels: ['phi'] })) assert.ok(Math.abs(e.dv) <= 1e-9 && Math.abs(e.dm) <= 1e-9, `${e.joint}: value ${e.dv}, slope ${e.dm}`);
+  });
+}

@@ -100,6 +100,9 @@ const MUTANTS = [
   { id: 'A6 the rise is measured on the ramp asked, not the length laid', pattern: 'his piece', edits: [[P, 'const rise = F_RISE_M / laidOf(R);', 'const rise = F_RISE_M / R;']] },
   // D574, the width at start takes F too (test/core_width_at_start_f.test.js)
   { id: 'A7 the width at start gets no start shape (the 20 m wedge again)', pattern: '32 → 55|mirrored|a 60 m piece', edits: [[P, "    if (!XS_START.has(ch) && ch !== 'w') continue;", '    if (!XS_START.has(ch)) continue;']] },
+  // L135, the second bank (src/core/extend.js `second`; test/core_bank_ramp.test.js and test/core_joint_c2.test.js rows 'L135')
+  { id: 'SB1 the second ramp blends by the route cubic (it starts with a curvature step at from)', pattern: 'L135 1', edits: [[X, "const f2 = channelFn({ v: targets.phi, m: 0 }, sec.target, L2, 'phi', shape2);", "const f2 = channelFn({ v: targets.phi, m: 0 }, sec.target, L2, 'kh', null);"]] },
+  { id: 'SB2 the second ramp\'s end is not pinned to zero curvature (the joint after the piece steps)', pattern: 'L135 4a', edits: [[X, "endC2(out, 'phi');", '']] },
 ];
 const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js', 'core_width_at_start_f.test.js'];
 function tree() {

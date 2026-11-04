@@ -95,3 +95,44 @@ const UNMOVED = [
 test('the shaped fit moves nothing else: box-off, whole-piece, cup, edge, width and turn at start, and an unshaped bank at start are byte for byte as before', () => {
   for (const [what, make, want] of UNMOVED) assert.equal(crypto.createHash('sha256').update(D.serialize(make())).digest('hex'), want, what);
 });
+
+// ── L135, THE SECOND BANK (src/core/extend.js `second: { phi: { from, target } }`; plan exo_memory/loop/plan_l135_second_bank_2026-11-04.md, in the lighthouse repo).
+// The keeper, 11-04 04:0x: "once you do banking once, there is another mark towards the end you can bank again that can let the end of the piece bank more in one
+// direction or back to level in one piece". Over [from, length] the bank goes from the first target to `target` with the bank's own shape; written RED first.
+// A cubic B-spline is C2 at every simple knot, so "C2 at from" alone could not fail: the rows read the bank's CURVATURE either side of `from`, which the ideal
+// ramps make 0 there (a hold on the left, a ramp that starts with S′ = S″ = 0 on the right), against core_joint_c2's TOL_D2 (a Bloss second ramp reads 6·Δ/L² ≈ 0.014).
+const C2_TOL = 1e-3, Hh = 0.5;   // deg/m², core_joint_c2.test.js TOL_D2; the one-sided four-point step it reads with
+const bankOf = (P, s) => D.valuesAt(P, Math.max(0, Math.min(P.length, s))).phi / DEG;
+/** the bank's second derivative at s, one-sided over Hh (dir −1 reads the span before s, +1 the span after), exact for the cubic each span is */
+const curvAt = (P, s, dir) => { const g = (k) => bankOf(P, s + dir * k * Hh); return (2 * g(0) - 5 * g(1) + 4 * g(2) - g(3)) / (Hh * Hh); };
+const monotone = (P, a, b, sign) => { let prev = bankOf(P, a); for (let s = a + 0.5; s <= b + 1e-9; s += 0.5) { const v = bankOf(P, s); if (sign * (v - prev) < -1e-3) return `turns back at ${s} m (${prev.toFixed(4)} -> ${v.toFixed(4)})`; prev = v; } return null; };
+const twice = (extra = {}) => extend(flat(), { length: 750, targets: { phi: 30 * DEG }, second: { phi: { from: 637.5, target: 0 } }, ...extra });
+
+test('L135 1: his 750 m piece, bank 30° (default ease) then back to level from 637.5 m: 30° at 637.5, 0 at 750 with slope 0, one way on each ramp, no curvature either side of 637.5', () => {
+  const P = twice().pieces[1], F = 637.5;
+  assert.ok(Math.abs(bankOf(P, F) - 30) <= 0.1, `30° where the second bank starts: ${bankOf(P, F)}`);
+  assert.ok(Math.abs(bankOf(P, 750)) <= 1e-6, `level at the end: ${bankOf(P, 750)}`);
+  assert.ok(Math.abs(D.channelAt(P, 'phi', 750).d1 / DEG) <= 1e-6, `the end slope is 0: ${D.channelAt(P, 'phi', 750).d1 / DEG} °/m`);
+  assert.equal(monotone(P, 0, F, 1), null, 'the first ramp rises one way');
+  assert.equal(monotone(P, F, 750, -1), null, 'the second ramp falls one way');
+  const left = curvAt(P, F, -1), right = curvAt(P, F, 1);
+  assert.ok(Math.abs(left) <= C2_TOL && Math.abs(right) <= C2_TOL && Math.abs(right - left) <= C2_TOL, `curvature at 637.5: ${left.toFixed(5)} before, ${right.toFixed(5)} after (°/m²)`);
+});
+
+test('L135 2: the steeper case, 30° then 50° from 85%: holds 30° from the first ramp\'s end to 637.5 m, reaches 50° at the end with slope 0, rises one way, no curvature either side of from', () => {
+  const P = extend(flat(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second: { phi: { from: 637.5, target: 50 * DEG } } }).pieces[1], F = 637.5;
+  for (let s = 300; s <= F; s += 0.5) assert.ok(Math.abs(bankOf(P, s) - 30) <= 0.1, `the hold at ${s} m: ${bankOf(P, s)}`);
+  assert.ok(Math.abs(bankOf(P, 750) - 50) <= 1e-6, `50° at the end: ${bankOf(P, 750)}`);
+  assert.ok(Math.abs(D.channelAt(P, 'phi', 750).d1 / DEG) <= 1e-6, 'the end slope is 0');
+  assert.equal(monotone(P, F, 750, 1), null, 'the second ramp rises one way');
+  const left = curvAt(P, F, -1), right = curvAt(P, F, 1);
+  assert.ok(Math.abs(left) <= C2_TOL && Math.abs(right) <= C2_TOL, `curvature at from: ${left.toFixed(5)} before, ${right.toFixed(5)} after`);
+});
+
+test('L135 5: the roll rate, read by the checker (src/validate rollRates over its 20 m chord): his 750 m case stays under the 0.9338 °/m amber on both ramps; a second bank squeezed into 20 m goes over it, so the checker\'s warning fires', () => {
+  const A = require('../src/core/adapter.js'), V = require('../src/validate/index.js');
+  const worst = (doc) => { const { segments, path } = A.toPath(doc), S = path.samples; let m = 0; for (const q of V._internal.rollRates(S, (i) => segments[S[i].seg].kind !== 'gap', false, path.lengthM)) if (q.s >= 1000 && q.s <= 1750) m = Math.max(m, q.rate); return m; };
+  const his = worst(twice()), fast = worst(twice({ second: { phi: { from: 730, target: 0 } } }));
+  assert.ok(his > 0.2 && his < V.ROLL_AMBER_DEG_M, `his piece rolls at most ${his.toFixed(4)} °/m (amber ${V.ROLL_AMBER_DEG_M}; over 0.2 means the second ramp is there)`);
+  assert.ok(fast > V.ROLL_AMBER_DEG_M, `30° undone in 20 m rolls at ${fast.toFixed(4)} °/m: over the amber, so the checker warns`);
+});

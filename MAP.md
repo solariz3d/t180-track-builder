@@ -51,7 +51,7 @@ file in both places.
 **`src/core/`, the track as equations.** *why: see `src/core/README.md` and each file's header.*
 - `document.js`: the document: pieces, each road piece a set of clamped cubic B-spline channels; checks, serialise, parse. *why: see header*
 - `adapter.js`: the document → the segments and path `src/geom` builds; `offsetPath` lifts the path by the height and sideways offsets. *why: see header*
-- `extend.js`: grow the track from its open end, each new piece continuing the last one's value and slope (`extend`). *why: see header*
+- `extend.js`: grow the track from its open end, each new piece continuing the last one's value and slope (`extend`); `second: { phi: { from, target } }` banks a piece twice, the second ramp laid over [from, length] (`secondRamp`, `endC2`; L135). *why: see header*
 - `turnby.js`: turn, climb or corner by a given amount (`extendTurnBy`, `extendClimbBy`, `extendCorner`).
 - `sharp.js`: a sharp turn beside the broad curve (`extendSharp`). `level.js`: level the road or take it to the floor (`extendLevel`, `extendToFloor`).
 - `jump.js`: a free flight and a landing (`jump`, `jumpHere`, `setLanding`, `landingOf`). *why: see header*

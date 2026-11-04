@@ -10,6 +10,11 @@
 //
 //   extend(doc, { length, transition, targets: { kh, kv, phi, w, r, c, e, s, t }, family, knotM, grip })  -> a new document, one piece longer
 // grip: the new piece's grip, a whole percent 50..150; left out, it is the last road piece's (the road keeps its surface until it is changed), 100 on an empty track.
+// second: { phi: { from, target } } (L135, the keeper 2026-11-04: "there is another mark towards the end you can bank again ... instead of having to place it, then flatten it
+// with the next piece"): the bank banks AGAIN inside the piece. Over [from, length] it goes from the first target to `target` (rad, absolute) with the bank's own shape (the
+// same bankShape the first ramp uses), C2 at `from` and ending with slope 0, so the next piece continues as today. `from` is at or after the first ramp's end and before the
+// piece's end; when the first bank eases over the whole piece its ramp is laid over [0, from] instead. Bank only for now: any other channel is refused (BAD_TARGET); a `from`
+// out of range, or a second bank with no first bank target, is refused (BAD_SECOND). Left out, nothing moves (the bytes are today's). See secondRamp.
 //
 // (ref 09 §10): e (the EDGE angle, degrees >= 0) and s (where the outer zone starts, 0.5 to 0.95 of the half-width) give a piece an edge; t (the TUBE sweep, degrees 0 to 360)
 // makes it a tube. A piece is a cup OR a tube (c and t together are refused, BAD_TARGET); a target c after a tube, or t after a cup, switches the kind, starting at the edge the
@@ -227,10 +232,11 @@ function sampleBasis(U, S, L) {
   }
   return { first, N };
 }
-function fitWithHold(piece, ch, f, Lt, target) {
+function fitWithHold(piece, ch, f, Lt, target, keep = null) {
   const C = piece.channels[ch], n = C.length, U = D.knotVector(piece), L = piece.length, dec = D.DEC[ch], t = Number(target.toFixed(dec)) + 0;
   const pinned = new Set([0, 1, n - 2, n - 1]); for (let i = 2; i < n; i++) if ((U[i + 1] + U[i + 2] + U[i + 3]) / 3 >= Lt - 1e-9) pinned.add(i);
-  for (const i of pinned) if (i >= 2) C[i] = t;
+  if (keep) for (const i of keep) pinned.add(i);   // L135 secondRamp: points held AS THEY ARE (the first ramp and its hold), not set to the target
+  for (const i of pinned) if (i >= 2 && !(keep && keep.has(i))) C[i] = t;
   const free = []; for (let i = 0; i < n; i++) if (!pinned.has(i)) free.push(i);
   if (!free.length) return;
   const { S, first, N } = samplesOf(piece, U, L);
@@ -265,8 +271,37 @@ function fitWithHold(piece, ch, f, Lt, target) {
   free.forEach((i, a) => { C[i] = Number(x[a].toFixed(dec)) + 0; });
 }
 
+/**
+ * THE SECOND BANK (L135): lay the second ramp over [F, L] onto a piece whose bank was already laid with its first ramp and a hold to the end (every path above, unchanged).
+ * SECOND_SUB knots are inserted across [F, L] (document.js insertKnots, so every other channel keeps its curve), then the bank alone is refitted to `f` (the first ramp, the
+ * hold, then the second ramp) by fitWithHold, with every control point whose support ends at or before F held as laid (so the piece up to F is the first lay's) and the last
+ * two set to the target. A cubic B-spline is C2 at its knots, and the ideal is flat at F (a hold, then a ramp starting with S′ = S″ = 0), so the curvature there is ~0
+ * (test/core_bank_ramp.test.js 'L135'). Then endC2 makes the end's curvature exactly 0, so the next piece, which continues value and slope by a line, meets it C2.
+ */
+const SECOND_SUB = 8;
+function endC2(piece, ch) {   // the end curvature 2(qₑ − q_d)/(L − U[n−1]) set to 0 by P[n−3] alone (continuity.js endDerivatives' closed form): q_d = qₑ
+  const P = piece.channels[ch], n = P.length, L = piece.length, U = D.knotVector(piece), dec = D.DEC[ch];
+  if (n < 5) return;
+  const qe = (3 * (P[n - 1] - P[n - 2])) / (L - U[n - 1]);
+  P[n - 3] = Number((P[n - 2] - (qe * (L - U[n - 2])) / 3).toFixed(dec)) + 0;
+}
+/** The second ramp's shape (the plan's contract): the quintic when the first is (no bankShape), the rounded ramp when it is rounded, and the SWELL when the bank is
+ *  "at start" (a swell or the two-share F shape): F's quick rise is a ramp leaving a joint, and laid after a hold it rang 0.1° into the hold (L135 row 3, measured). */
+const secondShape = (shape) => (shape === null ? null : shape === 'rounded' ? 'rounded' : 'swell');
+function secondRamp(piece, f, F, target, turns = []) {
+  const L = piece.length, ts = [...turns.map((k) => +k.toFixed(4))];
+  for (let j = 0; j < SECOND_SUB; j++) ts.push(+(F + ((L - F) * j) / SECOND_SUB).toFixed(4));
+  const add = [...new Set(ts)].filter((k) => k > 0.5 && k < L - 0.5 && piece.knots.every((h) => Math.abs(h - k) > 1e-3));
+  const out = add.length ? D.insertKnots(piece, add) : piece;
+  const U = D.knotVector(out), n = out.channels.phi.length, keep = new Set();
+  for (let i = 0; i < n; i++) if (U[i + 4] <= F + 1e-9) keep.add(i);   // basis i lives on [U[i], U[i + 4]]: wholly before F, it is the first lay's
+  fitWithHold(out, 'phi', f, Infinity, target, keep);
+  endC2(out, 'phi');
+  return out;
+}
+
 function extend(doc, opts = {}) {
-  let { length, transition, targets = {}, family, knotM, first, grip, bankShape, startShapes } = opts;
+  let { length, transition, targets = {}, family, knotM, first, grip, bankShape, startShapes, second } = opts;
   if (bankShape !== undefined && bankShape !== null && bankShape !== 'rounded' && bankShape !== 'swell' && !isShares(bankShape)) throw new D.CoreError('BAD_SHAPE', `bankShape is 'rounded', 'swell', { rise, fall } or left out, got ${bankShape}`);
   if (isShares(bankShape)) rampShape(0.5, bankShape.rise, bankShape.fall);   // the shares are checked before anything is laid
   const shape = bankShape === 'rounded' || bankShape === 'swell' || isShares(bankShape) ? bankShape : null;
@@ -315,7 +350,22 @@ function extend(doc, opts = {}) {
     const Lt = transition === undefined ? length : transition;
     if (!(Lt > 0 && Lt <= length)) throw new D.CoreError('BAD_TRANSITION', `the transition must be in (0, length], got ${Lt}`);
   }
-  const Lof = (ch) => (perChannel ? (ramp[ch] === undefined ? length : ramp[ch]) : transition === undefined ? length : transition);
+  const Lof0 = (ch) => (perChannel ? (ramp[ch] === undefined ? length : ramp[ch]) : transition === undefined ? length : transition);
+  // L135, THE SECOND BANK: checked here, where the first ramp's end is known; a first bank that eases over the whole piece is laid over [0, from] instead (Lof below)
+  let sec = null;
+  if (second !== undefined && second !== null) {
+    if (typeof second !== 'object' || Array.isArray(second)) throw new D.CoreError('BAD_SECOND', `second is { phi: { from, target } }, got ${second}`);
+    for (const k of Object.keys(second)) if (k !== 'phi') throw new D.CoreError('BAD_TARGET', `a second change is bank only for now (phi), got "${k}"`);
+    if (second.phi !== undefined && second.phi !== null) {
+      const { from: F, target: T2 } = second.phi;
+      if (!given(targets.phi)) throw new D.CoreError('BAD_SECOND', 'a second bank follows a first: give the bank a target too');
+      if (!Number.isFinite(T2)) throw new D.CoreError('BAD_TARGET', `the second bank's target must be a finite number, got ${T2}`);
+      const R1 = Lof0('phi'), whole = R1 >= length - 1e-9, lo = whole ? 0 : R1;
+      if (!(Number.isFinite(F) && F > 0 && F >= lo && F < length)) throw new D.CoreError('BAD_SECOND', `the second bank starts ${whole ? 'inside the piece' : `at or after the first bank's end (${lo} m)`} and before the piece's end (${length} m): from in ${whole ? `(0, ${length})` : `[${lo}, ${length})`}, got ${F}`);
+      sec = { from: F, target: T2, whole };
+    }
+  }
+  const Lof = (ch) => (ch === 'phi' && sec && sec.whole ? sec.from : Lof0(ch));
   const shortRamps = Object.keys(ramp).filter((ch) => ramp[ch] < length - 1e-9 && targets[ch] !== undefined && targets[ch] !== null);
   const shapeOf = (ch) => (ch === 'phi' ? shape : (startShapes && shortRamps.includes(ch) && startShapes[ch]) || null);   // the bank's shape, or a cup's or edge's at start
   const last = [...doc.pieces].reverse().find((P) => P.type === 'road');
@@ -412,7 +462,13 @@ function extend(doc, opts = {}) {
     const Lt = Lof('phi'), ts = turnsOf(shape, Lt).map((k) => +k.toFixed(4)).filter((k) => k > 0.5 && k < length - 0.5 && laid.knots.every((h) => Math.abs(h - k) > 1e-3));
     const refined = D.insertKnots(laid, [...new Set(ts)]);
     fitWithHold(refined, 'phi', channels.phi, Lt, targets.phi); c2Ends(refined, 'phi');
-    return D.appendPiece(doc, refined);
+    laid = refined;
+  }
+  if (sec) {   // L135: the second bank, over [from, length], on the piece as laid above (secondRamp)
+    const f1 = channels.phi, shape2 = secondShape(shape), L2 = length - sec.from;
+    const f2 = channelFn({ v: targets.phi, m: 0 }, sec.target, L2, 'phi', shape2);
+    const turns = shape2 ? turnsOf(shape2, L2).map((k) => sec.from + k) : [];   // a rounded or swell second ramp gets knots where its rate turns, as the first does
+    laid = secondRamp(laid, (s) => (s < sec.from ? f1(s) : f2(s - sec.from)), sec.from, sec.target, turns);
   }
   return D.appendPiece(doc, laid);
 }
