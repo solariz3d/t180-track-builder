@@ -141,6 +141,9 @@ const SPEED_WINDOW_MS = 60;  // the speed is the pointer's path over this long, 
 const DETENT_PX = 6;         // the pointer travel a drag holds at 0 (bank, turn, climb) and at the value it started from
 const EDGE_ON_PX_PER_M = 0.05;   // an axis shorter than this on screen (a view straight along it) is edge-on: the pointer's own motion is used instead. A FAR handle's axis is short too (the far end of a ghost seen from behind: 0.3 px/m, found in the window) but has a direction, so it is not edge-on
 const HIT_PX = 12;
+// L140 round 2 (the user on c42f985, his 1,000 m piece in Free view: the extra turn handle sat on the turn handle at the front): an extra handle closer than this to any
+// other handle on screen steps back along the road until it clears it. Three hit radii: the two hit circles (12 px each) apart, and a little of the arrows between
+const CLEAR_PX = 3 * HIT_PX, CLEAR_STEP = 0.01;
 const SNAP_PX = 12;          // L140: an extra handle's drag lands on level, or on the field's start value, from this far away (his 4.58° was about 10 px short at the bank's 0.45° a pixel)
 const LOCK_PX = 6;           // L140: an extra handle's first this-many px decide its drag: ACROSS the road sets the amount, ALONG it slides where the change starts
 //: THE DOTS, visible handles onto the zone grab on the selected run: rows across the road (the centre, the rims, and on a cup piece
@@ -167,6 +170,28 @@ function sampleNear(samples, s) {
  * piece, and `kinds` which kinds to place. `halfTarget`, when given, is the half-width a `target` kind (width) sits at (the field's value); `at` overrides a kind's place along the piece (Sculpt keeps the
  * width mark where it was). Each handle: { id: 'width:1', kind, side, pos: [x, y, z], axis: [x, y, z] (the unit vector a POSITIVE drag moves along) }.
  */
+/** L140 round 2: each extra kind steps back along the piece (CLEAR_STEP of it at a time, toward its start) until every one of its sides is more than CLEAR_PX on screen from
+ *  every other handle; it keeps its own place when it already clears, and the place it began at when no step back clears. `place(h)` puts one handle on screen. */
+function clearExtras(model, list, place) {
+  const extras = [...new Set(list.filter((h) => KINDS[h.kind] && KINDS[h.kind].extra).map((h) => h.kind))];
+  if (!extras.length) return list;
+  let out = list;
+  // gap(mine): the nearest any of this kind's sides comes to another handle on screen (Infinity: none to come near)
+  const gap = (mine) => Math.min(...mine.map((h) => (h.screen ? Math.min(Infinity, ...out.filter((o) => o.kind !== h.kind && o.screen).map((o) => Math.hypot(o.screen.x - h.screen.x, o.screen.y - h.screen.y))) : -Infinity)));
+  for (const kind of extras) {
+    const mine = out.filter((h) => h.kind === kind); let best = { g: gap(mine), list: mine }; if (best.g > CLEAR_PX) continue;
+    const at0 = model.at && model.at[kind] !== undefined ? model.at[kind] : KINDS[kind].at;
+    for (let a = at0 - CLEAR_STEP; a >= -1e-9; a -= CLEAR_STEP) {
+      const moved = placeHandles({ ...model, kinds: [kind], at: { ...(model.at || {}), [kind]: Math.max(0, a) } }).map(place), g = gap(moved);
+      if (g > best.g) best = { g, list: moved };
+      if (g > CLEAR_PX) break;
+    }
+    // no step back clears: the farthest it got from the others (a piece too small on screen for all of them)
+    out = out.filter((h) => h.kind !== kind).concat(best.list);
+  }
+  return out;
+}
+
 function placeHandles(model) {
   const out = [];
   for (const kind of model.kinds) {
@@ -332,7 +357,9 @@ function mount(stage, win, host) {
     model = m; const W = stage.clientWidth, H = stage.clientHeight;
     if (!model || !pose || !(W > 0 && H > 0)) { drawn = []; return; }
     const VP = M.viewProj(pose, W / H);
-    drawn = placeHandles(model).map((h) => ({ ...h, screen: screenAxis(VP, W, H, h.pos, h.axis), ...(h.along ? { slideAxis: screenAxis(VP, W, H, h.pos, h.along) } : {}) }));
+    const onScreen = (h) => ({ ...h, screen: screenAxis(VP, W, H, h.pos, h.axis), ...(h.along ? { slideAxis: screenAxis(VP, W, H, h.pos, h.along) } : {}) });
+    drawn = placeHandles(model).map(onScreen);
+    drawn = clearExtras(model, drawn, onScreen);
     if (model.dots && !drag) drawn = placeDots(model.dots, VP, W, H).concat(drawn);   // under the handles and the glyph; hidden while a handle is dragged
   };
   const draw = () => {
@@ -566,4 +593,4 @@ function mount(stage, win, host) {
   };
 }
 
-module.exports = { extraId, SNAP_PX, LOCK_PX, HIT_PX, placeDots, dotHit, DOT_MIN_M, DOT_MIN_PX, DOT_CAP, wrapTurn, KINDS, BRUSH_KINDS, BRUSH_CHANNELS, brushFormat, brushWords, ORDER, LANDING_ORDER, DEG, PRECISE_MOD, WARP_WAIT_MS, WARP_MISSES, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, scrubGain, SPEED_SLOW, SPEED_FAST, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };
+module.exports = { extraId, SNAP_PX, LOCK_PX, HIT_PX, CLEAR_PX, clearExtras, placeDots, dotHit, DOT_MIN_M, DOT_MIN_PX, DOT_CAP, wrapTurn, KINDS, BRUSH_KINDS, BRUSH_CHANNELS, brushFormat, brushWords, ORDER, LANDING_ORDER, DEG, PRECISE_MOD, WARP_WAIT_MS, WARP_MISSES, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, scrubGain, SPEED_SLOW, SPEED_FAST, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };

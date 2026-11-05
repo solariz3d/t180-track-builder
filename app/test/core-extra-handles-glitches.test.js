@@ -44,12 +44,12 @@ function fakeWindow() {
 const ghostOf = (L) => { const s0 = 1000, samples = []; for (let s = s0; s <= s0 + L + 1e-9; s += 2) samples.push({ s, pos: [0, 0, s], T: [0, 0, 1], L: [1, 0, 0], U: [0, 1, 0] }); return { s0, samples, segments: [], jump: false }; };
 const POSE = (L) => ({ eye: [0, 0.6 * L, 1000 - 0.25 * L], target: [0, 0, 1000 + 0.5 * L], up: [0, 1, 0], fov: Math.PI / 3 });
 
-async function mount() {
+async function mount({ pose = POSE } = {}) {
   const { doc, win, tick } = fakeWindow();
   const stage = doc.createElement('div'); stage.setAttribute('id', 'preview'); stage.clientWidth = 1200; stage.clientHeight = 800;
   const root = doc.createElement('div'), shell = await createCoreShell({ brushFn: null });
   shell.extend({ length: 1000, family: 'bowl' });   // his first piece: a 1,000 m straight
-  let L = 1000; doc.addEventListener('t180:ghost-request', (e) => e.detail.reply(ghostOf(L))); doc.addEventListener('t180:view', (e) => e.detail.reply({ pose: POSE(L) }));
+  let L = 1000; doc.addEventListener('t180:ghost-request', (e) => e.detail.reply(ghostOf(L))); doc.addEventListener('t180:view', (e) => e.detail.reply({ pose: pose(L) }));
   const panel = require('../core/panel.js').mount(root, shell);
   const label = (text) => root.all().find((e) => e.tagName === 'LABEL' && e.children[0] && e.children[0].textContent === text);
   const field = (text) => { const l = label(text); assert.ok(l, `no "${text}" field`); return l.children[1]; };
@@ -98,10 +98,15 @@ test('L140 G4: a drag on the bank handle never moves another field\'s mark (a tu
   p.panel.unmount();
 });
 
-test('L140 G5: a new extra change starts where its handle stands, just ahead of the field\'s own (the user\'s drawing: bank at 0.60 of the piece), not at the middle', async () => {
+// AMENDED (L140 round 2, pane C): his word on c42f985 (brief :29), the second change "should ease half way through": it starts HALFWAY by default (R2), and still moves where
+// it is slid (X6). The handle itself stands where he drew it (0.60), apart from where its change starts
+test('L140 G5: a new extra change starts where it is put, by default halfway along the piece, and the slide moves it', async () => {
   const p = await mount(); p.type('length m', 1000); p.type('bank °', 30);
+  p.panel.secondSlide(p.panel.extraHandles().find((e) => e.field === 'bank').id, 720);
   const at = p.make('bank', 10);
-  assert.equal(at, 600, 'its handle stood at 600 m'); assert.equal(p.changes().phi[0].from, 600, 'and its change starts there');
+  assert.equal(at, 720, 'slid to 720 m'); assert.equal(p.changes().phi[0].from, 720, 'and its change starts there');
+  p.panel.unmount();
+  const q = await mount(); q.type('length m', 1000); q.type('bank °', 30); q.make('bank', 10); assert.equal(q.changes().phi[0].from, 500, 'unslid: halfway');
   p.panel.unmount();
 });
 
@@ -146,5 +151,39 @@ test('L140 G10: a press with no movement on a mark that sits on a handle reaches
   p.type('bank °', 80); p.panel.secondAdd('bank', { then: '0', from: '500' }); p.tick();   // a bank change whose mark is at the bank handle's own station
   const h2 = p.handle('bank', 1), s2 = h2.screen, reached = p.stage.fire('pointerdown', { clientX: s2.x, clientY: s2.y, pointerId: 2, button: 0 }); p.stage.fire('pointerup', { clientX: s2.x, clientY: s2.y, pointerId: 2 });
   assert.equal(reached, reached0, 'the press goes on as far as with no mark there');
+  p.panel.unmount();
+});
+
+// ROUND 2 (the user on the c42f985 install, exo_memory/briefs/t180_second_bank.md:29, with t180_extra_turn_before/after_2026-11-05.png): "i first tried to add a piece that does a
+// simple S turn as one piece, it doesnt work right, and every time you click turn it auto adds another turn too close to the new one added, it needs to auto move to make room so
+// they do not overlap … the second turn only engages for the marked red area and not the rest of the turn which should ease half way through, and every subsequent click adds
+// another one, perhaps we should only do two per action on the piece"
+test('L140 R1: one extra handle per field: once its change is made, no second extra handle appears for that field', async () => {
+  const p = await mount(); p.type('length m', 1000); p.type('bank °', 30); p.type('turn °', -90);
+  p.make('bank', 10); p.make('turn', 90);
+  for (const f of ['bank', 'turn']) { const mine = p.panel.extraHandles().filter((e) => e.field === f); assert.equal(mine.length, 1, `one extra ${f} handle (${JSON.stringify(mine.map((e) => e.id))})`); assert.ok(!mine[0].unused, 'the used one'); }
+  p.panel.unmount();
+});
+
+test('L140 R2: his S: a 1,000 m piece turning -90, its extra turn of +90 starts HALFWAY (500 m), and the core lays it', async () => {
+  const p = await mount(); p.type('length m', 1000); p.type('turn °', -90);
+  p.make('turn', 90);
+  assert.equal(p.changes().turnDeg[0].from, 500, 'the second turn eases from half way through'); assert.equal(p.refusal(), null, 'laid');
+  p.panel.unmount();
+});
+
+test('L140 R2b: every field\'s extra change starts halfway by default (the bank, on 1,000 m)', async () => {
+  const p = await mount(); p.type('length m', 1000); p.type('bank °', 30);
+  p.make('bank', 0); assert.equal(p.changes().phi[0].from, 500);
+  p.panel.unmount();
+});
+
+test('L140 R3: seen from far off, his 1,000 m piece about 500 px long on screen as in his picture, every extra handle stands more than three hit radii (36 px) from every other handle', async () => {
+  const far = (L) => ({ eye: [0, 1.3 * L, 1000 - 0.3 * L], target: [0, 0, 1000 + 0.5 * L], up: [0, 1, 0], fov: Math.PI / 3 });
+  const p = await mount({ pose: far }); p.type('length m', 1000); p.type('turn °', -90); p.type('bank °', 30); p.type('climb °', 4);
+  const list = p.panel.handles.handles().filter((h) => h.screen), ex = list.filter((h) => /^extra:/.test(h.kind));
+  const ys = list.filter((h) => /^(length|width)/.test(h.kind)).map((h) => h.screen.y); assert.ok(Math.max(...ys) - Math.min(...ys) > 350, `the piece is about his size on screen (${(Math.max(...ys) - Math.min(...ys)).toFixed(0)} px)`);
+  assert.ok(ex.length >= 3, `the extra turn, bank and climb are up (${ex.map((h) => h.id)})`);
+  for (const h of ex) for (const o of list) if (o.kind !== h.kind) { const d = Math.hypot(o.screen.x - h.screen.x, o.screen.y - h.screen.y); assert.ok(d > 36, `${h.id} is ${d.toFixed(1)} px from ${o.id}`); }
   p.panel.unmount();
 });

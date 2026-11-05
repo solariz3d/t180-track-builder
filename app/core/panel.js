@@ -820,7 +820,7 @@ function mount(root, shell, mountOpts = {}) {
     // THE EXTRA HANDLES (L140): beside the field's own kinds, one per change each field already has and, where the piece has room for the next, one more (extraHandles below)
     const ex = extraHandles(), exOf = new Map(ex.map((x) => [x.id, x])), L = s1 - info.s0;
     return { mode: 'extend', samples: info.samples, s0: info.s0, s1, half, halfTarget: wt === null ? undefined : wt / 2, kinds: kinds.concat(ex.map((x) => x.id)),
-      at: Object.fromEntries(ex.map((x) => [x.id, L > 0 ? Math.min(1, Math.max(0, x.from / L)) : 0])),
+      at: Object.fromEntries(ex.map((x) => [x.id, x.at])),   // L140 round 2: the handle stands where he drew it; its change's mark, where the change starts
       base: (k) => (exOf.has(k) ? exOf.get(k).value : fieldNum(HANDLE_FIELD[k]) ?? (corner(k) ? 0 : null)),
       ctx: (k) => (exOf.has(k) ? { half: halfAt(exOf.get(k).from), snapTo: exOf.get(k).snapTo } : { half: half(HD.KINDS[k].at) }),
       slideBase: (k) => (exOf.has(k) ? exOf.get(k).from : 0) };
@@ -847,9 +847,12 @@ function mount(root, shell, mountOpts = {}) {
       const kind = exKindOf(f), K = HD.KINDS[kind]; if (!K || (HANDLE_FIELD[kind] && HANDLE_FIELD[kind].disabled)) continue;
       const start = Number(shown[f]), snapTo = K.zero ? [0].concat(Number.isFinite(start) && start !== 0 && !(K.unit === '°' && CORNER_KIND[f] === kind) ? [start] : []) : (Number.isFinite(start) ? [start] : []);
       const arr = (o.changes && o.changes[secKey(f)]) || [], live = secLive(f);
-      arr.forEach((c, k) => { const v = Number(live[k] && live[k].then.value); out.push({ id: HD.extraId(kind, k), field: f, index: k, from: c.from, value: Number.isFinite(v) ? v : 0, snapTo }); });
+      // ONE extra handle per field (the user on c42f985, brief :29: "every subsequent click adds another one, perhaps we should only do two per action on the piece … until we figure
+      // out how to make it work right"): its first change once there is one, else the change it can make. Later changes made another way keep their rows and marks
+      const at = Math.min(1, Math.max(0, EXTRA_AT[f]));
+      if (arr.length) { const v = Number(live[0] && live[0].then.value); out.push({ id: HD.extraId(kind, 0), field: f, index: 0, from: arr[0].from, value: Number.isFinite(v) ? v : 0, snapTo, at }); continue; }
       const of = offers.find((x) => x.field === f);
-      if (of) out.push({ id: HD.extraId(kind, arr.length), field: f, index: arr.length, from: of.from, value: of.base, snapTo, unused: true });
+      if (of) out.push({ id: HD.extraId(kind, 0), field: f, index: 0, from: of.from, value: of.base, snapTo, unused: true, at });
     }
     return out;
   };
@@ -1231,7 +1234,9 @@ function mount(root, shell, mountOpts = {}) {
   // WHERE AN EXTRA HANDLE STANDS before it is used (L140; the keeper's drawing, 11:43Z, exo_memory/briefs/t180_extra_handles_where_2026-11-05.png): on the road, on its own field's line,
   // just ahead of its own handle, as a share of the piece from its start (0) to its front (1). Read off the drawing: bank 0.60 (bank's own at 0.50), climb 0.74 (0.50), turn 0.89 (the
   // front), width 0.11 (the start). Cup is not in the drawing: it takes width's 0.11, as its own handle shares width's place at the start
+  // (round 2: this is where the HANDLE stands; where its change starts is EXTRA_FROM_SHARE, below, and the handle steps back on screen to clear the others, handles.js CLEAR_PX)
   const EXTRA_AT = Object.freeze({ bank: 0.60, climb: 0.74, turn: 0.89, width: 0.11, cup: 0.11 });
+  const EXTRA_FROM_SHARE = 0.5;
   const offersAt = () => {
     const floor = secondFloor(), L = Number(len.value); if (floor === null || !(L > 0)) return [];
     const o = opts(), out = [];
@@ -1246,8 +1251,9 @@ function mount(root, shell, mountOpts = {}) {
       // L140, B's G7: the next change's own shortest segment, for the smallest change it can make (to the value it starts from); at least the floor. No room for that: no handle
       const prevT = arr.length ? (corner ? 0 : arr[arr.length - 1].target) : (corner ? 0 : first), need = Math.max(floor, corner ? cornerMin(o, 0) : secondMinOf(shellMinM, key, prevT, prevT));
       if (Number.isFinite(EXTRA_AT[f]) ? !(R >= need - 1e-9) : !(R >= 2 * floor - 1e-9)) continue;
-      // L140: a slid extra handle stands where it was slid; an unslid one where the keeper drew it (EXTRA_AT), kept inside the room its change has; a field with no drawn place, the room's middle
-      const drawn = Number.isFinite(EXTRA_AT[f]) ? Math.min(L - need, Math.max(end, EXTRA_AT[f] * L)) : end + R / 2;
+      // L140 round 2 (the user, brief :29: the second turn "should ease half way through"; at 0.89 it ran only over his red marks): a change made from an extra handle starts HALFWAY
+      // along the piece (EXTRA_FROM_SHARE), kept inside the room it has; slid, where it was slid. A field with no extra handle (the edges): the room's middle, as L139
+      const drawn = Number.isFinite(EXTRA_AT[f]) ? Math.min(L - need, Math.max(end, EXTRA_FROM_SHARE * L)) : end + R / 2;
       const from = Number.isFinite(secPending[f]) && secPending[f] > end ? secPending[f] : near2(drawn), st = ST.styleOf(f), last = arr.length ? arr[arr.length - 1] : null;
       const base = corner ? 0 : f === 'bank' ? Number(last ? last.target / DEG : bankTarget()) : last ? (f === 'turn' || f === 'climb' ? last.target * 100 / DEG : last.target) : Number(f === 'edgeR' ? rightTarget() : asTyped(f));
       out.push({ field: f, index: arr.length, from, half: halfAt(from), offer: true, base, ...st, kind: corner ? key : st.kind });

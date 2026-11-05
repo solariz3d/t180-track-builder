@@ -300,10 +300,10 @@ test('L139 O3: dragging an offer makes exactly one change, from the offer\'s pla
   withCore(p, { floor: 20, min: () => 30 }, () => {
     p.type('length m', 1000); p.type('bank °', 30); p.type('width m', 40); p.add('width', 30, 700, 0.7);
     const doc0 = p.shell.getState().history.present, w0 = JSON.stringify(p.opts().changes.w);
-    // AMENDED (L140, pane C; B's G5): the bank's offer stands where the user drew its extra handle, 0.60 of the piece, not at the middle of the stretch
-    const o = offersOf(p, 'bank')[0]; assert.equal(o.from, 600, 'the bank\'s offer: 0.60 of its 1000 m piece');
+    // AMENDED (L140, pane C; B's G5), and again in L140 round 2: the change an extra handle makes starts halfway along the piece by default (his "should ease half way through", brief :29)
+    const o = offersOf(p, 'bank')[0]; assert.equal(o.from, 500, 'the bank\'s offer: halfway along its 1000 m piece');
     p.panel.secondOffer(o, 40); p.panel.secondOffer(o, 45);   // one drag, two moves
-    assert.deepEqual(p.opts().changes.phi, [{ from: 600, target: 45 * DEG }], 'exactly one change, at the offer, with the value the drag reached');
+    assert.deepEqual(p.opts().changes.phi, [{ from: 500, target: 45 * DEG }], 'exactly one change, at the offer, with the value the drag reached');
     assert.equal(JSON.stringify(p.opts().changes.w), w0, 'width\'s list unchanged'); assert.equal(p.shell.getState().history.present, doc0, 'the document untouched until Extend');
     let handled = false; p.doc.dispatchEvent(new p.win.CustomEvent('t180-undo-guard', { detail: { handled: () => { handled = true; } } }));
     assert.equal(handled, true); assert.equal(p.has(p.nm('bank')), false, 'one Ctrl+Z: the change is gone'); assert.equal('phi' in (p.opts().changes || {}), false);
