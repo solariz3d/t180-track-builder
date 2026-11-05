@@ -68,17 +68,21 @@ const up2 = (x) => Math.ceil(x * 100 - 1e-9) / 100, down2 = (x) => Math.floor(x 
  * Each change's from (m) for one field's list [{ from: number | null, target }]: a from given stays; a missing one is laid: the first at SECOND_FROM_SHARE of the piece,
  * a later one right after the previous mark plus that segment's minimum (segment k runs from mark k to the next and changes target k−1 to target k; B's core measures
  * the same), never before `lo` (an early first ramp's end) nor past the room the later segments need (L − the sum of their minimums). With one change this is L135's
- * clamp, min(85%, L − its minimum). A corner list: the core exports no corner segment minimum here, so missing marks split the piece evenly.
+ * clamp, min(85%, L − its minimum).
+ * A CORNER list (L139 corner default, after B's R1 fix): change k is a corner of list[k].target degrees over [mark k, the next mark or L], and the core refuses it below
+ * cornerChangeMinM(doc, opts, deg) = max(cornerMinM, SECOND_MIN_K·√|deg|) (src/core/turnby.js), passed in as cornerMin(deg). A missing mark still prefers the even split of
+ * the piece (his S: +90 then −90 turns at the middle), but within the same bounds as above: after the previous mark plus that corner's minimum, and before the room the
+ * later corners need. Without cornerMin (a shell before R1) the split is plain. The FIRST corner's own shortest (the head's shortestTurnBy) is not passed to the panel.
  */
-function changeFroms(length, list, first, ch, { lo = 0, corner = false, minM = null } = {}) {
+function changeFroms(length, list, first, ch, { lo = 0, corner = false, minM = null, cornerMin = null } = {}) {
   const L = Number(length), n = list.length, out = [];
   if (!(L > 0)) return list.map((x) => x.from);
-  if (corner) return list.map((x, k) => (x.from !== null ? x.from : near2((L * (k + 1)) / (n + 1))));
-  const t = [first, ...list.map((x) => x.target)], m = list.map((_, k) => secondMinOf(minM, ch, t[k], t[k + 1]));
+  const cm = (deg) => { if (typeof cornerMin !== 'function' || !Number.isFinite(deg)) return 0; const v = cornerMin(deg); return Number.isFinite(v) && v > 0 ? v : 0; };
+  const t = [first, ...list.map((x) => x.target)], m = list.map((x, k) => (corner ? cm(x.target) : secondMinOf(minM, ch, t[k], t[k + 1])));
   for (let k = 0; k < n; k++) {
     if (list[k].from !== null) { out.push(list[k].from); continue; }
     let rest = 0; for (let j = k; j < n; j++) rest += m[j];
-    const lower = up2(k === 0 ? lo : out[k - 1] + m[k - 1]), pref = k === 0 ? near2(L * SECOND_FROM_SHARE) : lower;
+    const lower = up2(k === 0 ? lo : out[k - 1] + m[k - 1]), pref = corner ? near2((L * (k + 1)) / (n + 1)) : k === 0 ? near2(L * SECOND_FROM_SHARE) : lower;
     out.push(Math.max(lower, Math.min(pref, down2(L - rest))));
   }
   return out;
@@ -161,7 +165,7 @@ const EARLY_TITLE = Object.freeze({
 // change, ending at a climb rate of 0 (a steady pitch, level only when it ends at pitch 0).
 // `head`: the head's end values as coreshell headState gives them (phi in rad; c, e, er in degrees), which a cross-section ramp at the start is measured from;
 // without one (an empty track, or a caller that has none) the change is measured from 0
-function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null, changes = null, secondMinM = null }) {
+function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null, changes = null, secondMinM = null, cornerChangeMinM = null }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
   const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup), corner = turnAs === 'corner' && t !== null && t !== 0, climbCorner = turnAs === 'corner' && c !== null && c !== 0;
   if (turnAs !== 'rate' && turnAs !== 'corner') throw new Error(`BAD_TURN_AS: the turn is read as 'rate' or 'corner', got ${turnAs}`);
@@ -209,7 +213,7 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
     if (!items.length) continue;
     if ((f === 'turn' || f === 'climb') && turnAs === 'corner') {
       const first = f === 'turn' ? t : c; if (first === null) continue;
-      const key = f === 'turn' ? 'turnDeg' : 'climbDeg', froms = changeFroms(out.length, items.map((x) => ({ from: x.from })), first, key, { corner: true });
+      const key = f === 'turn' ? 'turnDeg' : 'climbDeg', froms = changeFroms(out.length, items.map((x) => ({ from: x.from, target: x.then })), first, key, { corner: true, cornerMin: cornerChangeMinM });
       later[key] = items.map((x, k) => ({ from: froms[k], deg: x.then }));
       continue;
     }
@@ -364,6 +368,9 @@ function mount(root, shell, mountOpts = {}) {
   // has no target (the first change is its target). A new document clears them all (showHead); Undo gives back the undone piece's own (fieldsNow, putBack)
   // the core's minimum and floor, through the shell (a shell without them: null)
   const shellMinM = (ch, a, b) => (typeof shell.secondMinM === 'function' ? shell.secondMinM(ch, a, b) : null);
+  // a later corner's shortest, by its degrees (B's R1: src/core/turnby.js cornerChangeMinM, through the shell); cornerMinM reads only the family and the knot spacing, so the
+  // document's own (the last road piece's family) is what it is asked with, as extend() would lay it
+  const shellCornerMin = (deg) => (typeof shell.cornerChangeMinM === 'function' ? shell.cornerChangeMinM(shell.getState().history.present, {}, deg) : null);
   // a corner's segment: the core's shortest corner of that angle (src/core/turnby.js cornerChangeMinM, through the shell; L139 R1, pane B: max(cornerMinM, 31.5·√|Δθ°|),
   // smooth to ride), else the shortest after a straight (cornerMinM), else 0
   const cornerMin = (o, deg) => { const doc = shell.getState().history.present, v = typeof shell.cornerChangeMinM === 'function' && Number.isFinite(deg) ? shell.cornerChangeMinM(doc, o, deg) : typeof shell.cornerMinM === 'function' ? shell.cornerMinM(doc, o) : null; return Number.isFinite(v) && v > 0 ? v : 0; };
@@ -426,7 +433,7 @@ function mount(root, shell, mountOpts = {}) {
   const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), edgeR: rightTarget(), start: asTyped('start'), tube: asTyped('tube'),
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
     empty: !shell.getState().history.present.pieces.length, turnAs: turnAs.value, head: shell.headState(),
-    changes: secChanges(), secondMinM: shellMinM });
+    changes: secChanges(), secondMinM: shellMinM, cornerChangeMinM: shellCornerMin });
   // (the user, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
   // document it made; when Undo steps from that document back to the one it was made from, the fields are put back (the length, every field as typed or left as
   // shown, the at-start ticks), so Extend again rebuilds the same piece. Redo, a brush and open show the head, as before

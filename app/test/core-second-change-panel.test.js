@@ -334,3 +334,16 @@ test('L139 O5: on the real core, his snake through the panel (corner +60, then �
   assert.ok(Math.sign(turned(s0 + 300)) === Math.sign(turned(s0 + 900)), 'the first and last corners turn the same way');
   p.panel.unmount();
 });
+
+// THE CORNER DEFAULT (after B's R1 fix, cd8b7fd: a corner after the first is refused below cornerChangeMinM = max(cornerMinM, SECOND_MIN_K·√|Δθ°|)). The panel's default
+// corner marks split the piece evenly; on a piece where the even split leaves a later corner less than that, the default was refused by name. His 11-05 picture's piece:
+// corner −90°, bank +66.14°, cup 15.5. Its length is not in the picture (E assumed 750 m, where the even split happens to clear 31.5·√90 = 298.8 m); at 500 m it does not
+test('L139 K1: his picture\'s −90° corner with a second corner change (+90°), its mark left to the panel, is laid by the real core on a 500 m piece, not refused', async () => {
+  const p = await mountPanel();
+  p.type('length m', 500); p.type('turn °', -90); p.type('bank °', 66.14); p.type('cup °', 15.5); p.add('turn', 90);
+  const need = p.shell.cornerChangeMinM(p.shell.getState().history.present, {}, 90), mark = p.opts().changes.turnDeg[0].from;
+  assert.ok(500 - mark >= need - 1e-9, `the default mark (${mark}) leaves the second corner at least the core's ${need.toFixed(1)} m`);
+  const n = p.shell.getState().history.present.pieces.length; p.extend();
+  assert.equal(p.shell.getState().history.present.pieces.length, n + 1, `laid by the core, not refused (${msgText(p)})`);
+  p.panel.unmount();
+});
