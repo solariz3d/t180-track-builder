@@ -118,21 +118,23 @@ test('L135 C4: the Extend options carry the bank\'s change only with a bank targ
   p.panel.unmount();
 });
 
+// AMENDED (L139, after eed9269: the bank's minimum is 31.5·√Δ°): the second piece's from is 200 (its 200 m ramp clears −20 → −45's 157.5 m; 300 left 100 m and is now
+// refused), and the first piece's laid from is the core-clamped default (750 − 172.53, as the field shows it), read from the shell's own minimum
 test('L135 C5: Undo gives back the bank\'s change as it was for the undone piece (and whether from was typed); a new document clears it (AMENDED L139: a list)', async () => {
   const p = await mountPanel();
-  withoutMin(() => {
-    p.type('length m', 750); p.type('bank °', 30); p.addBank(0); p.extend();
-    p.type('length m', 400); p.type('bank °', -20); p.addBank(-45, 300); p.extend();
-    p.shell.undo();
-    assert.equal(p.thenBank().value, '-45', 'Undo: the undone piece\'s then bank'); assert.equal(p.fromBank().value, '300', 'and its typed from');
-    assert.equal(p.thenBank().disabled, false, 'on, with the bank put back');
-    assert.deepEqual(p.opts().changes.phi, [{ from: 300, target: -45 * DEG }], 'so Extend again rebuilds the same piece');
-    p.shell.undo();
-    assert.equal(p.thenBank().value, '0', 'one more Undo: the first piece\'s'); assert.equal(p.fromBank().value, '637.5', 'its laid from');
-    p.type('length m', 1000); assert.equal(p.fromBank().value, '850', 'an untyped from still follows the length after Undo');
-    p.shell.newDoc();
-    assert.equal(p.has('then bank 1'), false, 'a new document clears the bank\'s changes');
-  });
+  const laid = (L) => String(Math.min(Math.round(L * 0.85 * 100) / 100, Math.floor((L - p.shell.secondMinM('phi', 30 * DEG, 0)) * 100 + 1e-9) / 100));
+  p.type('length m', 750); p.type('bank °', 30); p.addBank(0); p.extend();
+  p.type('length m', 400); p.type('bank °', -20); p.addBank(-45, 200); p.extend();
+  assert.equal(p.shell.getState().history.past.length >= 2, true, `both pieces placed (${msgText(p)})`);
+  p.shell.undo();
+  assert.equal(p.thenBank().value, '-45', 'Undo: the undone piece\'s then bank'); assert.equal(p.fromBank().value, '200', 'and its typed from');
+  assert.equal(p.thenBank().disabled, false, 'on, with the bank put back');
+  assert.deepEqual(p.opts().changes.phi, [{ from: 200, target: -45 * DEG }], 'so Extend again rebuilds the same piece');
+  p.shell.undo();
+  assert.equal(p.thenBank().value, '0', 'one more Undo: the first piece\'s'); assert.equal(p.fromBank().value, laid(750), 'its laid from');
+  p.type('length m', 1000); assert.equal(p.fromBank().value, laid(1000), 'an untyped from still follows the length after Undo');
+  p.shell.newDoc();
+  assert.equal(p.has('then bank 1'), false, 'a new document clears the bank\'s changes');
   p.panel.unmount();
 });
 
@@ -192,13 +194,19 @@ test('L135 C10: the layer draws the marks from the preview\'s own answers (ghost
 const D = require('../../src/core/document.js');
 const msgText = (p) => p.root.all().filter((e) => e.attrs && e.attrs.class === 'message').map((e) => e.textContent).join(' | ');
 
-test('L135 C11: with B\'s core, his case is built: 750 m, bank 30 then 0 from 637.5, the piece holds about 30° at from and ends level', async () => {
+// AMENDED (L139, after eed9269): 637.5 leaves a 112.5 m ramp, under the core's 172.53 m for 30° → 0, so it is refused by name; his case is laid at the panel's
+// default from instead (750 − 172.53), which is what an untyped from gives him now
+test('L135 C11: with B\'s core, his case is built: 750 m, bank 30 then 0 from the panel\'s default, the piece holds about 30° at from and ends level; 637.5 is refused by name', async () => {
   const p = await mountPanel();
   p.type('length m', 750); p.type('bank °', 30); p.addBank(0, 637.5);
+  assert.match(msgText(p), /no preview of this piece: .*second bank.*172\.5/, `637.5 is refused, naming the minimum (${msgText(p)})`);
+  p.set(p.fromBank(), '');
+  const f = Number(p.fromBank().value);   // read before Extend: after it the fields show the new head, which has no change
   const n = p.shell.getState().history.present.pieces.length; p.extend();
   const d = p.shell.getState().history.present; assert.equal(d.pieces.length, n + 1, `one piece placed (${msgText(p)})`);
   const P = d.pieces[d.pieces.length - 1], at = (s) => D.channelAt(P, 'phi', s).v / DEG;
-  near(at(637.5), 30, 0.1, 'the bank at from'); near(at(750), 0, 1e-6, 'level at the end'); near(D.channelAt(P, 'phi', 750).d1, 0, 1e-9, 'ending with slope 0');
+  near(f, 750 - p.shell.secondMinM('phi', 30 * DEG, 0), 0.011, 'the default from: 750 less the core\'s minimum');
+  near(at(f), 30, 0.1, 'the bank at from'); near(at(750), 0, 1e-6, 'level at the end'); near(D.channelAt(P, 'phi', 750).d1, 0, 1e-9, 'ending with slope 0');
   p.panel.unmount();
 });
 
@@ -213,18 +221,22 @@ test('L135 C12: with B\'s core, a from past the piece is the core\'s refusal by 
 
 // THE DEFAULT-FROM CLAMP (B's row-6 fix: a second ramp shorter than 15·√Δ° is BAD_SECOND). AMENDED L139: the panel reads the minimum from the core's secondMinM
 // (no copy of the 15), and the row pins the panel to the core: the laid default is laid, and 1 cm past it the core refuses, naming its minimum
-test('L135 C13: on a 300 m piece, 30° then 0, the default from is clamped to 300 − 15·√30 = 217.84 by the core\'s own minimum; typed, it stays', async () => {
+// AMENDED (L139, after eed9269: K 15 → 31.5): the clamp is READ from the core's minimum at run time (it was 217.84 = 300 − 15·√30 written in; with K = 31.5 it is
+// 300 − 172.53 = 127.46), so the next change of K moves this row with it; where 85% is allowed the piece is now 1,500 m (750 m is clamped too)
+test('L135 C13: on a 300 m piece, 30° then 0, the default from is clamped to 300 less the core\'s own minimum; 1 cm past it is refused, naming it; typed, it stays', async () => {
   const p = await mountPanel();
+  const min = p.shell.secondMinM('phi', 30 * DEG, 0), clamp = Math.floor((300 - min) * 100 + 1e-9) / 100;
+  assert.ok(min > 0, 'the shell passes the core\'s minimum through');
   p.type('length m', 300); p.type('bank °', 30); p.addBank(0);
-  assert.equal(p.fromBank().value, '217.84', 'the default, clamped (85% = 255 leaves 45 m, under the 82.16 m minimum)');
-  assert.deepEqual(p.opts().changes, { phi: [{ from: 217.84, target: 0 }] }, 'and sent as shown');
-  assert.equal(extendOptions({ length: 300, turn: '', climb: '', width: '', cup: '', bank: '30', changes: { bank: [{ then: '0', from: '' }] }, secondMinM: p.shell.secondMinM }).changes.phi[0].from, 217.84, 'a blank from in the pure options, with the shell\'s minimum: the same clamp');
-  assert.equal(extendOptions({ length: 750, turn: '', climb: '', width: '', cup: '', bank: '30', changes: { bank: [{ then: '0', from: '' }] }, secondMinM: p.shell.secondMinM }).changes.phi[0].from, 637.5, 'where 85% is allowed it is still 85%');
+  assert.equal(p.fromBank().value, String(clamp), `the default, clamped (85% = 255 leaves 45 m, under the ${min.toFixed(2)} m minimum)`);
+  assert.deepEqual(p.opts().changes, { phi: [{ from: clamp, target: 0 }] }, 'and sent as shown');
+  assert.equal(extendOptions({ length: 300, turn: '', climb: '', width: '', cup: '', bank: '30', changes: { bank: [{ then: '0', from: '' }] }, secondMinM: p.shell.secondMinM }).changes.phi[0].from, clamp, 'a blank from in the pure options, with the shell\'s minimum: the same clamp');
+  assert.equal(extendOptions({ length: 1500, turn: '', climb: '', width: '', cup: '', bank: '30', changes: { bank: [{ then: '0', from: '' }] }, secondMinM: p.shell.secondMinM }).changes.phi[0].from, 1275, 'where 85% is allowed it is still 85%');
   const n = p.shell.getState().history.present.pieces.length; p.extend();
   assert.equal(p.shell.getState().history.present.pieces.length, n + 1, `the clamped default is laid by the core (${msgText(p)})`);
   p.shell.undo();
-  p.set(p.fromBank(), 217.85);   // 1 cm past the clamp: the core's own minimum refuses it
-  assert.match(msgText(p), /no preview of this piece: .*82\.2/, `1 cm past the clamp the core refuses, naming its minimum (${msgText(p)})`);
+  p.set(p.fromBank(), Math.round((clamp + 0.01) * 100) / 100);   // 1 cm past the clamp: the core's own minimum refuses it
+  assert.match(msgText(p), new RegExp(`no preview of this piece: .*${min.toFixed(1).replace('.', '\\.')}`), `1 cm past the clamp the core refuses, naming its minimum (${msgText(p)})`);
   p.set(p.fromBank(), 255);
   assert.equal(p.fromBank().value, '255', 'a typed from stays as typed'); assert.equal(p.opts().changes.phi[0].from, 255, 'and is sent as typed (the core refuses it by name)');
   p.panel.unmount();

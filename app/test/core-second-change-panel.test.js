@@ -164,7 +164,9 @@ test('L139 S6: Undo gives back every field\'s list (count, values, shares, typed
   withCore(p, {}, () => {
     p.type('length m', 1000); p.type('bank °', 30); p.add('bank', 0, 600, 0.6); p.add('bank', 10, 800, 0.8);
     p.type('width m', 40); p.add('width', 30, 650); p.extend();
-    p.type('length m', 500); p.type('bank °', -20); p.add('bank', 10, 400, 0.8); p.extend();
+    // (AMENDED after eed9269: the second piece's change sits at half the piece, its 250 m clearing −20 → 10's 172.53 m; at 0.8 it left 100 m and was refused)
+    p.type('length m', 500); p.type('bank °', -20); p.add('bank', 10, 250, 0.5); p.extend();
+    assert.equal(p.shell.getState().history.past.length >= 2, true, 'both pieces placed');
     p.shell.undo();
     assert.equal(p.thn('bank').value, '10'); assert.equal(p.has('then bank 2'), false, 'the undone piece had one bank change'); assert.equal(p.has('then width 1'), false, 'and no width change');
     p.shell.undo();
@@ -299,5 +301,36 @@ test('L139 O3: dragging an offer makes exactly one change, from the offer\'s pla
     let handled = false; p.doc.dispatchEvent(new p.win.CustomEvent('t180-undo-guard', { detail: { handled: () => { handled = true; } } }));
     assert.equal(handled, true); assert.equal(p.has('then bank 1'), false, 'one Ctrl+Z: the change is gone'); assert.equal('phi' in (p.opts().changes || {}), false);
   });
+  p.panel.unmount();
+});
+
+// ON B's REAL CORE (l139-second-change eed9269): the offers and the corner list, end to end, with the core's own minimums and floor through the shell
+const msgText = (p) => p.root.all().filter((e) => e.attrs && e.attrs.class === 'message').map((e) => e.textContent).join(' | ');
+test('L139 O4: on the real core, a bank offer dragged at the place it appears is laid (form (ii): its own default drag is not refused for room)', async () => {
+  const p = await mountPanel();
+  assert.ok(p.shell.secondFloorM() > 0, 'the shell passes the core\'s floor through');
+  p.type('length m', 400); p.type('bank °', 30);
+  const o = offersOf(p, 'bank')[0]; assert.ok(o, 'a 400 m piece with a bank target offers a change');
+  p.panel.secondOffer(o, 20);   // dragged down to 20°: a 10° change, its minimum well inside R/2
+  const n = p.shell.getState().history.present.pieces.length; p.extend();
+  assert.equal(p.shell.getState().history.present.pieces.length, n + 1, `laid by the core (${msgText(p)})`);
+  const P = p.shell.getState().history.present.pieces.at(-1); near(require('../../src/core/document.js').channelAt(P, 'phi', 400).v / DEG, 20, 1e-6, 'ending at the dragged 20°');
+  p.panel.unmount();
+});
+
+test('L139 O5: on the real core, his snake through the panel (corner +60, then −60, then +60 over 900 m, untyped marks) is one piece ending +60° from where it began, and straight', async () => {
+  const p = await mountPanel();
+  const h0 = p.shell.endHeadingDeg();
+  p.type('length m', 900); p.type('turn °', 60); p.add('turn', -60); p.add('turn', 60);
+  const n = p.shell.getState().history.present.pieces.length; p.extend();
+  assert.equal(p.shell.getState().history.present.pieces.length, n + 1, `one piece laid (${msgText(p)})`);
+  near(((p.shell.endHeadingDeg() - h0 + 540) % 360) - 180, 60, 0.01, 'the heading turned +60 in all');
+  near(p.shell.headState().kh, 0, 1e-9, 'and it ends straight');
+  // inside the piece (one +60 corner alone would also end +60 and straight, so the snake is read where it bends back): +60 at its first mark, back to 0 at its second
+  const AD = require('../../src/core/adapter.js'), d = p.shell.getState().history.present, path = AD.toPath(d).path, s0 = path.lengthM - 900;
+  const T = (s) => path.samples.reduce((a, m) => (Math.abs(m.s - s) < Math.abs(a.s - s) ? m : a)).T, yaw = (t) => Math.atan2(t[0], t[2]) * 180 / Math.PI;
+  const turned = (s) => ((yaw(T(s)) - yaw(T(s0)) + 540) % 360) - 180;
+  near(Math.abs(turned(s0 + 300)), 60, 0.5, 'at the first mark (300 m) it has turned 60'); near(turned(s0 + 600), 0, 0.5, 'at the second (600 m) it is back to the start heading');
+  assert.ok(Math.sign(turned(s0 + 300)) === Math.sign(turned(s0 + 900)), 'the first and last corners turn the same way');
   p.panel.unmount();
 });
