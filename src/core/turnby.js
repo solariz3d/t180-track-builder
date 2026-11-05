@@ -246,19 +246,22 @@ function cornerLists(opts) {
 /** The piece whose channels in `lists` turn (or pitch) by each corner exactly between its marks, at rate 0 at every mark and at the end; channels in `aims` alone as solve's. */
 function solveList(doc, opts, lists, aims) {
   const chs = Object.keys(aims), d0 = easedPiece(doc, opts, chs), P0 = headOf(d0), L = P0.length;
+  // L140: with later corners, the FIRST corner turns over its own smooth length (cornerChangeMinM) and the road runs straight from there to the first mark (the keeper's
+  // drive of L139: his first corner stretched over the whole first half); a first mark nearer than that keeps the corner to the mark. ends(ch)[j]: where corner j's ease ends
+  const ends = (ch) => { const b = [0, ...(lists[ch] ? lists[ch].marks : []), L]; return b.slice(1).map((x, j) => (j === 0 && lists[ch] ? Math.min(x, cornerChangeMinM(doc, opts, (lists[ch].angles[0] * 180) / Math.PI)) : x)); };
   const ts = [];
-  for (const ch of chs) { const b = [0, ...(lists[ch] ? lists[ch].marks : []), L]; for (let j = 0; j + 1 < b.length; j++) for (let i = 0; i < CORNER_SUB; i++) ts.push(+(b[j] + ((b[j + 1] - b[j]) * i) / CORNER_SUB).toFixed(4)); }
+  for (const ch of chs) { const b = [0, ...(lists[ch] ? lists[ch].marks : []), L], e = ends(ch); for (let j = 0; j + 1 < b.length; j++) for (let i = 0; i < CORNER_SUB; i++) ts.push(+(b[j] + ((e[j] - b[j]) * i) / CORNER_SUB).toFixed(4)); }
   const add = [...new Set(ts)].filter((k) => k > 0.5 && k < L - 0.5 && P0.knots.every((h) => Math.abs(h - k) > 1e-3)).sort((a, b) => a - b);
   const P = add.length ? D.insertKnots(P0, add) : P0, d1 = freeze(D.checkDoc({ ...d0, pieces: [...d0.pieces.slice(0, -1), P] }));
   const m = P.channels.kh.length, U = D.knotVector(P), free = freeOf(m), cs = {}, rows = {};
   if (!free.length) return { doc: null, converged: false };
   for (const ch of chs) {
-    const marks = lists[ch] ? lists[ch].marks : [], angles = lists[ch] ? lists[ch].angles : [aims[ch]], b = [0, ...marks, L], k0 = P.channels[ch][0];
+    const marks = lists[ch] ? lists[ch].marks : [], angles = lists[ch] ? lists[ch].angles : [aims[ch]], b = [0, ...marks, L], e = ends(ch), k0 = P.channels[ch][0];
     const base = Float64Array.from(P.channels[ch]), shapes = angles.map(() => new Float64Array(m));
     for (let i = 2; i <= m - 3; i++) {
-      const s = (U[i + 1] + U[i + 2] + U[i + 3]) / 3, u0 = s / b[1];
+      const s = (U[i + 1] + U[i + 2] + U[i + 3]) / 3, u0 = s / e[0];
       base[i] = u0 < 0.5 ? k0 * (1 - bloss(2 * u0)) : 0;   // the head's rate fades over the first half of the first corner
-      for (let j = 0; j < angles.length; j++) shapes[j][i] = ease((s - b[j]) / (b[j + 1] - b[j]));
+      for (let j = 0; j < angles.length; j++) shapes[j][i] = ease((s - b[j]) / (e[j] - b[j]));
     }
     base[m - 1] = base[m - 2] = 0;
     const W = b.slice(1).map((s) => weightsTo(P, s)), want = angles.map((_, r) => angles.slice(0, r + 1).reduce((a, x) => a + x, 0));

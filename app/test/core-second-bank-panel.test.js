@@ -231,7 +231,9 @@ test('L135 C13: on a 300 m piece, 30° then 0, the default from is clamped to 30
   assert.equal(p.fromBank().value, String(clamp), `the default, clamped (85% = 255 leaves 45 m, under the ${min.toFixed(2)} m minimum)`);
   assert.deepEqual(p.opts().changes, { phi: [{ from: clamp, target: 0 }] }, 'and sent as shown');
   assert.equal(extendOptions({ length: 300, turn: '', climb: '', width: '', cup: '', bank: '30', changes: { bank: [{ then: '0', from: '' }] }, secondMinM: p.shell.secondMinM }).changes.phi[0].from, clamp, 'a blank from in the pure options, with the shell\'s minimum: the same clamp');
-  assert.equal(extendOptions({ length: 1500, turn: '', climb: '', width: '', cup: '', bank: '30', changes: { bank: [{ then: '0', from: '' }] }, secondMinM: p.shell.secondMinM }).changes.phi[0].from, 1275, 'where 85% is allowed it is still 85%');
+  // AMENDED L140 (rule changed, by pane B: the keeper's drive of L139, 2026-11-05 10:06Z, "broken … glitchy and non intuitive"; plan_l140 Part 1.2): a blank mark is laid
+  // back from the END (the last at L − its minimum, each earlier one its own minimum before the next), not at 85% of the piece or the even split
+  assert.equal(extendOptions({ length: 1500, turn: '', climb: '', width: '', cup: '', bank: '30', changes: { bank: [{ then: '0', from: '' }] }, secondMinM: p.shell.secondMinM }).changes.phi[0].from, Math.floor((1500 - min) * 100 + 1e-9) / 100, 'on a long piece too the default is L − the minimum, at the end');
   const n = p.shell.getState().history.present.pieces.length; p.extend();
   assert.equal(p.shell.getState().history.present.pieces.length, n + 1, `the clamped default is laid by the core (${msgText(p)})`);
   p.shell.undo();

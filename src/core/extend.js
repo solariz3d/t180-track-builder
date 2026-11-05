@@ -459,12 +459,18 @@ function extend(doc, opts = {}) {
     if (!(Lt > 0 && Lt <= length)) throw new D.CoreError('BAD_TRANSITION', `the transition must be in (0, length], got ${Lt}`);
   }
   const Lof0 = (ch) => (perChannel ? (ramp[ch] === undefined ? length : ramp[ch]) : transition === undefined ? length : transition);
-  // L135 THE SECOND BANK, L139 ANY NUMBER OF CHANGES ON EVERY FIELD: checked here, where each first ramp's end is known; a first ramp over the whole piece is laid over
-  // [0, its first mark] instead (Lof below). See changeLists.
+  // L135 THE SECOND BANK, L139 ANY NUMBER OF CHANGES ON EVERY FIELD: checked here, where each first ramp's end is known. See changeLists.
+  // L140, A FIRST CHANGE REACHES ITS VALUE AND HOLDS (the keeper drove L139, 2026-11-05 10:06Z: "broken … glitchy and non intuitive"; his save's bank climbed 0 → 80° across
+  // the whole first 500 m and never held; the plan's Part 1): a field with later changes whose first ramp is the whole piece (no transition, not "early") reaches its
+  // target over its OWN smooth minimum, secondMinM from the head's value to it (the length that change's quintic needs to ride under the bar), then holds to its first mark;
+  // a mark nearer than that keeps the ramp to the mark (L139's lay). Laid by the quintic, as every change is: the bank's rounded shape over that minimum read ~5 × the bar.
+  // An "early" or typed transition is untouched. headFrom: the head's state, known below; Lof is read only after it is set.
   const lists = changeLists(changes, second, targets, opts.targets, length, Lof0);
-  const Lof = (ch) => (lists[ch] && lists[ch].whole ? lists[ch].items[0].from : Lof0(ch));
+  let headFrom = null;
+  const firstHold = (ch) => !!(lists[ch] && lists[ch].whole);
+  const Lof = (ch) => (!firstHold(ch) ? Lof0(ch) : !headFrom ? lists[ch].items[0].from : Math.min(lists[ch].items[0].from, Math.max(SECOND_FLOOR_M, secondMinM(ch, headFrom[ch].v, targets[ch]))));   // never under 20 m: a bank already at its target (an empty track's `first`) has a minimum of 0
   const shortRamps = Object.keys(ramp).filter((ch) => ramp[ch] < length - 1e-9 && targets[ch] !== undefined && targets[ch] !== null);
-  const shapeOf = (ch) => (ch === 'phi' ? shape : (startShapes && shortRamps.includes(ch) && startShapes[ch]) || null);   // the bank's shape, or a cup's or edge's at start
+  const shapeOf = (ch) => (ch === 'phi' ? (firstHold('phi') ? null : shape) : (startShapes && shortRamps.includes(ch) && startShapes[ch]) || null);   // the bank's shape, or a cup's or edge's at start
   const last = [...doc.pieces].reverse().find((P) => P.type === 'road');
   const fam = family || (last ? last.family : 'bowl');
   let from = D.endState(doc), held = true; const from0 = from;   // from0: null on an empty track (the at-start `first` applies)
@@ -483,6 +489,7 @@ function extend(doc, opts = {}) {
     from = Object.fromEntries(D.CHANNELS.map((ch) => [ch, { v: f[ch], m: 0 }])); held = false;
   }
   if (from.tNext) from = { ...from, t: from.tNext };   // the tube this piece may start continues from tNext (endState reports t only at a tube head)
+  headFrom = from;   // L140: Lof reads the head's values from here on
   const channels = Object.fromEntries(D.CHANNELS.map((ch) => [ch, channelFn(from[ch], targets[ch], Lof(ch), ch, shapeOf(ch))]));
   const c2Targets = [...C2_CHANNELS].filter((ch) => given(targets[ch]));
   // a shaped width at start is laid as the cross-section's are, in three quarters of its ramp (8 subdivisions), so F's 20 m rise is 20 m as laid
@@ -555,7 +562,7 @@ function extend(doc, opts = {}) {
     laid = D.insertKnots(piece, [...new Set(ts)].sort((a, b) => a - b));
     for (const ch of shapedShort) { rampControl(laid, ch, from[ch], targets[ch], ramp[ch], held, sub, shapeOf(ch)); if (C2_CHANNELS.has(ch)) c2Ends(laid, ch); }   // the width is a route channel: no C2 pin
   }
-  if (shape && given(targets.phi) && !shortRamps.includes('phi')) {
+  if (shape && !firstHold('phi') && given(targets.phi) && !shortRamps.includes('phi')) {
     const Lt = Lof('phi'), ts = turnsOf(shape, Lt).map((k) => +k.toFixed(4)).filter((k) => k > 0.5 && k < length - 0.5 && laid.knots.every((h) => Math.abs(h - k) > 1e-3));
     const refined = D.insertKnots(laid, [...new Set(ts)]);
     fitWithHold(refined, 'phi', channels.phi, Lt, targets.phi); c2Ends(refined, 'phi');

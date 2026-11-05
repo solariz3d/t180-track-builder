@@ -65,8 +65,9 @@ const SECOND_NAME = Object.freeze({ turn: 'turn', climb: 'climb', bank: 'bank', 
 const secondMinOf = (minM, ch, a, b) => { if (typeof minM !== 'function' || !Number.isFinite(a) || !Number.isFinite(b)) return 0; const m = minM(ch, a, b); return Number.isFinite(m) && m > 0 ? m : 0; };
 const up2 = (x) => Math.ceil(x * 100 - 1e-9) / 100, down2 = (x) => Math.floor(x * 100 + 1e-9) / 100, near2 = (x) => Math.round(x * 100) / 100;
 /**
- * Each change's from (m) for one field's list [{ from: number | null, target }]: a from given stays; a missing one is laid: the first at SECOND_FROM_SHARE of the piece,
- * a later one right after the previous mark plus that segment's minimum (segment k runs from mark k to the next and changes target k−1 to target k; B's core measures
+ * Each change's from (m) for one field's list [{ from: number | null, target }]: a from given stays; a missing one is laid BACK FROM THE END since L140 (below: the last at
+ * L − its minimum, each earlier one its own minimum before the next; L139 laid the first at SECOND_FROM_SHARE of the piece and a later one right after the previous mark plus
+ * that segment's minimum (segment k runs from mark k to the next and changes target k−1 to target k; B's core measures
  * the same), never before `lo` (an early first ramp's end) nor past the room the later segments need (L − the sum of their minimums). With one change this is L135's
  * clamp, min(85%, L − its minimum).
  * A CORNER list (L139 corner default, after B's R1 fix): change k is a corner of list[k].target degrees over [mark k, the next mark or L], and the core refuses it below
@@ -79,11 +80,20 @@ function changeFroms(length, list, first, ch, { lo = 0, corner = false, minM = n
   if (!(L > 0)) return list.map((x) => x.from);
   const cm = (deg) => { if (typeof cornerMin !== 'function' || !Number.isFinite(deg)) return 0; const v = cornerMin(deg); return Number.isFinite(v) && v > 0 ? v : 0; };
   const t = [first, ...list.map((x) => x.target)], m = list.map((x, k) => (corner ? cm(x.target) : secondMinOf(minM, ch, t[k], t[k + 1])));
+  // L140 (pane B, the plan's Part 1, after the keeper's drive: every change of his sat at the even split, 500 m of 1,000): a blank mark sits toward the END, as close as
+  // smooth allows, like his red marks: laid BACK from the end, the last at L − its minimum and each earlier one its own minimum before the next (a typed mark is its own
+  // anchor). Then forward, never before `lo` (an early first ramp's end) nor before the previous mark plus its minimum. Without a minimum (a shell before L139) a blank
+  // mark falls back to L139's share of the piece (SECOND_FROM_SHARE, or the even split for corners)
+  const back = new Array(n).fill(null);
+  for (let k = n - 1; k >= 0; k--) {
+    if (list[k].from !== null) { back[k] = list[k].from; continue; }
+    const next = k + 1 < n ? back[k + 1] : L;
+    back[k] = m[k] > 0 ? down2(next - m[k]) : corner ? near2((L * (k + 1)) / (n + 1)) : k === 0 ? near2(L * SECOND_FROM_SHARE) : null;
+  }
   for (let k = 0; k < n; k++) {
     if (list[k].from !== null) { out.push(list[k].from); continue; }
-    let rest = 0; for (let j = k; j < n; j++) rest += m[j];
-    const lower = up2(k === 0 ? lo : out[k - 1] + m[k - 1]), pref = corner ? near2((L * (k + 1)) / (n + 1)) : k === 0 ? near2(L * SECOND_FROM_SHARE) : lower;
-    out.push(Math.max(lower, Math.min(pref, down2(L - rest))));
+    const lower = up2(k === 0 ? lo : out[k - 1] + m[k - 1]);
+    out.push(back[k] === null ? lower : Math.max(lower, back[k]));
   }
   return out;
 }

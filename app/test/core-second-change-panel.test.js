@@ -116,8 +116,10 @@ test('L139 S3: a dragged change keeps its share of the piece (lengthen: the mark
     p.set(p.from('bank', 1), 500); p.type('length m', 1000);
     assert.equal(p.from('bank', 1).value, '500', 'typed: metres, it stays'); assert.equal(p.from('bank', 2).value, '700', 'the dragged one keeps its share');
     p.set(p.from('bank', 1), '');
-    assert.equal(p.from('bank', 1).value, '800', 'cleared: laid by the rule, 1000 − the two segments\' 100 + 100'); assert.equal(p.opts().changes.phi[0].from, 800);
-    p.type('length m', 900); assert.equal(p.from('bank', 1).value, '700', 'and it follows the piece');
+    // AMENDED L140 (rule changed, by pane B: the keeper's drive of L139, 2026-11-05 10:06Z, "broken … glitchy and non intuitive"; plan_l140 Part 1.2): a blank mark is laid
+    // back from the END (the last at L − its minimum, each earlier one its own minimum before the next), not forward from the start
+    assert.equal(p.from('bank', 1).value, '600', 'cleared: laid by the rule, its own 100 m before the next mark (700)'); assert.equal(p.opts().changes.phi[0].from, 600);
+    p.type('length m', 900); assert.equal(p.from('bank', 1).value, '530', 'and it follows the piece: 100 m before the dragged mark\'s 70% of 900 (630)');
   });
   p.panel.unmount();
 });
@@ -140,7 +142,10 @@ test('L139 S4: the options carry each field\'s list in the core\'s units; as cor
   const q = await mountPanel();   // corners (the default)
   q.type('length m', 900); q.type('turn °', 60); q.add('turn', -60); q.add('turn', 60);
   const o = withCore(q, {}, () => q.opts());
-  assert.equal(o.turnDeg, 60, 'the first corner as before'); assert.deepEqual(o.changes.turnDeg, [{ from: 300, deg: -60 }, { from: 600, deg: 60 }], 'two more corners, untyped marks splitting the piece in three');
+  // AMENDED L140 (rule changed, by pane B: the keeper's drive of L139; plan_l140 Part 1.2): untyped corner marks are laid back from the END, each corner its own smooth
+  // length (the core's cornerChangeMinM) before the next, not the even split
+  const cm = (deg) => q.shell.cornerChangeMinM(q.shell.getState().history.present, {}, deg), d2 = (x) => Math.floor(x * 100 + 1e-9) / 100, m2 = d2(900 - cm(60)), m1 = d2(m2 - cm(-60));
+  assert.equal(o.turnDeg, 60, 'the first corner as before'); assert.deepEqual(o.changes.turnDeg, [{ from: m1, deg: -60 }, { from: m2, deg: 60 }], 'two more corners, untyped marks laid back from the end');
   assert.equal('kh' in o.changes, false, 'corners are not rates');
   q.panel.unmount();
 });
@@ -322,6 +327,8 @@ test('L139 O5: on the real core, his snake through the panel (corner +60, then �
   const p = await mountPanel();
   const h0 = p.shell.endHeadingDeg();
   p.type('length m', 900); p.type('turn °', 60); p.add('turn', -60); p.add('turn', 60);
+  // AMENDED L140 (rule changed, by pane B: untyped marks are laid back from the end, not the even split): the bends are read at the marks as laid (L139 read 300 and 600)
+  const [k1, k2] = p.opts().changes.turnDeg.map((x) => x.from);
   const n = p.shell.getState().history.present.pieces.length; p.extend();
   assert.equal(p.shell.getState().history.present.pieces.length, n + 1, `one piece laid (${msgText(p)})`);
   near(((p.shell.endHeadingDeg() - h0 + 540) % 360) - 180, 60, 0.01, 'the heading turned +60 in all');
@@ -330,7 +337,7 @@ test('L139 O5: on the real core, his snake through the panel (corner +60, then �
   const AD = require('../../src/core/adapter.js'), d = p.shell.getState().history.present, path = AD.toPath(d).path, s0 = path.lengthM - 900;
   const T = (s) => path.samples.reduce((a, m) => (Math.abs(m.s - s) < Math.abs(a.s - s) ? m : a)).T, yaw = (t) => Math.atan2(t[0], t[2]) * 180 / Math.PI;
   const turned = (s) => ((yaw(T(s)) - yaw(T(s0)) + 540) % 360) - 180;
-  near(Math.abs(turned(s0 + 300)), 60, 0.5, 'at the first mark (300 m) it has turned 60'); near(turned(s0 + 600), 0, 0.5, 'at the second (600 m) it is back to the start heading');
+  near(Math.abs(turned(s0 + k1)), 60, 0.5, `at the first mark (${k1} m) it has turned 60`); near(turned(s0 + k2), 0, 0.5, `at the second (${k2} m) it is back to the start heading`);
   assert.ok(Math.sign(turned(s0 + 300)) === Math.sign(turned(s0 + 900)), 'the first and last corners turn the same way');
   p.panel.unmount();
 });
