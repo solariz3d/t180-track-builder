@@ -51,8 +51,8 @@ file in both places.
 **`src/core/`, the track as equations.** *why: see `src/core/README.md` and each file's header.*
 - `document.js`: the document: pieces, each road piece a set of clamped cubic B-spline channels; checks, serialise, parse. *why: see header*
 - `adapter.js`: the document → the segments and path `src/geom` builds; `offsetPath` lifts the path by the height and sideways offsets. *why: see header*
-- `extend.js`: grow the track from its open end, each new piece continuing the last one's value and slope (`extend`); `second: { phi: { from, target } }` banks a piece twice, the second ramp laid over [from, length] (`secondRamp`, `endC2`; L135). *why: see header*
-- `turnby.js`: turn, climb or corner by a given amount (`extendTurnBy`, `extendClimbBy`, `extendCorner`).
+- `extend.js`: grow the track from its open end, each new piece continuing the last one's value and slope (`extend`); `changes: { kh|kv|phi|w|c|e|er: [{ from, target }, …] }` changes a field any number of times inside a piece, each change over [its mark, the next mark or the end] (`changeLists` checks and refuses by name, `secondRamp` lays them in one fixed field order, `endC2`; L139), and `second: { ch: { from, target } }` (L135) is a one-item list; `secondMinM` is each change's shortest length (the panel reads it), `SECOND_MIN_K` the bank's K, `SECOND_FLOOR_M` the 20 m floor. *why: see header*
+- `turnby.js`: turn, climb or corner by a given amount (`extendTurnBy`, `extendClimbBy`, `extendCorner`); a list of corners in one piece, `changes: { turnDeg|climbDeg: [{ from, deg }, …] }`, each exact and straight at every mark (`cornerLists`, `solveList`, `extendList`; L139); `cornerMinM` the shortest corner from a straight.
 - `sharp.js`: a sharp turn beside the broad curve (`extendSharp`). `level.js`: level the road or take it to the floor (`extendLevel`, `extendToFloor`).
 - `jump.js`: a free flight and a landing (`jump`, `jumpHere`, `setLanding`, `landingOf`). *why: see header*
 - `sculpt.js`: the brush and its modes (`brush`, `sculpt`, `stretch`). `bankswing.js`: bank a whole bend as one swing (`swingBank`). `smoothramps.js`: re-lay old ramps smoothly (`smoothRamps`).

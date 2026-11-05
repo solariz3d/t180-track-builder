@@ -219,9 +219,11 @@ test("row 10: through Finish and through bankLap, the added bank is C2: the bank
 // Both the core's default ease and the panel's rounded bank (app/core/panel.js extendOptions sends bankShape 'rounded'): unpinned, the fitted second ramp ended at 0.00093 °/m²
 // on the first (under the bar) and 0.0058 on the second (5.8 times over it), measured with endC2 removed (L135 mutant SB2's first run)
 for (const [how, extra] of [['default ease', {}], ['the panel\'s rounded bank', { bankShape: 'rounded' }]]) {
-  test(`L135 4a: after a piece that banks 30° and back to level from 637.5 m (${how}), the next piece continues with no bank step: value, slope and curvature continuous at both joints`, () => {
+// AMENDED L139 (rule changed: K 15 -> 31.5, the keeper 2026-11-05 07:00Z "we dont want the bumps"; pane E 711d7d10): his from 637.5 leaves 112.5 m, under the new
+// minimum (172.5 m for 30°, 140.9 m for 20°), and is now refused by name (test/core_changes.test.js L139 7). The row's rule is unchanged; its from is the latest the rule allows.
+  test(`L135 4a: after a piece that banks 30° and back to level from 577 m (${how}), the next piece continues with no bank step: value, slope and curvature continuous at both joints`, () => {
     let doc = extend(D.createDoc('twice'), { length: 1000, family: 'bowl' });
-    doc = extend(doc, { length: 750, targets: { phi: 30 * DEG }, second: { phi: { from: 637.5, target: 0 } }, ...extra });
+    doc = extend(doc, { length: 750, targets: { phi: 30 * DEG }, second: { phi: { from: 577, target: 0 } }, ...extra });
     doc = extend(doc, { length: 300 });
     assert.ok(Math.abs(at(doc.pieces[1], 'phi', 750)) <= 1e-6, `the piece ends level (its second bank): ${at(doc.pieces[1], 'phi', 750)}°`);
     assert.deepEqual(Cn.c2Breaks(doc, { channels: ['phi'], tol: TOL_D2 }).map((e) => `${e.joint} ${e.dkDeg}`), [], 'no curvature step in the bank at any joint');

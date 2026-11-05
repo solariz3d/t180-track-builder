@@ -106,21 +106,25 @@ const bankOf = (P, s) => D.valuesAt(P, Math.max(0, Math.min(P.length, s))).phi /
 /** the bank's second derivative at s, one-sided over Hh (dir −1 reads the span before s, +1 the span after), exact for the cubic each span is */
 const curvAt = (P, s, dir) => { const g = (k) => bankOf(P, s + dir * k * Hh); return (2 * g(0) - 5 * g(1) + 4 * g(2) - g(3)) / (Hh * Hh); };
 const monotone = (P, a, b, sign) => { let prev = bankOf(P, a); for (let s = a + 0.5; s <= b + 1e-9; s += 0.5) { const v = bankOf(P, s); if (sign * (v - prev) < -1e-3) return `turns back at ${s} m (${prev.toFixed(4)} -> ${v.toFixed(4)})`; prev = v; } return null; };
-const twice = (extra = {}) => extend(flat(), { length: 750, targets: { phi: 30 * DEG }, second: { phi: { from: 637.5, target: 0 } }, ...extra });
+// AMENDED L139 (rule changed: K 15 -> 31.5, the keeper 2026-11-05 07:00Z "we dont want the bumps"; pane E 711d7d10): his from 637.5 leaves 112.5 m, under the new
+// minimum (172.5 m for 30°, 140.9 m for 20°), and is now refused by name (test/core_changes.test.js L139 7). The row's rule is unchanged; its from is the latest the rule allows.
+const twice = (extra = {}) => extend(flat(), { length: 750, targets: { phi: 30 * DEG }, second: { phi: { from: 577, target: 0 } }, ...extra });
 
-test('L135 1: his 750 m piece, bank 30° (default ease) then back to level from 637.5 m: 30° at 637.5, 0 at 750 with slope 0, one way on each ramp, no curvature either side of 637.5', () => {
-  const P = twice().pieces[1], F = 637.5;
+test('L135 1: his 750 m piece, bank 30° (default ease) then back to level from 577 m: 30° at 577, 0 at 750 with slope 0, one way on each ramp, no curvature either side of 577', () => {
+  const P = twice().pieces[1], F = 577;
   assert.ok(Math.abs(bankOf(P, F) - 30) <= 0.1, `30° where the second bank starts: ${bankOf(P, F)}`);
   assert.ok(Math.abs(bankOf(P, 750)) <= 1e-6, `level at the end: ${bankOf(P, 750)}`);
   assert.ok(Math.abs(D.channelAt(P, 'phi', 750).d1 / DEG) <= 1e-6, `the end slope is 0: ${D.channelAt(P, 'phi', 750).d1 / DEG} °/m`);
   assert.equal(monotone(P, 0, F, 1), null, 'the first ramp rises one way');
   assert.equal(monotone(P, F, 750, -1), null, 'the second ramp falls one way');
   const left = curvAt(P, F, -1), right = curvAt(P, F, 1);
-  assert.ok(Math.abs(left) <= C2_TOL && Math.abs(right) <= C2_TOL && Math.abs(right - left) <= C2_TOL, `curvature at 637.5: ${left.toFixed(5)} before, ${right.toFixed(5)} after (°/m²)`);
+  assert.ok(Math.abs(left) <= C2_TOL && Math.abs(right) <= C2_TOL && Math.abs(right - left) <= C2_TOL, `curvature at 577: ${left.toFixed(5)} before, ${right.toFixed(5)} after (°/m²)`);
 });
 
-test('L135 2: the steeper case, 30° then 50° from 85%: holds 30° from the first ramp\'s end to 637.5 m, reaches 50° at the end with slope 0, rises one way, no curvature either side of from', () => {
-  const P = extend(flat(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second: { phi: { from: 637.5, target: 50 * DEG } } }).pieces[1], F = 637.5;
+// AMENDED L139 (rule changed: K 15 -> 31.5, the keeper 2026-11-05 07:00Z "we dont want the bumps"; pane E 711d7d10): his from 637.5 leaves 112.5 m, under the new
+// minimum (172.5 m for 30°, 140.9 m for 20°), and is now refused by name (test/core_changes.test.js L139 7). The row's rule is unchanged; its from is the latest the rule allows.
+test('L135 2: the steeper case, 30° then 50° from 609 m: holds 30° from the first ramp\'s end to 609 m, reaches 50° at the end with slope 0, rises one way, no curvature either side of from', () => {
+  const P = extend(flat(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second: { phi: { from: 609, target: 50 * DEG } } }).pieces[1], F = 609;
   for (let s = 300; s <= F; s += 0.5) assert.ok(Math.abs(bankOf(P, s) - 30) <= 0.1, `the hold at ${s} m: ${bankOf(P, s)}`);
   assert.ok(Math.abs(bankOf(P, 750) - 50) <= 1e-6, `50° at the end: ${bankOf(P, 750)}`);
   assert.ok(Math.abs(D.channelAt(P, 'phi', 750).d1 / DEG) <= 1e-6, 'the end slope is 0');
@@ -132,9 +136,11 @@ test('L135 2: the steeper case, 30° then 50° from 85%: holds 30° from the fir
 test('L135 5: the roll rate, read by the checker (src/validate rollRates over its 20 m chord): his 750 m case stays under the 0.9338 °/m amber on both ramps; a second bank squeezed into 20 m goes over it, so the checker\'s warning fires', () => {
   const A = require('../src/core/adapter.js'), V = require('../src/validate/index.js');
   const worst = (doc) => { const { segments, path } = A.toPath(doc), S = path.samples; let m = 0; for (const q of V._internal.rollRates(S, (i) => segments[S[i].seg].kind !== 'gap', false, path.lengthM)) if (q.s >= 1000 && q.s <= 1750) m = Math.max(m, q.rate); return m; };
+  // AMENDED L139 (rule changed: K 15 -> 31.5, the keeper's 07:00Z "smooth all around"): a bank change at its minimum now peaks at 1.875·Δ/(31.5·√Δ) = 0.0595·√Δ °/m, over the
+  // 0.9338 amber only past Δ ≈ 246°. The fast case is now a 270° change (30° to -240°) over its 518 m minimum (1.875·270/518 = 0.98 °/m), read over its own ramp.
   // AMENDED (L135 row-6 fix): the fast case was 30° undone in 20 m, which the shortest-second-ramp rule now refuses (BAD_SECOND, 82.2 m for 30°: core_extend 'L135 6b/6c').
   // The fastest roll the rule still allows is a large change at its minimum, 15·√90 = 142.3 m for 90°, whose quintic peaks at 1.875·90/145 ≈ 1.16 °/m: the checker must warn on it
-  const his = worst(twice()), fast = worst(twice({ second: { phi: { from: 750 - 145, target: -60 * DEG } } }));
+  const his = worst(twice()), fast = worst(twice({ second: { phi: { from: 750 - 518, target: -240 * DEG } } }));
   assert.ok(his > 0.2 && his < V.ROLL_AMBER_DEG_M, `his piece rolls at most ${his.toFixed(4)} °/m (amber ${V.ROLL_AMBER_DEG_M}; over 0.2 means the second ramp is there)`);
-  assert.ok(fast > V.ROLL_AMBER_DEG_M, `30° to -60° in 145 m rolls at ${fast.toFixed(4)} °/m: over the amber, so the checker warns`);
+  assert.ok(fast > V.ROLL_AMBER_DEG_M, `30° to -240° in 518 m rolls at ${fast.toFixed(4)} °/m: over the amber, so the checker warns`);
 });

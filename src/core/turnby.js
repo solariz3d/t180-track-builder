@@ -169,7 +169,136 @@ function extendCorner(doc, opts = {}) {
   return out;
 }
 const MEMO = new WeakMap(), MEMO_MAX = 6;
+// ── L139, A LIST OF CORNERS IN ONE PIECE (the keeper, 2026-11-05 06:49Z: "With turns you can create multiple snaking curves with one piece, the same with the climb if you
+// are inverted or upside down"). extendCorner(doc, { turnDeg, changes: { turnDeg: [{ from, deg }, ...] } }) (and climbDeg the same): corner 0 is turnDeg over [0, the first
+// mark], corner k its deg over [its mark, the next mark or the end]. Each corner is the symmetric ease of its own segment (0 at both of its marks, so the road runs straight,
+// or at a steady pitch, at every mark), and the heights are solved together so the angle up to each mark is exact: the angle to a point s is linear in the control points
+// (the trapezoid of the adapter's segments, as turnWeights), one row per mark and one for the end. Each corner after the first is refused by name when its segment is shorter
+// than the shortest corner from a straight (cornerMinM: every mark is straight); the first, when the head cannot make it before the first mark (shortestTurnBy).
+const CORNER_SUB = 8;   // knots inserted across each corner's segment, as extend.js inserts SECOND_SUB across each change
+const CORNER_FIELDS = [['kh', 'turnDeg', 'TURN_TOO_SHORT', 'turn'], ['kv', 'climbDeg', 'CLIMB_TOO_SHORT', 'climb']];
+/** The angle from 0 to s1 as weights on the control points: the adapter's trapezoid on its 2 m segments over the piece (turnWeights), cut at s1. */
+function weightsTo(P, s1) {
+  if (s1 >= P.length - 1e-9) return turnWeights(P);
+  const n = Math.max(1, Math.ceil(P.length / SEG_M - 1e-9)), kv = [0, 0, 0, 0, ...P.knots, P.length, P.length, P.length, P.length], w = new Float64Array(P.channels.kh.length);
+  const node = (s) => { const b = basisN(kv, Math.min(Math.max(s, 0), P.length)); return { s, first: b.first, N: Array.from(b.N) }; };
+  const add = (a, b) => { const h = b.s - a.s; for (let k = 0; k < 4; k++) { w[a.first + k] += (h / 2) * a.N[k]; w[b.first + k] += (h / 2) * b.N[k]; } };
+  let prev = node(0);
+  for (let j = 1; j <= n; j++) { const s = (P.length * j) / n; if (s >= s1) { add(prev, node(s1)); break; } const cur = node(s); add(prev, cur); prev = cur; }
+  return w;
+}
+/** Solve the small dense system M·x = r (Gaussian elimination, partial pivoting). */
+function dense(M, r) {
+  const n = r.length, A = M.map((row, i) => [...row, r[i]]);
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let i = c + 1; i < n; i++) if (Math.abs(A[i][c]) > Math.abs(A[p][c])) p = i;
+    [A[c], A[p]] = [A[p], A[c]];
+    if (!(Math.abs(A[c][c]) > 0)) return null;
+    for (let i = c + 1; i < n; i++) { const f = A[i][c] / A[c][c]; for (let j = c; j <= n; j++) A[i][j] -= f * A[c][j]; }
+  }
+  const x = new Array(n).fill(0);
+  for (let i = n - 1; i >= 0; i--) { let v = A[i][n]; for (let j = i + 1; j < n; j++) v -= A[i][j] * x[j]; x[i] = v / A[i][i]; }
+  return x;
+}
+/** The shortest corner from a straight, in whole metres, with these fields (the knot spacing decides it): every corner after the first starts on one. */
+const CORNER_MIN = new Map();
+function cornerMinM(doc, opts = {}) {
+  const fam = opts.family || ((doc.pieces || []).filter((P) => P.type === 'road').slice(-1)[0] || {}).family || 'bowl', key = `${fam}|${opts.knotM}`;
+  if (!CORNER_MIN.has(key)) {
+    const straight = extend(D.createDoc('corner min'), { length: 1000, family: fam });
+    CORNER_MIN.set(key, shortestTurnBy(freeze(straight), { length: 1, family: fam, ...(opts.knotM === undefined ? {} : { knotM: opts.knotM }) }, { kh: Math.PI / 2 }));
+  }
+  return CORNER_MIN.get(key);
+}
+/** The corner lists asked for, checked: { kh: { marks, angles } } (rad), or null when no list has a change. */
+function cornerLists(opts) {
+  const ch = opts.changes, given = (v) => v !== undefined && v !== null;
+  if (!given(ch) || typeof ch !== 'object') return null;
+  const out = {};
+  for (const [c, k, code, word] of CORNER_FIELDS) {
+    const li = ch[k];
+    if (given(ch[c]) && k in opts && (!Array.isArray(ch[c]) || ch[c].length)) throw new D.CoreError('BAD_SECOND', `the ${word} is read as corners (${k}): change it with changes.${k}, not changes.${c}`);
+    if (!given(li)) continue;
+    if (!Array.isArray(li)) throw new D.CoreError('BAD_SECOND', `changes.${k} is a list [{ from, deg }, ...], got ${JSON.stringify(li)}`);
+    if (!li.length) continue;
+    if (!(k in opts)) throw new D.CoreError('BAD_SECOND', `changes.${k} follows a first corner: give ${k} too`);
+    const L = opts.length, marks = [], angles = [(opts[k] * Math.PI) / 180];
+    li.forEach((it, j) => {
+      const { from: F, deg } = it || {};
+      if (!Number.isFinite(deg)) throw new D.CoreError('BAD_TARGET', `the ${word} change ${j + 1}: a corner needs a finite number of degrees, got ${deg}`);
+      const lo = j ? marks[j - 1] : 0;
+      if (!(Number.isFinite(F) && F > lo && F < L)) throw new D.CoreError('BAD_SECOND', `the ${word} change ${j + 1} starts after ${j ? `change ${j} (${lo} m)` : 'the piece\'s start'} and before its end (${L} m), got ${F}`);
+      marks.push(F); angles.push((deg * Math.PI) / 180);
+    });
+    out[c] = { marks, angles, k, code, word };
+  }
+  return Object.keys(out).length ? out : null;
+}
+/** The piece whose channels in `lists` turn (or pitch) by each corner exactly between its marks, at rate 0 at every mark and at the end; channels in `aims` alone as solve's. */
+function solveList(doc, opts, lists, aims) {
+  const chs = Object.keys(aims), d0 = easedPiece(doc, opts, chs), P0 = headOf(d0), L = P0.length;
+  const ts = [];
+  for (const ch of chs) { const b = [0, ...(lists[ch] ? lists[ch].marks : []), L]; for (let j = 0; j + 1 < b.length; j++) for (let i = 0; i < CORNER_SUB; i++) ts.push(+(b[j] + ((b[j + 1] - b[j]) * i) / CORNER_SUB).toFixed(4)); }
+  const add = [...new Set(ts)].filter((k) => k > 0.5 && k < L - 0.5 && P0.knots.every((h) => Math.abs(h - k) > 1e-3)).sort((a, b) => a - b);
+  const P = add.length ? D.insertKnots(P0, add) : P0, d1 = freeze(D.checkDoc({ ...d0, pieces: [...d0.pieces.slice(0, -1), P] }));
+  const m = P.channels.kh.length, U = D.knotVector(P), free = freeOf(m), cs = {}, rows = {};
+  if (!free.length) return { doc: null, converged: false };
+  for (const ch of chs) {
+    const marks = lists[ch] ? lists[ch].marks : [], angles = lists[ch] ? lists[ch].angles : [aims[ch]], b = [0, ...marks, L], k0 = P.channels[ch][0];
+    const base = Float64Array.from(P.channels[ch]), shapes = angles.map(() => new Float64Array(m));
+    for (let i = 2; i <= m - 3; i++) {
+      const s = (U[i + 1] + U[i + 2] + U[i + 3]) / 3, u0 = s / b[1];
+      base[i] = u0 < 0.5 ? k0 * (1 - bloss(2 * u0)) : 0;   // the head's rate fades over the first half of the first corner
+      for (let j = 0; j < angles.length; j++) shapes[j][i] = ease((s - b[j]) / (b[j + 1] - b[j]));
+    }
+    base[m - 1] = base[m - 2] = 0;
+    const W = b.slice(1).map((s) => weightsTo(P, s)), want = angles.map((_, r) => angles.slice(0, r + 1).reduce((a, x) => a + x, 0));
+    const M = W.map((w) => shapes.map((sh) => turnOf(w, sh))), A = dense(M, W.map((w, r) => want[r] - turnOf(w, base)));
+    if (!A) return { doc: null, converged: false };
+    cs[ch] = Float64Array.from(base, (x, i) => x + A.reduce((a, h, j) => a + h * shapes[j][i], 0));
+    rows[ch] = { W, want };
+  }
+  const resid = (ch, c) => rows[ch].W.map((w, r) => turnOf(w, c) - rows[ch].want[r]);
+  let d = withChannels(d1, cs);
+  for (let it = 0; it < MAX_ITER; it++) {
+    let done = true;
+    for (const ch of chs) {
+      const c = Float64Array.from(headOf(d).channels[ch]), r = resid(ch, c);
+      if (r.every((x) => Math.abs(x) <= TURN_TOL)) { cs[ch] = c; continue; }
+      done = false;
+      // the least-norm step on the free columns for the rows W: δ = Wᵀ(WWᵀ)⁻¹(−r)
+      const W = rows[ch].W, G = W.map((a) => W.map((b2) => free.reduce((s, i) => s + a[i] * b2[i], 0))), y = dense(G, r.map((x) => -x));
+      if (!y) return { doc: null, converged: false };
+      for (const i of free) c[i] += W.reduce((s, w, k) => s + w[i] * y[k], 0);
+      cs[ch] = c;
+    }
+    if (done) return { doc: d, converged: true };
+    d = withChannels(d1, cs);
+  }
+  return { doc: d, converged: chs.every((ch) => resid(ch, headOf(d).channels[ch]).every((x) => Math.abs(x) <= TURN_TOL)) };
+}
+/** Extend with the corner lists laid, or refuse by name: a corner after the first shorter than cornerMinM, the first shorter than the head can make it. */
+function extendList(doc, opts, rest, lists, aims) {
+  const changes = { ...(rest.changes || {}) };
+  for (const [, k] of CORNER_FIELDS) delete changes[k];
+  const o = { ...rest }; if (Object.keys(changes).length) o.changes = changes; else delete o.changes;
+  for (const ch of Object.keys(lists)) {
+    const { marks, angles, k, code, word } = lists[ch], min = cornerMinM(doc, o);
+    marks.forEach((F, j) => {
+      const end = j + 1 < marks.length ? marks[j + 1] : o.length;
+      if (end - F < min - 1e-9) throw Object.assign(new D.CoreError(code, `the ${word} change ${j + 1} (a corner of ${DEGS(angles[j + 1])}) needs at least ${min} m before ${j + 1 < marks.length ? `change ${j + 2}'s mark` : "the piece's end"}: from at most ${end - min}, got ${F}`), { needM: min });
+    });
+    const { changes: _c, ...bare } = o, need = shortestTurnBy(doc, { ...bare, length: 1 }, { [ch]: angles[0] });   // the head alone decides the first corner
+    if (need === null || marks[0] < need - 1e-9) throw Object.assign(new D.CoreError(code, `the ${word} change 0 (the first corner, ${DEGS(angles[0])}) needs at least ${need} m before change 1's mark, got ${marks[0]}`), { needM: need });
+  }
+  const r = solveList(doc, o, lists, aims);
+  if (r.converged) return r.doc;
+  const first = lists.kh || lists.kv;
+  throw new D.CoreError(first.code, `a ${o.length} m piece cannot lay the ${Object.values(lists).map((x) => x.word).join(' and ')} corners asked for, each exact and ending straight`);
+}
+
 function cornerOf(doc, opts) {
+  const lists = cornerLists(opts);   // L139: checked first, so a corner list with no first corner is refused by name
   if (!('turnDeg' in opts) && !('climbDeg' in opts)) return extend(doc, opts);
   const { turnDeg, climbDeg, ...rest } = opts, aims = {};
   for (const [ch, k, v] of [['kh', 'turnDeg', turnDeg], ['kv', 'climbDeg', climbDeg]]) {
@@ -177,7 +306,12 @@ function cornerOf(doc, opts) {
     if (!Number.isFinite(v)) throw new D.CoreError('BAD_TARGET', `a corner needs a finite number of degrees, got ${k} ${v}`);
     aims[ch] = (v * Math.PI) / 180;
   }
+  if (lists) return extendList(doc, opts, rest, lists, aims);   // L139: corners after the first, in one piece
+  if (rest.changes && typeof rest.changes === 'object' && !Array.isArray(rest.changes) && CORNER_FIELDS.some(([, k]) => k in rest.changes)) {   // empty corner lists: the corner as before
+    const changes = { ...rest.changes }; for (const [, k] of CORNER_FIELDS) delete changes[k];
+    if (Object.keys(changes).length) rest.changes = changes; else delete rest.changes;
+  }
   return extendBy(doc, rest, aims);
 }
 
-module.exports = { extendTurnBy, extendClimbBy, extendCorner, shortestTurnBy, turnWeights };
+module.exports = { extendTurnBy, extendClimbBy, extendCorner, shortestTurnBy, turnWeights, cornerMinM };

@@ -11,6 +11,7 @@ const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
 const X = 'core/extend.js';
 const B = 'core/bankswing.js';
+const T = 'core/turnby.js';
 const P = '../app/core/panel.js';   // a file outside src/, given relative to it (the tree copies the app folders the panel loads)
 
 const MUTANTS = [
@@ -101,10 +102,15 @@ const MUTANTS = [
   // D574, the width at start takes F too (test/core_width_at_start_f.test.js)
   { id: 'A7 the width at start gets no start shape (the 20 m wedge again)', pattern: '32 → 55|mirrored|a 60 m piece', edits: [[P, "    if (!XS_START.has(ch) && ch !== 'w') continue;", '    if (!XS_START.has(ch)) continue;']] },
   // L135, the second bank (src/core/extend.js `second`; test/core_bank_ramp.test.js and test/core_joint_c2.test.js rows 'L135')
-  { id: 'SB1 the second ramp blends by the route cubic (it starts with a curvature step at from)', pattern: 'L135 1', edits: [[X, "const f2 = channelFn({ v: targets.phi, m: 0 }, sec.target, L2, 'phi', shape2);", "const f2 = channelFn({ v: targets.phi, m: 0 }, sec.target, L2, 'kh', null);"]] },
-  { id: 'SB2 the second ramp\'s end is not pinned to zero curvature (the joint after the piece steps)', pattern: 'L135 4a', edits: [[X, "endC2(out, 'phi');", '']] },
+  // AMENDED L139 (by name, the same two mutants): the code they edit moved when one second bank became any number of changes on every field, so their anchors are L139's lines
+  { id: 'SB1 the second ramp blends by the route cubic (it starts with a curvature step at from)', pattern: 'L135 1', edits: [[X, "segs.push({ F, f: channelFn({ v: prev, m: 0 }, T, L2, C2_CHANNELS.has(ch) ? ch : 'c', shape2) });", "segs.push({ F, f: channelFn({ v: prev, m: 0 }, T, L2, ch === 'phi' ? 'kh' : C2_CHANNELS.has(ch) ? ch : 'c', ch === 'phi' ? null : shape2) });"]] },
+  { id: 'SB2 the second ramp\'s end is not pinned to zero curvature (the joint after the piece steps)', pattern: 'L135 4a', edits: [[X, 'if (C2_CHANNELS.has(ch)) endC2(out, ch);', "if (C2_CHANNELS.has(ch) && ch !== 'phi') endC2(out, ch);"]] },
+  // L139, one row per family of change (src/core/extend.js changeLists and secondRamp, src/core/turnby.js solveList; test/core_changes.test.js)
+  { id: 'CH1 route: a turn or climb change blends by the cubic again (a curvature step in the rate at every mark)', pattern: 'L139 4b', edits: [[X, "C2_CHANNELS.has(ch) ? ch : 'c', shape2) });", 'ch, shape2) });']] },
+  { id: 'CH2 cross-section: a cup or edge change is not pinned to zero curvature at its end', pattern: 'L139 1 (c|e|er):', edits: [[X, 'if (C2_CHANNELS.has(ch)) endC2(out, ch);', "if (ch === 'phi') endC2(out, ch);"]] },
+  { id: 'CH3 corner: each mark aims at its own corner, not the angle so far (the S and the snake end off their heading)', pattern: 'L139 (9|10) ', edits: [[T, 'angles.slice(0, r + 1)', 'angles.slice(r, r + 1)']] },
 ];
-const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js', 'core_width_at_start_f.test.js'];
+const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js', 'core_width_at_start_f.test.js', 'core_changes.test.js'];
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-ramp-mut-'));
   for (const d of ['src', 'tools', 'app/core', 'app/camera', 'app/lib', 'app/validate-ui']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });   // the app folders app/core/panel.js loads

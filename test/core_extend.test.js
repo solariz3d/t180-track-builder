@@ -137,7 +137,9 @@ const flat135 = () => extend(D.createDoc('g'), { length: 1000, family: 'bowl' })
 test('L135 6: a second bank is refused by name where the contract says: from at or before 0, before the first ramp ends, at or past the end; a second change on any channel but the bank; a second bank with no first', () => {
   const ask = (second, extra = {}) => () => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second, ...extra });
   for (const from of [0, -10, 299, 750, 800, NaN]) assert.throws(ask({ phi: { from, target: 0 } }), (e) => e.code === 'BAD_SECOND' && /300/.test(e.message) && /750/.test(e.message), `from ${from} is refused, naming the range 300..750`);
-  assert.throws(ask({ kh: { from: 600, target: 0 } }), (e) => e.code === 'BAD_TARGET' && /bank only/.test(e.message), 'a second turn is refused');
+  // AMENDED L139 (rule changed, the keeper 2026-11-05 00:34: "its more than just the banking, its the turns, climb, etc."): a second turn is now laid (test/core_changes.test.js);
+  // what is refused by name is a change on a channel no change moves (the rise rate r here)
+  assert.throws(ask({ r: { from: 600, target: 0 } }), (e) => e.code === 'BAD_TARGET' && /a change moves/.test(e.message), 'a change of the rise rate is refused');
   assert.throws(ask({ phi: { from: 600, target: NaN } }), (e) => e.code === 'BAD_TARGET', 'a target that is not a number is refused');
   assert.throws(() => extend(flat135(), { length: 750, second: { phi: { from: 600, target: 0 } } }), (e) => e.code === 'BAD_SECOND', 'a second bank with no first bank target is refused');
   assert.doesNotThrow(ask({ phi: { from: 300, target: 0 } }), 'from at the first ramp\'s end is allowed (the contract: at or after it)');
@@ -163,12 +165,14 @@ test('L135 7: no second bank, the same bytes as before: eight extend calls equal
   for (const second of [undefined, null]) assert.equal(sha(extend(flat135(), { ...base, second })), GOLDEN_135[0][2], `second: ${second}`);
 });
 
-test('L135 8: mirror on insert negates both banks: a saved piece that banks +30° and then +10° from 637.5 m goes in mirrored at −30° and −10°', () => {
+// AMENDED L139 (rule changed: K 15 -> 31.5, the keeper 2026-11-05 07:00Z "we dont want the bumps"; pane E 711d7d10): his from 637.5 leaves 112.5 m, under the new
+// minimum (172.5 m for 30°, 140.9 m for 20°), and is now refused by name (test/core_changes.test.js L139 7). The row's rule is unchanged; its from is the latest the rule allows.
+test('L135 8: mirror on insert negates both banks: a saved piece that banks +30° and then +10° from 609 m goes in mirrored at −30° and −10°', () => {
   const PC = require('../src/core/piece.js');
-  const src = extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second: { phi: { from: 637.5, target: 10 * DEG } } });
+  const src = extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second: { phi: { from: 609, target: 10 * DEG } } });
   const run = PC.saveRun(src, 1, 1, { name: 'twice' }), into = PC.insert(flat135(), run, { mirror: true }), P = into.pieces[1];
   const at = (Q, s) => D.channelAt(Q, 'phi', s).v / DEG;
-  for (const s of [300, 500, 637.5, 700, 750]) assert.ok(Math.abs(at(P, s) + at(src.pieces[1], s)) <= 1e-6, `at ${s} m: ${at(P, s)} mirrored from ${at(src.pieces[1], s)}`);
+  for (const s of [300, 500, 609, 700, 750]) assert.ok(Math.abs(at(P, s) + at(src.pieces[1], s)) <= 1e-6, `at ${s} m: ${at(P, s)} mirrored from ${at(src.pieces[1], s)}`);
   assert.ok(Math.abs(at(P, 500) + 30) <= 0.1 && Math.abs(at(P, 750) + 10) <= 1e-6, `the hold at -30 and the end at -10: ${at(P, 500)}, ${at(P, 750)}`);
   // a piece holds no "fields" to remember (piece.js ROAD_KEYS): the second bank IS its bank channel, so save and open round-trip it as they do every channel
   assert.equal(D.serialize(D.parse(D.serialize(src))), D.serialize(src), 'the document with a second bank saves and opens unchanged');
@@ -180,14 +184,16 @@ test('L135 8: mirror on insert negates both banks: a saved piece that banks +30�
 // to `from` but the road the preview, the checker and the export use does not. Measured (B's scratch minscan2.js / kcheck.js, 1,000 m piece, hold before from, built path
 // against the same piece built with no second bank): the shortest second ramp that keeps the built path within 0.5° of the hold grows as the square root of the change,
 // 15 m × √(change in degrees) (30 m for 5°, 82 m for 30°, 142 m for 90°). Under ~0.57 m the document itself drops early too (§2c: no knot of its own survives the filter).
-const minSecondM = (deg) => 15 * Math.sqrt(Math.abs(deg));
+// AMENDED L139 (rule changed: K 15 -> 31.5, the keeper 2026-11-05 07:00Z "we dont want the bumps, we want the transmutations to be smooth all around the board";
+// pane E 711d7d10): the bank's quintic is under BANK_BAR from 31.46·√Δ°. The rows below keep their rules; their numbers are the new minimum's (172.5 m for 30°).
+const minSecondM = (deg) => 31.5 * Math.sqrt(Math.abs(deg));
 test('L135 6b: a second ramp of 0.5 m (from 749.5 on a 750 m piece) is refused by name, and the message names the shortest it may be', () => {
   assert.throws(() => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second: { phi: { from: 749.5, target: 0 } } }),
-    (e) => e.code === 'BAD_SECOND' && e.message.includes(minSecondM(30).toFixed(1)), 'BAD_SECOND, naming 82.2 m');
+    (e) => e.code === 'BAD_SECOND' && e.message.includes(minSecondM(30).toFixed(1)), 'BAD_SECOND, naming 172.5 m');
 });
-test('L135 6c: a second ramp just under the shortest (82.0 m for a 30° change, the minimum 82.2 m) is refused; at the minimum it is laid', () => {
+test('L135 6c: a second ramp just under the shortest (172.4 m for a 30° change, the minimum 172.5 m) is refused; at the minimum it is laid', () => {
   const at = (L2) => () => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second: { phi: { from: 750 - L2, target: 0 } } });
-  assert.throws(at(82.0), (e) => e.code === 'BAD_SECOND' && e.message.includes('82.2'), 'just under: refused, naming the minimum');
+  assert.throws(at(172.4), (e) => e.code === 'BAD_SECOND' && e.message.includes('172.5'), 'just under: refused, naming the minimum');
   assert.doesNotThrow(at(Math.ceil(minSecondM(30) * 10) / 10), 'at the minimum: laid');
 });
 test('L135 6d (a guard): a second ramp at the minimum is laid and the BUILT road holds within 0.5° of the hold up to from (30° and 90° changes)', () => {

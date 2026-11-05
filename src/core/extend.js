@@ -279,6 +279,7 @@ function fitWithHold(piece, ch, f, Lt, target, keep = null) {
  * (test/core_bank_ramp.test.js 'L135'). Then endC2 makes the end's curvature exactly 0, so the next piece, which continues value and slope by a line, meets it C2.
  */
 const SECOND_SUB = 8;
+const KNOT_GAP_M = 5;   // a quarter of KNOT_M: the shortest span a change's inserted knot may make (secondRamp)
 /**
  * THE SHORTEST SECOND RAMP (L135 row-6 fix; E's review §2c and §2d): K metres × √(the change in degrees). The adapter re-rounds every roll corner past its acceleration bar
  * (src/core/adapter.js bankPlan, BANK_BAR), so a short second ramp is spread back over the hold in the road AS BUILT (the preview, the checker, the export), though the
@@ -287,8 +288,12 @@ const SECOND_SUB = 8;
  * K = 15 kept every one of 2,440 checked cases (Δ 0.5° to 135°, every whole metre to 60 m past the minimum, both shapes, an open head and a following straight) within it,
  * except at a few isolated lengths where bankPlan's own rounding spikes (147 m: about 0.019° per degree of change, while 146.5 m and 147.5 m are clean), which no minimum
  * removes. It also keeps the knot filter of secondRamp (k < L − 0.5) from ever meeting a ramp it would leave without knots (§2c), except for a change under ~0.0015°.
+ *
+ * RAISED TO 31.5 (L139, the keeper 2026-11-05 07:00Z: "we dont want the bumps, we want the transmutations to be smooth all around the board"; pane E's Amendment B and its
+ * smooth-all-around addendum, 711d7d10): the bank's quintic peaks at (10/√3)·Δ/L² in roll acceleration, which is under BANK_BAR (3 g at a wheel 10 m out at 170 m/s) from
+ * L = √(5.774·Δ/BANK_BAR) = 31.46·√(Δ in degrees). K = 15 kept the hold but let the change itself roll at up to 4.4 × the bar. ONE constant: the keeper's to move.
  */
-const SECOND_MIN_K = 15;
+const SECOND_MIN_K = 31.5;
 function endC2(piece, ch) {   // the end curvature 2(qₑ − q_d)/(L − U[n−1]) set to 0 by P[n−3] alone (continuity.js endDerivatives' closed form): q_d = qₑ
   const P = piece.channels[ch], n = P.length, L = piece.length, U = D.knotVector(piece), dec = D.DEC[ch];
   if (n < 5) return;
@@ -298,20 +303,111 @@ function endC2(piece, ch) {   // the end curvature 2(qₑ − q_d)/(L − U[n−
 /** The second ramp's shape (the plan's contract): the quintic when the first is (no bankShape), the rounded ramp when it is rounded, and the SWELL when the bank is
  *  "at start" (a swell or the two-share F shape): F's quick rise is a ramp leaving a joint, and laid after a hold it rang 0.1° into the hold (L135 row 3, measured). */
 const secondShape = (shape) => (shape === null ? null : shape === 'rounded' ? 'rounded' : 'swell');
-function secondRamp(piece, f, F, target, turns = []) {
-  const L = piece.length, ts = [...turns.map((k) => +k.toFixed(4))];
-  for (let j = 0; j < SECOND_SUB; j++) ts.push(+(F + ((L - F) * j) / SECOND_SUB).toFixed(4));
-  const add = [...new Set(ts)].filter((k) => k > 0.5 && k < L - 0.5 && piece.knots.every((h) => Math.abs(h - k) > 1e-3));
+function secondRamp(piece, plan) {
+  const L = piece.length, ts = [];
+  for (const ch of CHANGE_CHANNELS) if (plan[ch]) ts.push(...plan[ch].turns.map((k) => +k.toFixed(4)));   // every field's knots in ONE insertion, in one fixed order of the fields
+  // L139: a knot is inserted only KNOT_GAP_M or more from the piece's own and from the one before it. A span of millimetres beside a 20 m knot made the cubic's third
+  // derivative jump there: a width change at its minimum read 1.22 × ROUTE_BAR on the built edge at one length and 0.84 at the next (scratch wscan.js); with the gap, ≤ 0.90
+  const add = [...new Set(ts)].filter((k) => k > 0.5 && k < L - 0.5 && piece.knots.every((h) => Math.abs(h - k) > KNOT_GAP_M)).sort((x, y) => x - y).filter((k, i, a) => i === 0 || k - a[i - 1] > KNOT_GAP_M);
   const out = add.length ? D.insertKnots(piece, add) : piece;
-  const U = D.knotVector(out), n = out.channels.phi.length, keep = new Set();
-  for (let i = 0; i < n; i++) if (U[i + 4] <= F + 1e-9) keep.add(i);   // basis i lives on [U[i], U[i + 4]]: wholly before F, it is the first lay's
-  fitWithHold(out, 'phi', f, Infinity, target, keep);
-  endC2(out, 'phi');
+  const U = D.knotVector(out), n = out.channels.kh.length;
+  for (const ch of CHANGE_CHANNELS) {
+    const p = plan[ch]; if (!p) continue;
+    const keep = new Set();
+    for (let i = 0; i < n; i++) if (U[i + 4] <= p.from + 1e-9) keep.add(i);   // basis i lives on [U[i], U[i + 4]]: wholly before the first mark, it is the first lay's
+    fitWithHold(out, ch, p.f, Infinity, p.target, keep);
+    if (C2_CHANNELS.has(ch)) endC2(out, ch);   // the cross-section ends with curvature 0 too; a route channel ends with slope 0 (fitWithHold's last two points)
+    if (ch === 'c') out.channels.c = out.channels.c.map((x) => Math.min(D.CUP_MAX, Math.max(0, x)));   // the fit's ringing never leaves [0, 150], as the first lay's
+  }
+  return out;
+}
+
+/**
+ * L139, ANY NUMBER OF CHANGES ON EVERY FIELD (the keeper, 2026-11-05 00:34: "Remember its more than just the banking, its the turns, climb, etc."; 06:49Z: "what if i want
+ * the climb to change more than once per piece, the same with turns?"). The fields a change may move, in the ONE order they are laid (so the same `changes` with its keys in
+ * any order is the same document: pane E's registration, addendum A1).
+ */
+const CHANGE_CHANNELS = ['kh', 'kv', 'phi', 'w', 'c', 'e', 'er'];
+const FIELD_NAMES = { kh: 'turn', kv: 'climb', phi: 'bank', w: 'width', c: 'cup', e: 'edge', er: 'right edge' };
+const NTH = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'];
+/** "change 1 (its second bank)": which change, by its number and by the field's own count (the first is the target). */
+const changeName = (ch, k) => `change ${k + 1} (its ${NTH[k + 1] || `${k + 2}th`} ${FIELD_NAMES[ch]})`;
+/** The route's change bar (app/core/panel.js ROUTE_BAR, the same expression; the core does not import the panel): 3 g at a wheel 10 m out at 170 m/s, per metre squared. */
+const ROUTE_BAR = 29.4 / (10 * 170 * 170);
+/** The floor every change is held to, one knot span (document.js KNOT_M; the panel's AT_START_M): the width, cup and edges' minimum, the turn's and climb's least, and the panel's reveal floor. */
+const SECOND_FLOOR_M = 20;
+/** The wheel the cross-section's ride is read at (test/core_joint_c2.test.js, a wheel 8.4 m from the centre). */
+const WHEEL_M = 8.4;
+/**
+ * The shortest a change of `ch` from `a` to `b` may be laid over, in metres (pane E's registration, Amendment A, fc21dcdd; the panel reads it and copies no number):
+ * the bank K·√(the change in degrees), K = SECOND_MIN_K (measured, L135 row 6); the turn and the climb max(20, 3·|Δ| / ROUTE_BAR), the panel's own at-start rule
+ * (routeStartM with ROUTE_SPREAD 3): every change blends by the quintic, whose rate of change peaks at 1.875·|Δ|/L, 0.625 of ROUTE_BAR there. SMOOTH ALL AROUND (the keeper's
+ * 07:00Z ruling, E's 711d7d10): the width's edge line, at w/2, changes its lateral curvature at up to 30·|Δw|/L³ (the quintic's third derivative peaks at 60/L³), under
+ * ROUTE_BAR from L = (30·|Δw|/ROUTE_BAR)^⅓ (143 m for a 10 m change); the cup and the edges move the wheel line 8.4 m out at most 8.4 m·sin per radian of their angle (ψ
+ * there is at most the angle, ∂z/∂angle ≤ 8.4 m), so its vertical curvature changes at up to 60·8.4·|Δ rad|/L³, under ROUTE_BAR from L = (60·8.4·|Δ rad|/ROUTE_BAR)^⅓
+ * (44.2 m × ∛(Δ in degrees): 138 m for 30°). Never under SECOND_FLOOR_M. Measured on the built road (scratch smooth.js, the hand-back).
+ */
+function secondMinM(ch, a, b) {
+  if (!CHANGE_CHANNELS.includes(ch)) throw new D.CoreError('BAD_TARGET', `a change moves ${CHANGE_CHANNELS.join(', ')}, got "${ch}"`);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) throw new D.CoreError('BAD_TARGET', `a change's minimum needs two finite values, got ${a} and ${b}`);
+  const d = Math.abs(b - a);
+  if (ch === 'phi') return SECOND_MIN_K * Math.sqrt(d / (Math.PI / 180));
+  if (ch === 'kh' || ch === 'kv') return Math.max(SECOND_FLOOR_M, (3 * d) / ROUTE_BAR);
+  if (ch === 'w') return Math.max(SECOND_FLOOR_M, Math.cbrt((30 * d) / (0.9 * ROUTE_BAR)));   // sized for 0.9 of the bar: the cubic's fit of the quintic reads up to ~9% over it (wscan.js)
+  return Math.max(SECOND_FLOOR_M, Math.cbrt((60 * WHEEL_M * d * (Math.PI / 180)) / ROUTE_BAR));   // the cup and the edges, in degrees
+}
+/**
+ * The changes asked for, checked: { ch: { items: [{ from, target }], whole } } for each field with at least one. `changes` is { ch: [{ from, target }, ...] }; the L135
+ * form `second: { ch: { from, target } }` is a one-item list. Change k runs from its mark to the next (or the piece's end) and blends from the value before it (the
+ * first target, for change 1) to its own target; it is refused by name (BAD_SECOND: the field, which change, the minimum) when shorter than secondMinM. The first mark is
+ * at or after the field's first ramp's end, or anywhere inside the piece when that ramp is the whole piece (it is then laid over [0, the first mark]).
+ */
+function changeLists(changes, second, targets, typed, length, Lof0) {
+  const given = (v) => v !== undefined && v !== null, raw = {};
+  if (given(second)) {
+    if (typeof second !== 'object' || Array.isArray(second)) throw new D.CoreError('BAD_SECOND', `second is { field: { from, target } }, got ${second}`);
+    for (const [ch, v] of Object.entries(second)) if (given(v)) raw[ch] = [v];
+  }
+  if (given(changes)) {
+    if (typeof changes !== 'object' || Array.isArray(changes)) throw new D.CoreError('BAD_SECOND', `changes is { field: [{ from, target }, ...] }, got ${changes}`);
+    for (const [ch, v] of Object.entries(changes)) {
+      if (!given(v)) continue;
+      if (!Array.isArray(v)) throw new D.CoreError('BAD_SECOND', `the changes of ${ch} are a list [{ from, target }, ...], got ${JSON.stringify(v)}`);
+      if (raw[ch]) throw new D.CoreError('BAD_SECOND', `${ch} is given both as second and as changes: give one`);
+      raw[ch] = v;
+    }
+  }
+  // an edge typed without a right one sets both sides (as its target does); its changes do too, unless the right edge was typed on its own
+  if (raw.e && !raw.er && !(typed && given(typed.er))) raw.er = raw.e;
+  const out = {};
+  for (const ch of Object.keys(raw)) if (!CHANGE_CHANNELS.includes(ch)) throw new D.CoreError('BAD_TARGET', `a change moves ${CHANGE_CHANNELS.join(', ')} (the turn, climb, bank, width, cup and edges), got "${ch}"`);
+  for (const ch of CHANGE_CHANNELS) {
+    const items = raw[ch]; if (!items || !items.length) continue;
+    const name = `the ${FIELD_NAMES[ch]} (${ch})`;
+    if (!given(targets[ch])) throw new D.CoreError('BAD_SECOND', `a change of ${name} follows a first: give it a target too`);
+    const R1 = Lof0(ch), whole = R1 >= length - 1e-9, lo = whole ? 0 : R1;
+    items.forEach((it, k) => {
+      const { from: F, target: T } = it || {};
+      if (!Number.isFinite(T)) throw new D.CoreError('BAD_TARGET', `${name} ${changeName(ch, k)}: its target must be a finite number, got ${T}`);
+      if (ch === 'c' && !(T >= 0 && T <= D.CUP_MAX)) throw new D.CoreError('BAD_CUP', `${name} ${changeName(ch, k)}: the cup must be from 0 to ${D.CUP_MAX} degrees, got ${T}`);
+      if (ch === 'w' && !(T > 0)) throw new D.CoreError('BAD_TARGET', `${name} ${changeName(ch, k)}: the width must be more than 0 m, got ${T}`);
+      if (k === 0 && !(Number.isFinite(F) && F > 0 && F >= lo && F < length)) throw new D.CoreError('BAD_SECOND', `${name} ${changeName(ch, 0)} starts ${whole ? 'inside the piece' : `at or after its first ramp's end (${lo} m)`} and before the piece's end (${length} m): from in ${whole ? `(0, ${length})` : `[${lo}, ${length})`}, got ${F}`);
+      if (k > 0 && !(Number.isFinite(F) && F > items[k - 1].from && F < length)) throw new D.CoreError('BAD_SECOND', `${name} ${changeName(ch, k)} starts after change ${k} (${items[k - 1].from} m) and before the piece's end (${length} m), got ${F}`);
+    });
+    // each change, from its mark to the next (or the end), at least the field's minimum (L135 row 6 for the bank; pane E's Amendment A for the rest)
+    let prev = targets[ch];
+    items.forEach(({ from: F, target: T }, k) => {
+      const end = k + 1 < items.length ? items[k + 1].from : length, minM = secondMinM(ch, prev, T), what = k + 1 < items.length ? `change ${k + 2}'s mark` : "the piece's end";
+      if (end - F < minM - 1e-9) throw new D.CoreError('BAD_SECOND', `${name} ${changeName(ch, k)}, from ${+prev.toPrecision(6)} to ${+T.toPrecision(6)}, needs at least ${minM.toFixed(1)} m before ${what} (the built road rounds a shorter one back over the hold): from at most ${(end - minM).toFixed(1)}, got ${F}`);
+      prev = T;
+    });
+    out[ch] = { items: items.map(({ from, target }) => ({ from, target })), whole };
+  }
   return out;
 }
 
 function extend(doc, opts = {}) {
-  let { length, transition, targets = {}, family, knotM, first, grip, bankShape, startShapes, second } = opts;
+  let { length, transition, targets = {}, family, knotM, first, grip, bankShape, startShapes, second, changes } = opts;
   if (bankShape !== undefined && bankShape !== null && bankShape !== 'rounded' && bankShape !== 'swell' && !isShares(bankShape)) throw new D.CoreError('BAD_SHAPE', `bankShape is 'rounded', 'swell', { rise, fall } or left out, got ${bankShape}`);
   if (isShares(bankShape)) rampShape(0.5, bankShape.rise, bankShape.fall);   // the shares are checked before anything is laid
   const shape = bankShape === 'rounded' || bankShape === 'swell' || isShares(bankShape) ? bankShape : null;
@@ -361,24 +457,10 @@ function extend(doc, opts = {}) {
     if (!(Lt > 0 && Lt <= length)) throw new D.CoreError('BAD_TRANSITION', `the transition must be in (0, length], got ${Lt}`);
   }
   const Lof0 = (ch) => (perChannel ? (ramp[ch] === undefined ? length : ramp[ch]) : transition === undefined ? length : transition);
-  // L135, THE SECOND BANK: checked here, where the first ramp's end is known; a first bank that eases over the whole piece is laid over [0, from] instead (Lof below)
-  let sec = null;
-  if (second !== undefined && second !== null) {
-    if (typeof second !== 'object' || Array.isArray(second)) throw new D.CoreError('BAD_SECOND', `second is { phi: { from, target } }, got ${second}`);
-    for (const k of Object.keys(second)) if (k !== 'phi') throw new D.CoreError('BAD_TARGET', `a second change is bank only for now (phi), got "${k}"`);
-    if (second.phi !== undefined && second.phi !== null) {
-      const { from: F, target: T2 } = second.phi;
-      if (!given(targets.phi)) throw new D.CoreError('BAD_SECOND', 'a second bank follows a first: give the bank a target too');
-      if (!Number.isFinite(T2)) throw new D.CoreError('BAD_TARGET', `the second bank's target must be a finite number, got ${T2}`);
-      const R1 = Lof0('phi'), whole = R1 >= length - 1e-9, lo = whole ? 0 : R1;
-      if (!(Number.isFinite(F) && F > 0 && F >= lo && F < length)) throw new D.CoreError('BAD_SECOND', `the second bank starts ${whole ? 'inside the piece' : `at or after the first bank's end (${lo} m)`} and before the piece's end (${length} m): from in ${whole ? `(0, ${length})` : `[${lo}, ${length})`}, got ${F}`);
-      // L135 row-6 fix (E's review §2c, §2d): a second ramp too short for the road AS BUILT is refused, by the measured minimum (SECOND_MIN_K)
-      const dDeg = Math.abs(T2 - targets.phi) / (Math.PI / 180), minM = SECOND_MIN_K * Math.sqrt(dDeg);
-      if (length - F < minM - 1e-9) throw new D.CoreError('BAD_SECOND', `a second bank of ${dDeg.toFixed(1)}° needs at least ${minM.toFixed(1)} m before the piece's end (the built road rounds a shorter one back over the hold): from at most ${(length - minM).toFixed(1)}, got ${F}`);
-      sec = { from: F, target: T2, whole };
-    }
-  }
-  const Lof = (ch) => (ch === 'phi' && sec && sec.whole ? sec.from : Lof0(ch));
+  // L135 THE SECOND BANK, L139 ANY NUMBER OF CHANGES ON EVERY FIELD: checked here, where each first ramp's end is known; a first ramp over the whole piece is laid over
+  // [0, its first mark] instead (Lof below). See changeLists.
+  const lists = changeLists(changes, second, targets, opts.targets, length, Lof0);
+  const Lof = (ch) => (lists[ch] && lists[ch].whole ? lists[ch].items[0].from : Lof0(ch));
   const shortRamps = Object.keys(ramp).filter((ch) => ramp[ch] < length - 1e-9 && targets[ch] !== undefined && targets[ch] !== null);
   const shapeOf = (ch) => (ch === 'phi' ? shape : (startShapes && shortRamps.includes(ch) && startShapes[ch]) || null);   // the bank's shape, or a cup's or edge's at start
   const last = [...doc.pieces].reverse().find((P) => P.type === 'road');
@@ -477,13 +559,26 @@ function extend(doc, opts = {}) {
     fitWithHold(refined, 'phi', channels.phi, Lt, targets.phi); c2Ends(refined, 'phi');
     laid = refined;
   }
-  if (sec) {   // L135: the second bank, over [from, length], on the piece as laid above (secondRamp)
-    const f1 = channels.phi, shape2 = secondShape(shape), L2 = length - sec.from;
-    const f2 = channelFn({ v: targets.phi, m: 0 }, sec.target, L2, 'phi', shape2);
-    const turns = shape2 ? turnsOf(shape2, L2).map((k) => sec.from + k) : [];   // a rounded or swell second ramp gets knots where its rate turns, as the first does
-    laid = secondRamp(laid, (s) => (s < sec.from ? f1(s) : f2(s - sec.from)), sec.from, sec.target, turns);
+  if (Object.keys(lists).length) {   // L135 / L139: each field's changes, over [its marks, length], on the piece as laid above (secondRamp)
+    const plan = {};
+    for (const ch of CHANGE_CHANNELS) {
+      const li = lists[ch]; if (!li) continue;
+      const f1 = channels[ch], shape2 = ch === 'phi' ? secondShape(shape) : null, segs = [], turns = [];
+      li.items.forEach(({ from: F, target: T }, k) => {
+        const end = k + 1 < li.items.length ? li.items[k + 1].from : length, prev = k ? li.items[k - 1].target : targets[ch], L2 = end - F;
+        // every change blends by the C2 quintic, the route's too (read as the cup's: no shape), so the rate meets each mark with no curvature step: measured on five lists
+        // (scratch slopes.js), the cubic left the turn 1.2e-6 /m off its first value and sloping 1.2e-6 /m² at a mark, the quintic 2e-8 and 1e-10; its peak, 1.875·Δ/L, is 0.625 of the
+        // route's bar at the turn's and climb's minimum (secondMinM)
+        segs.push({ F, f: channelFn({ v: prev, m: 0 }, T, L2, C2_CHANNELS.has(ch) ? ch : 'c', shape2) });
+        if (shape2) turns.push(...turnsOf(shape2, L2).map((x) => F + x));   // a rounded or swell bank ramp gets knots where its rate turns, as the first does
+        for (let j = 0; j < SECOND_SUB; j++) turns.push(F + (L2 * j) / SECOND_SUB);   // in L135's order, the turns then the even knots: the insertion order is in the bytes
+      });
+      const f = (s) => { if (s < segs[0].F) return f1(s); let g = segs[0]; for (const x of segs) if (s >= x.F) g = x; return g.f(s - g.F); };
+      plan[ch] = { f, from: segs[0].F, target: li.items[li.items.length - 1].target, turns };
+    }
+    laid = secondRamp(laid, plan);
   }
   return D.appendPiece(doc, laid);
 }
 
-module.exports = { extend, roundedLinear, rampShape, BANK_ROUND_M, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, sampleBasis, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };
+module.exports = { extend, secondMinM, SECOND_MIN_K, SECOND_FLOOR_M, CHANGE_CHANNELS, roundedLinear, rampShape, BANK_ROUND_M, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, sampleBasis, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };

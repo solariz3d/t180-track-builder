@@ -75,12 +75,14 @@ for (const [name, make] of [['his ribbon', ribbon], ['ELYSIUM (the fixture)', el
 
 // ── L135 4b: THE SECOND BANK, felt. The piece that banks twice and the straight after it, read by the same four measures: the second ramp's end is a joint like
 // any other, and a car crossing it must feel nothing the pieces do not already have inside them.
-test('L135 4b: a straight, his 750 m piece banking 30° and back to level from 637.5 m, a straight: no step, the roll under the bar, no dip, no ripple at either joint', () => {
+// AMENDED L139 (rule changed: K 15 -> 31.5, the keeper 2026-11-05 07:00Z "we dont want the bumps"; pane E 711d7d10): his from 637.5 leaves 112.5 m, under the new
+// minimum (172.5 m for 30°, 140.9 m for 20°), and is now refused by name (test/core_changes.test.js L139 7). The row's rule is unchanged; its from is the latest the rule allows.
+test('L135 4b: a straight, his 750 m piece banking 30° and back to level from 577 m, a straight: no step, the roll under the bar, no dip, no ripple at either joint', () => {
   let doc = extend(D.createDoc('twice'), { length: 1000, family: 'bowl' });
-  doc = extend(doc, { ...opts(750, 30, 0), second: { phi: { from: 637.5, target: 0 } } });
+  doc = extend(doc, { ...opts(750, 30, 0), second: { phi: { from: 577, target: 0 } } });
   doc = extend(doc, opts(300, null, 0));
   assert.ok(Math.abs(D.channelAt(doc.pieces[1], 'phi', 750).v) <= 1e-9, 'the piece ends level (its second bank)');
-  const J = joints(doc, [{ a: 1000 + 637.5, b: 1750, delta: 30 * DEG }]), bad = J.filter((r) => r.bad.length);   // the second ramp is held to its own floor, as a piece is (allowedAt)
+  const J = joints(doc, [{ a: 1000 + 577, b: 1750, delta: 30 * DEG }]), bad = J.filter((r) => r.bad.length);   // the second ramp is held to its own floor, as a piece is (allowedAt)
   assert.equal(J.length, 2, `${J.length} joints read`);
   assert.equal(bad.length, 0, bad.map((r) => `${r.joint}: ${r.bad.join('; ')}`).join(' | '));
 });

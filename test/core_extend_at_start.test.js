@@ -81,9 +81,11 @@ test('at start: the turn is sized to its change (51.5 m), the small climb keeps 
 });
 
 // ── L135 3: THE SECOND BANK with "at start" ticked (the plan's row 3): the first ramp is the panel's at-start ramp, then the hold, then the second ramp.
-test('L135 3: bank 30° "at start" on his 750 m piece, then back to level from 637.5 m: the at-start ramp reaches 30° at its end, holds to 637.5, falls to 0 at the end with slope 0, no curvature either side of from', () => {
+// AMENDED L139 (rule changed: K 15 -> 31.5, the keeper 2026-11-05 07:00Z "we dont want the bumps"; pane E 711d7d10): his from 637.5 leaves 112.5 m, under the new
+// minimum (172.5 m for 30°, 140.9 m for 20°), and is now refused by name (test/core_changes.test.js L139 7). The row's rule is unchanged; its from is the latest the rule allows.
+test('L135 3: bank 30° "at start" on his 750 m piece, then back to level from 577 m: the at-start ramp reaches 30° at its end, holds to 577, falls to 0 at the end with slope 0, no curvature either side of from', () => {
   const o = extendOptions({ length: '750', turn: '', climb: '', bank: '30', width: '', cup: '', edge: '', start: '', tube: '', atStart: { ...NONE, bank: true }, turnAs: 'rate', head: headOf(straight()) });
-  const R = o.transition.phi, F = 637.5;
+  const R = o.transition.phi, F = 577;
   assert.ok(Number.isFinite(R) && R < F, `the panel's at-start ramp is a short one, before from: ${R}`);
   const doc = extend(straight(), { ...o, second: { phi: { from: F, target: 0 } } }), P = doc.pieces[1];
   const at = (s) => D.channelAt(P, 'phi', s).v / DEG;
