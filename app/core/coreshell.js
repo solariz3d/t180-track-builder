@@ -42,7 +42,7 @@
 'use strict';
 
 const D = require('../../src/core/document.js');
-const { extend } = require('../../src/core/extend.js');
+const EXT = require('../../src/core/extend.js'), { extend } = EXT;
 const LV = require('../../src/core/level.js');
 const TB = require('../../src/core/turnby.js');
 const GT = require('../../src/core/gridturn.js');   // 2026-10-12: Turn to grid
@@ -745,6 +745,11 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       const r = commit('removeHead', () => Object.freeze(D.checkDoc({ ...d, closed: false, pieces: Object.freeze(d.pieces.slice(0, -1)) })), { lastEdited: null });
       return wasClosed && st.history.present !== d ? set(ok('removed the last piece: the loop is open again (Ctrl+Z puts the closed lap back)')) : r;
     },
+    // THE LATER CHANGES' NUMBERS FOR THE PANEL (L139, pane C, at B's word): the core's own, passed through, because the panel may not require src/core/extend.js
+    // (it pulls node's fs, which the app's loader refuses). null where this core does not export them: the panel then lays 85% and offers nothing
+    secondMinM: (ch, a, b) => (typeof EXT.secondMinM === 'function' ? EXT.secondMinM(ch, a, b) : null),
+    secondFloorM: () => (Number.isFinite(EXT.SECOND_FLOOR_M) ? EXT.SECOND_FLOOR_M : null),
+    cornerMinM: (d, o) => (typeof TB.cornerMinM === 'function' ? TB.cornerMinM(d, o) : null),
     /** The GHOST of an extension: the track as it would be, not committed (the preview's 't180-ghost' candidate). */
     candidate: (opts, { coarse = false } = {}) => {
       if (coarse) { const n0 = doc().pieces.length, dc = TB.extendCorner(doc(), opts); return { segments: segmentsOf(dc, { segMFor: (P, pi) => (pi >= n0 && P.type === 'road' ? ghostSegM(P) : undefined) }), closed: false, start: startOf(dc) }; }   // the drag's ghost
