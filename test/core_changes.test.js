@@ -81,6 +81,7 @@ test('L139 4 (E §M3): three fields, three marks; each holds to its own mark wit
   for (const order of perms(Object.keys(M3))) {
     const d = extend(flat(), { ...base, changes: Object.fromEntries(order.map((k) => [k, M3[k]])) });
     for (const ch of order) { const lk = leak(d, none, ch, M3[ch][0].from), dl = Math.abs(M3[ch][0].target - M3_FIRST[ch]); assert.ok(lk <= 0.01 * dl, `${order.join(',')}: ${ch} leaks ${lk} against ${0.01 * dl}`); }
+    for (const ch of order) assert.ok(Math.abs(endOf(d, ch).v - M3[ch][0].target) <= 1e-6, `${order.join(',')}: ${ch} ends at ${endOf(d, ch).v}, not its change's ${M3[ch][0].target}`);   // the changes are laid at all (a core that ignores them is order-blind too)
     docs.add(D.serialize(d));
   }
   assert.equal(docs.size, 1, 'the order of the fields in `changes` moves nothing');
