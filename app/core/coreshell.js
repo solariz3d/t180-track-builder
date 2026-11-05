@@ -750,6 +750,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     secondMinM: (ch, a, b) => (typeof EXT.secondMinM === 'function' ? EXT.secondMinM(ch, a, b) : null),
     secondFloorM: () => (Number.isFinite(EXT.SECOND_FLOOR_M) ? EXT.SECOND_FLOOR_M : null),
     cornerMinM: (d, o) => (typeof TB.cornerMinM === 'function' ? TB.cornerMinM(d, o) : null),
+    cornerChangeMinM: (d, o, deg) => (typeof TB.cornerChangeMinM === 'function' ? TB.cornerChangeMinM(d, o, deg) : null),   // L139 R1 (pane B): a later corner's shortest, by its angle
     /** The GHOST of an extension: the track as it would be, not committed (the preview's 't180-ghost' candidate). */
     candidate: (opts, { coarse = false } = {}) => {
       if (coarse) { const n0 = doc().pieces.length, dc = TB.extendCorner(doc(), opts); return { segments: segmentsOf(dc, { segMFor: (P, pi) => (pi >= n0 && P.type === 'road' ? ghostSegM(P) : undefined) }), closed: false, start: startOf(dc) }; }   // the drag's ghost

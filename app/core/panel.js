@@ -364,8 +364,9 @@ function mount(root, shell, mountOpts = {}) {
   // has no target (the first change is its target). A new document clears them all (showHead); Undo gives back the undone piece's own (fieldsNow, putBack)
   // the core's minimum and floor, through the shell (a shell without them: null)
   const shellMinM = (ch, a, b) => (typeof shell.secondMinM === 'function' ? shell.secondMinM(ch, a, b) : null);
-  // a corner's segment: the core's shortest corner after a straight (src/core/turnby.js cornerMinM, through the shell; B: the same for every later corner), else 0
-  const cornerMin = (o) => { const v = typeof shell.cornerMinM === 'function' ? shell.cornerMinM(shell.getState().history.present, o) : null; return Number.isFinite(v) && v > 0 ? v : 0; };
+  // a corner's segment: the core's shortest corner of that angle (src/core/turnby.js cornerChangeMinM, through the shell; L139 R1, pane B: max(cornerMinM, 31.5·√|Δθ°|),
+  // smooth to ride), else the shortest after a straight (cornerMinM), else 0
+  const cornerMin = (o, deg) => { const doc = shell.getState().history.present, v = typeof shell.cornerChangeMinM === 'function' && Number.isFinite(deg) ? shell.cornerChangeMinM(doc, o, deg) : typeof shell.cornerMinM === 'function' ? shell.cornerMinM(doc, o) : null; return Number.isFinite(v) && v > 0 ? v : 0; };
   const secondFloor = () => { const v = typeof shell.secondFloorM === 'function' ? shell.secondFloorM() : null; return Number.isFinite(v) && v > 0 ? v : null; };
   const SEC = Object.fromEntries(SECOND_FIELDS.map((f) => [f, { list: [], box: el('div', { class: 'then-list', 'aria-label': `${SECOND_NAME[f]} changes` }) }]));
   const secUnit = (f) => (f === 'turn' || f === 'climb' ? (cornerMode() ? '°' : '°/100m') : f === 'width' ? 'm' : '°');
@@ -1169,7 +1170,7 @@ function mount(root, shell, mountOpts = {}) {
       const first = corner ? Number(f === 'turn' ? asTyped('turn') : asTyped('climb')) : o.targets[key];
       if (!Number.isFinite(first)) continue;
       let end = (o.transition && o.transition[key]) || 0;
-      if (arr.length) { const k = arr.length - 1, prev = k === 0 ? first : (corner ? arr[k - 1].deg : arr[k - 1].target); end = arr[k].from + (corner ? cornerMin(o) : secondMinOf(shellMinM, key, prev, arr[k].target)); }
+      if (arr.length) { const k = arr.length - 1, prev = k === 0 ? first : (corner ? arr[k - 1].deg : arr[k - 1].target); end = arr[k].from + (corner ? cornerMin(o, Number(arr[k].deg)) : secondMinOf(shellMinM, key, prev, arr[k].target)); }
       const R = L - end; if (!(R >= 2 * floor - 1e-9)) continue;
       const from = near2(end + R / 2), st = ST.styleOf(f), last = arr.length ? arr[arr.length - 1] : null;
       const base = corner ? 0 : f === 'bank' ? Number(last ? last.target / DEG : bankTarget()) : last ? (f === 'turn' || f === 'climb' ? last.target * 100 / DEG : last.target) : Number(f === 'edgeR' ? rightTarget() : asTyped(f));

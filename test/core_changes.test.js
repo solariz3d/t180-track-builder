@@ -180,9 +180,11 @@ test('L139 11 (the amendment): a climb list over an inversion (+120°, then −1
   const e = endOf(d, 'kv'); assert.ok(Math.abs(e.v) <= 1e-9 && Math.abs(e.d1) <= 1e-9, `ends at ${e.v}, slope ${e.d1}`);
 });
 test('L139 12 (E §M2): a corner after a corner needs the shortest corner from the straight it starts on: 0.1 m under it is refused by name, at it it is laid', () => {
-  const min = TB.cornerMinM(flat(), { length: 1000 }), make = (L2) => () => TB.extendCorner(flat(), { length: 1000, turnDeg: 90, changes: { turnDeg: [{ from: 1000 - L2, deg: 30 }] } });
-  assert.ok(min >= 20 && min <= 25, `the shortest corner ${min} m`);
-  assert.throws(make(min - 0.1), (e) => e.code === 'TURN_TOO_SHORT' && e.message.includes('change 1') && e.message.includes(String(min)), `refused at ${min - 0.1}`);
+  // AMENDED L139 R1 (rule changed, pane E's review §3: a later corner at cornerMinM read 194 × the bar): the minimum is max(cornerMinM, 31.5·√|Δθ°|), 172.5 m for 30°;
+  // cornerMinM, the shortest corner from a straight, is still its floor
+  assert.ok(TB.cornerMinM(flat(), { length: 1000 }) >= 20 && TB.cornerMinM(flat(), { length: 1000 }) <= 25, 'the shortest corner from a straight, the floor');
+  const min = TB.cornerChangeMinM(flat(), { length: 1000 }, 30), make = (L2) => () => TB.extendCorner(flat(), { length: 1000, turnDeg: 90, changes: { turnDeg: [{ from: 1000 - L2, deg: 30 }] } });
+  assert.throws(make(min - 0.1), (e) => e.code === 'TURN_TOO_SHORT' && e.message.includes('change 1') && e.message.includes(min.toFixed(1)), `refused at ${min - 0.1}`);
   assert.doesNotThrow(make(min), `laid at ${min}`);
   assert.throws(() => TB.extendCorner(flat(), { length: 1000, turnDeg: 90, changes: { turnDeg: [{ from: 5, deg: 30 }] } }), (e) => e.code === 'TURN_TOO_SHORT' && e.message.includes('change 0'), 'the first corner must fit before its mark');
 });
@@ -203,3 +205,45 @@ test('L139 15 (E addendum X2): a climb RATE list through an inversion (0 → 0.0
   assert.ok(integral(three, 'kv', 500) / DEG > 90, `the road is past vertical by 500 m: ${integral(three, 'kv', 500) / DEG}°`);
   const e = endOf(three, 'kv'); assert.ok(Math.abs(e.v) <= 1e-9 && Math.abs(e.d1) <= 1e-9, `ends at ${e.v}, slope ${e.d1}`);
 });
+
+// ── L139 R1/R2 (pane E's review of d750353, exo_memory/handback/p-l139-E_2026-11-05.md §2, §3; the chair's 02:30 packet): 9′ read on the BUILT road, on the path the
+// keeper uses (app/core/panel.js extendOptions, then extendCorner), and the corner lists' own smooth length
+const BANK_BAR = 29.4 / (10 * 170 * 170);
+const { extendOptions } = require('../app/core/panel.js');
+/** The built road's roll acceleration (the adapter's roll, 2 m second differences, as joints() b reads it), peak over [a, b] in track metres, ÷ the bar. */
+function builtRollPeak(d, a, b) {
+  const S = A.toPath(d).path.samples, r = (s) => { let lo = 0, hi = S.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S[m].s <= s) lo = m; else hi = m; } return S[lo].roll; };
+  let m = 0; for (let s = a; s <= b; s += 0.5) m = Math.max(m, Math.abs(r(s + 2) - 2 * r(s) + r(s - 2)) / 4); return m / BANK_BAR;
+}
+/** The built heading's (or pitch's) second difference over 1 m, peak over [a, b], ÷ the bar (pane E's l139slope.js reader). */
+function builtTurnPeak(d, a, b, pitch = false) {
+  const S = A.toPath(d).path.samples; let prev = null, off = 0;
+  const H = S.map((x) => { let v = pitch ? Math.asin(Math.max(-1, Math.min(1, x.T[1]))) : Math.atan2(x.T[2], x.T[0]); if (prev !== null) { while (v + off - prev > Math.PI) off -= 2 * Math.PI; while (v + off - prev < -Math.PI) off += 2 * Math.PI; } v += off; prev = v; return { s: x.s, v }; });
+  const atS = (s) => { let lo = 0, hi = H.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (H[m].s <= s) lo = m; else hi = m; } const f = (s - H[lo].s) / (H[hi].s - H[lo].s); return H[lo].v + f * (H[hi].v - H[lo].v); };
+  let m = 0; for (let s = a; s <= b; s += 0.5) m = Math.max(m, Math.abs(atS(s + 1) - 2 * atS(s) + atS(s - 1))); return m / BANK_BAR;
+}
+const panelPiece = (f) => extendOptions({ length: '750', turn: '', climb: '', bank: '', width: '', cup: '', edge: '', start: '', tube: '', atStart: {}, turnAs: 'corner', ...f, secondMinM: X.secondMinM });
+for (const [what, f] of [
+  ['his 11-05 picture (750 m assumed): a −90° corner, bank 66.14° then 0, cup 15.5, the panel\'s default from', { turn: '-90', bank: '66.14', cup: '15.5', changes: { bank: [{ then: '0', from: '' }] } }],
+  ['the same, bank "early"', { turn: '-90', bank: '66.14', cup: '15.5', atStart: { bank: true }, changes: { bank: [{ then: '0', from: '' }] } }],
+  ['the same on a straight road (turn as a rate, none typed)', { turnAs: 'rate', bank: '66.14', cup: '15.5', changes: { bank: [{ then: '0', from: '' }] } }],
+  ['his sketch (L136): 270° corner, climb −6, bank −28.47 early then 0, width 30, cup 15 early', { turn: '270', climb: '-6', bank: '-28.47', width: '30', cup: '15', atStart: { bank: true, cup: true }, changes: { bank: [{ then: '0', from: '' }] } }],
+]) {
+  test(`L139 R2: laid BY THE PANEL, ${what}: the built road's roll accelerates under the bar (× 1.05) from 20 m before the change's mark to 20 m into the next piece`, () => {
+    const o = panelPiece(f), d = extend(TB.extendCorner(flat(), o), { length: 200 }), F = o.changes.phi[0].from;
+    const pk = builtRollPeak(d, 1000 + F - 20, 1750 + 20);
+    assert.ok(pk <= 1.05, `the built roll reads ${pk.toFixed(3)} × the bar after the mark at ${F} m`);
+  });
+}
+// R1: a corner after the first is a symmetric ease over its own segment, whose curvature rate scales as Δθ/L² (pane E §3: 90° reads 1.021 over 300 m, 194 × over 21 m);
+// its shortest is max(cornerMinM, SECOND_MIN_K·√|Δθ in degrees|), the bank's own constant from the same ease physics
+for (const [k, deg] of [['turnDeg', 90], ['turnDeg', 30], ['climbDeg', 40]]) {
+  test(`L139 R1 ${k} ${deg}°: a corner change shorter than max(cornerMinM, 31.5·√Δθ°) by 0.1 m is refused by name; at it, the built road's ${k === 'turnDeg' ? 'turn' : 'pitch'} rate is under the bar (× 1.05)`, () => {
+    const min = Math.max(TB.cornerMinM(flat(), { length: 1000 }), 31.5 * Math.sqrt(deg)), seg = (L2) => ({ length: 3 * L2, [k]: deg, changes: { [k]: [{ from: L2, deg: -deg }, { from: 2 * L2, deg }] } });
+    assert.throws(() => TB.extendCorner(flat(), { ...seg(min), changes: { [k]: [{ from: min, deg: -deg }, { from: 2 * min, deg }] }, length: 3 * min - 0.1 }),
+      (e) => /TOO_SHORT/.test(e.code) && e.message.includes('change 2') && e.message.includes(min.toFixed(1)), `refused 0.1 m under ${min}`);
+    assert.ok(typeof TB.cornerChangeMinM === 'function' && Math.abs(TB.cornerChangeMinM(flat(), { length: 1000 }, deg) - min) <= 1e-9, 'exported, for the panel (the shell)');
+    const d = extend(TB.extendCorner(flat(), seg(Math.ceil(min * 10) / 10)), { length: 200 }), pk = builtTurnPeak(d, 1000 + min - 20, 1000 + 3 * min + 20, k === 'climbDeg');
+    assert.ok(pk <= 1.05, `the built ${k === 'turnDeg' ? 'heading' : 'pitch'} rate reads ${pk.toFixed(3)} × the bar over the later corners`);
+  });
+}

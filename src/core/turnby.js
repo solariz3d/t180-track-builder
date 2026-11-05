@@ -24,7 +24,7 @@
 // turn are amber), so a short sharp turn is the user's to judge by driving it; how sharp a builder turn can be is still to measure.
 'use strict';
 const D = require('./document.js');
-const { extend, bloss } = require('./extend.js');
+const { extend, bloss, SECOND_MIN_K } = require('./extend.js');
 const { basisN } = require('../../tools/piecewise.cjs');
 
 const SEG_M = 2;               // the adapter's segment (toSegments segM): the heading is integrated on its ends
@@ -210,6 +210,15 @@ function cornerMinM(doc, opts = {}) {
   }
   return CORNER_MIN.get(key);
 }
+/**
+ * THE SHORTEST LATER CORNER (L139 R1, pane E's review §3): a corner after the first is the symmetric ease of its own segment, whose curvature rate (the built heading's,
+ * or the pitch's, second difference) scales as Δθ/L²: 90° read 1.021 × ROUTE_BAR over 300 m and 194 × over cornerMinM's 21 m. Under the bar from about 31.5–31.8·√(Δθ in
+ * degrees), the bank's own constant from the same ease physics, so: max(cornerMinM, SECOND_MIN_K·√|Δθ°|). Exported for the panel (its offers and default marks).
+ */
+function cornerChangeMinM(doc, opts, deg) {
+  if (!Number.isFinite(deg)) throw new D.CoreError('BAD_TARGET', `a corner's minimum needs a finite number of degrees, got ${deg}`);
+  return Math.max(cornerMinM(doc, opts), SECOND_MIN_K * Math.sqrt(Math.abs(deg)));
+}
 /** The corner lists asked for, checked: { kh: { marks, angles } } (rad), or null when no list has a change. */
 function cornerLists(opts) {
   const ch = opts.changes, given = (v) => v !== undefined && v !== null;
@@ -283,10 +292,10 @@ function extendList(doc, opts, rest, lists, aims) {
   for (const [, k] of CORNER_FIELDS) delete changes[k];
   const o = { ...rest }; if (Object.keys(changes).length) o.changes = changes; else delete o.changes;
   for (const ch of Object.keys(lists)) {
-    const { marks, angles, k, code, word } = lists[ch], min = cornerMinM(doc, o);
+    const { marks, angles, k, code, word } = lists[ch];
     marks.forEach((F, j) => {
-      const end = j + 1 < marks.length ? marks[j + 1] : o.length;
-      if (end - F < min - 1e-9) throw Object.assign(new D.CoreError(code, `the ${word} change ${j + 1} (a corner of ${DEGS(angles[j + 1])}) needs at least ${min} m before ${j + 1 < marks.length ? `change ${j + 2}'s mark` : "the piece's end"}: from at most ${end - min}, got ${F}`), { needM: min });
+      const end = j + 1 < marks.length ? marks[j + 1] : o.length, min = cornerChangeMinM(doc, o, (angles[j + 1] * 180) / Math.PI);
+      if (end - F < min - 1e-9) throw Object.assign(new D.CoreError(code, `the ${word} change ${j + 1} (a corner of ${DEGS(angles[j + 1])}) needs at least ${min.toFixed(1)} m before ${j + 1 < marks.length ? `change ${j + 2}'s mark` : "the piece's end"} (shorter, the road turns faster than it can be ridden smoothly): from at most ${(end - min).toFixed(1)}, got ${F}`), { needM: min });
     });
     const { changes: _c, ...bare } = o, need = shortestTurnBy(doc, { ...bare, length: 1 }, { [ch]: angles[0] });   // the head alone decides the first corner
     if (need === null || marks[0] < need - 1e-9) throw Object.assign(new D.CoreError(code, `the ${word} change 0 (the first corner, ${DEGS(angles[0])}) needs at least ${need} m before change 1's mark, got ${marks[0]}`), { needM: need });
@@ -314,4 +323,4 @@ function cornerOf(doc, opts) {
   return extendBy(doc, rest, aims);
 }
 
-module.exports = { extendTurnBy, extendClimbBy, extendCorner, shortestTurnBy, turnWeights, cornerMinM };
+module.exports = { extendTurnBy, extendClimbBy, extendCorner, shortestTurnBy, turnWeights, cornerMinM, cornerChangeMinM };

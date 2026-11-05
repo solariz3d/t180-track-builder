@@ -300,9 +300,11 @@ function endC2(piece, ch) {   // the end curvature 2(qₑ − q_d)/(L − U[n−
   const qe = (3 * (P[n - 1] - P[n - 2])) / (L - U[n - 1]);
   P[n - 3] = Number((P[n - 2] - (qe * (L - U[n - 2])) / 3).toFixed(dec)) + 0;
 }
-/** The second ramp's shape (the plan's contract): the quintic when the first is (no bankShape), the rounded ramp when it is rounded, and the SWELL when the bank is
- *  "at start" (a swell or the two-share F shape): F's quick rise is a ramp leaving a joint, and laid after a hold it rang 0.1° into the hold (L135 row 3, measured). */
-const secondShape = (shape) => (shape === null ? null : shape === 'rounded' ? 'rounded' : 'swell');
+/** A change's shape: EVERY change blends by the C2 quintic, whatever shape the first ramp has (L139 R2, the chair's ruling of 02:30 on pane E's review §2). L135 gave a
+ *  second bank the first's shape (rounded for rounded, the swell for "at start"), and the rounded ramp's 10 m corners (BANK_ROUND_M) put the document's roll acceleration
+ *  at 6.8 × BANK_BAR whatever K is; on a straight road the adapter re-rounds them (1.03 ×), on a turning one it cannot (BANK_TURN_KEEP): his 11-05 picture read 4.28 × built.
+ *  The quintic is what SECOND_MIN_K is sized for. */
+const secondShape = () => null;
 function secondRamp(piece, plan) {
   const L = piece.length, ts = [];
   for (const ch of CHANGE_CHANNELS) if (plan[ch]) ts.push(...plan[ch].turns.map((k) => +k.toFixed(4)));   // every field's knots in ONE insertion, in one fixed order of the fields
