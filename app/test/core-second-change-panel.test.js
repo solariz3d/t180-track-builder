@@ -61,14 +61,16 @@ async function mountPanel() {
   const has = (a) => !!root.all().find((e) => e.attrs && e.attrs['aria-label'] === a);
   const set = (f, v) => { f.value = String(v); f.oninput(); };
   const type = (text, v) => set(field(text), v);
-  const thn = (k, i = 1) => byAria(`then ${k} ${i}`), from = (k, i = 1) => byAria(`${k} from ${i}`);
+  // AMENDED (L140, pane C): the rows are named as their handles are labelled, "extra bank" ("extra bank 2" for the second), the user's word (10:15Z "it adds something called extra turn")
+  const nm = (k, i = 1) => `extra ${k}${i > 1 ? ` ${i}` : ''}`;
+  const thn = (k, i = 1) => byAria(nm(k, i)), from = (k, i = 1) => byAria(`${nm(k, i)} from`);
   // (thn, not then: an object with a then is a thenable, and await mountPanel() would call it)
   // a change as the offer's drag makes it (panel.secondAdd is what secondOffer calls on a drag's first movement)
   const add = (k, then = '', from = '', share = null) => panel.secondAdd(KEY[k], { then: String(then), from: String(from), share });
   const turnAs = root.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as');
   const button = (text) => root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === text);
   type('length m', 100);
-  return { doc, win, root, shell, panel, label, field, byAria, has, set, type, thn, from, add, turnAs, calls, extend: () => button('Extend').onclick(), opts: () => panel.options() };
+  return { doc, win, root, shell, panel, label, field, byAria, has, set, type, nm, thn, from, add, turnAs, calls, extend: () => button('Extend').onclick(), opts: () => panel.options() };
 }
 const KEY = { turn: 'turn', climb: 'climb', bank: 'bank', width: 'width', cup: 'cup', 'left edge': 'edge', 'right edge': 'edgeR' };
 const near = (a, b, tol, what) => assert.ok(Math.abs(a - b) <= tol, `${what}: ${a}, not ${b} (±${tol})`);
@@ -88,11 +90,11 @@ test('L139 S1: every field (turn, climb, bank, width, cup, left and right edge) 
   const p = await mountPanel();
   const order = p.root.all().filter((e) => e.attrs && (e.tagName === 'LABEL' || / changes$/.test(e.attrs['aria-label'] || ''))).map((e) => (e.tagName === 'LABEL' ? e.children[0] && e.children[0].textContent : e.attrs['aria-label']));
   for (const [k, lab] of FIELDS) { const i = order.indexOf(lab); assert.ok(i >= 0, lab); assert.equal(order[i + 1], `${k} changes`, `${k}: its list right after its row (${order.slice(i, i + 3).join(' | ')})`); }
-  assert.equal(p.has('then bank 1'), false, 'no change until one is made');
+  assert.equal(p.has(p.nm('bank')), false, 'no change until one is made');
   p.type('bank °', 30); p.add('bank', 10); p.add('bank', 20); p.add('bank', 0);
-  assert.ok(p.has('then bank 3') && p.has('bank from 3') && p.has('remove bank change 3'), 'three changes, three rows'); assert.equal(p.thn('bank', 2).attrs.type, 'number');
-  p.byAria('remove bank change 2').onclick();
-  assert.equal(p.has('then bank 3'), false, 'removed one: two left'); assert.equal(p.thn('bank', 2).value, '0', 'renumbered'); assert.equal(p.thn('bank', 1).value, '10');
+  assert.ok(p.has(p.nm('bank', 3)) && p.has(`${p.nm('bank', 3)} from`) && p.has(`remove ${p.nm('bank', 3)}`), 'three changes, three rows'); assert.equal(p.thn('bank', 2).attrs.type, 'number');
+  p.byAria(`remove ${p.nm('bank', 2)}`).onclick();
+  assert.equal(p.has(p.nm('bank', 3)), false, 'removed one: two left'); assert.equal(p.thn('bank', 2).value, '0', 'renumbered'); assert.equal(p.thn('bank', 1).value, '10');
   p.panel.unmount();
 });
 
@@ -168,12 +170,12 @@ test('L139 S6: Undo gives back every field\'s list (count, values, shares, typed
     p.type('length m', 500); p.type('bank °', -20); p.add('bank', 10, 250, 0.5); p.extend();
     assert.equal(p.shell.getState().history.past.length >= 2, true, 'both pieces placed');
     p.shell.undo();
-    assert.equal(p.thn('bank').value, '10'); assert.equal(p.has('then bank 2'), false, 'the undone piece had one bank change'); assert.equal(p.has('then width 1'), false, 'and no width change');
+    assert.equal(p.thn('bank').value, '10'); assert.equal(p.has(p.nm('bank', 2)), false, 'the undone piece had one bank change'); assert.equal(p.has(p.nm('width')), false, 'and no width change');
     p.shell.undo();
     assert.equal(p.thn('bank', 1).value, '0'); assert.equal(p.thn('bank', 2).value, '10', 'two bank changes back'); assert.equal(p.from('width').value, '650', 'the typed width from');
     p.type('length m', 2000); assert.equal(p.from('bank', 2).value, '1600', 'its share came back with it'); assert.equal(p.from('width').value, '650', 'and the typed one is still metres');
     p.shell.newDoc();
-    for (const [k] of FIELDS) assert.equal(p.has(`then ${k} 1`), false, `${k} cleared`);
+    for (const [k] of FIELDS) assert.equal(p.has(p.nm(k)), false, `${k} cleared`);
   });
   p.panel.unmount();
 });
@@ -250,16 +252,19 @@ test('L139 S10: in the panel a mark drag sets that change\'s from (as its share)
 
 // E's rows (l139_registration addendum "offers appear by room", 29d95192), form (ii): an offer shows once the free stretch R ≥ 2·floor and stands at its middle
 const offersOf = (p, f) => p.panel.offersAt().filter((o) => o.field === f);
-test('L139 O1: a field\'s offer shows exactly when its free stretch reaches 2·SECOND_FLOOR_M, at the stretch\'s middle; again after each change; never without a target; one per field', async () => {
+// AMENDED (L140, pane C; B's G5 and G7, exo_memory/handback/p-l140-glitches-B_2026-11-05.md): the offer is now the EXTRA handle's place. It shows once the free stretch holds its
+// change's OWN minimum (here min() = 30, over the floor of 20), not 2·floor; and it stands where the user drew it (bank: 0.60 of the piece, 11:43Z drawing), no later than that
+// minimum before the end, not at the stretch's middle
+test('L139 O1: a field\'s offer shows exactly when its free stretch reaches its change\'s own minimum, where the user drew it within that room; again after each change; never without a target; one per field', async () => {
   const p = await mountPanel();
   withCore(p, { floor: 20, min: () => 30 }, () => {
     p.type('bank °', 30);
-    p.type('length m', 39.9); assert.equal(offersOf(p, 'bank').length, 0, 'below 2·floor: no offer');
-    p.type('length m', 40); assert.equal(offersOf(p, 'bank').length, 1, 'at 2·floor: it shows'); assert.equal(offersOf(p, 'bank')[0].from, 20, 'at the middle of the stretch');
+    p.type('length m', 29.9); assert.equal(offersOf(p, 'bank').length, 0, 'below its own minimum: no offer');
+    p.type('length m', 30); assert.equal(offersOf(p, 'bank').length, 1, 'at its own minimum: it shows'); assert.equal(offersOf(p, 'bank')[0].from, 0, 'no later than its minimum before the end (0.60·30 = 18 is later)');
     const o = offersOf(p, 'bank')[0]; assert.equal(o.offer, true); assert.equal(o.colour, HD.KINDS.bank.colour, 'in its field\'s colour'); assert.equal(o.lat, HD.KINDS.bank.lat, 'at its place across');
     p.type('length m', 200); p.add('bank', 0, 100);
-    p.type('length m', 169.9); assert.equal(offersOf(p, 'bank').length, 0, 'after a change at 100 with a 30 m segment: the stretch is L − 130, under 40');
-    p.type('length m', 170); assert.equal(offersOf(p, 'bank').length, 1, 'at 170 it shows again'); assert.equal(offersOf(p, 'bank')[0].from, 150, 'at 130 + 40/2'); assert.equal(offersOf(p, 'bank')[0].index, 1, 'the second change');
+    p.type('length m', 159.9); assert.equal(offersOf(p, 'bank').length, 0, 'after a change at 100 with a 30 m segment: the stretch is L − 130, under 30');
+    p.type('length m', 160); assert.equal(offersOf(p, 'bank').length, 1, 'at 160 it shows again'); assert.equal(offersOf(p, 'bank')[0].from, 130, 'at the stretch\'s start: 0.60·160 = 96 is before it, and 160 − 30 = 130 leaves its minimum'); assert.equal(offersOf(p, 'bank')[0].index, 1, 'the second change');
     assert.equal(offersOf(p, 'width').length, 0, 'no width target: no offer');
     assert.ok(p.panel.offersAt().every((x, i, a) => a.findIndex((y) => y.field === x.field) === i), 'at most one offer per field');
   });
@@ -272,8 +277,9 @@ test('L139 O2: shortening hides the offer at the same length lengthening showed 
   const p = await mountPanel();
   withCore(p, { floor: 20, min: () => 30 }, () => {
     p.type('bank °', 30);
-    const seen = []; for (const L of [41, 40.1, 40, 39.9, 39.8, 39.9, 40, 40.1]) { p.type('length m', L); seen.push([L, offersOf(p, 'bank').length]); }
-    assert.deepEqual(seen.map(([, n]) => n), [1, 1, 1, 0, 0, 0, 1, 1], `shown from 40 up, both ways: ${JSON.stringify(seen)}`);
+    // AMENDED (L140, pane C; B's G7): the threshold is the change's own minimum (30 here), not 2·floor (40)
+    const seen = []; for (const L of [31, 30.1, 30, 29.9, 29.8, 29.9, 30, 30.1]) { p.type('length m', L); seen.push([L, offersOf(p, 'bank').length]); }
+    assert.deepEqual(seen.map(([, n]) => n), [1, 1, 1, 0, 0, 0, 1, 1], `shown from 30 up, both ways: ${JSON.stringify(seen)}`);
   });
   p.panel.unmount();
 });
@@ -294,12 +300,13 @@ test('L139 O3: dragging an offer makes exactly one change, from the offer\'s pla
   withCore(p, { floor: 20, min: () => 30 }, () => {
     p.type('length m', 1000); p.type('bank °', 30); p.type('width m', 40); p.add('width', 30, 700, 0.7);
     const doc0 = p.shell.getState().history.present, w0 = JSON.stringify(p.opts().changes.w);
-    const o = offersOf(p, 'bank')[0]; assert.equal(o.from, 500, 'the bank\'s offer: the middle of its 1000 m stretch');
+    // AMENDED (L140, pane C; B's G5): the bank's offer stands where the user drew its extra handle, 0.60 of the piece, not at the middle of the stretch
+    const o = offersOf(p, 'bank')[0]; assert.equal(o.from, 600, 'the bank\'s offer: 0.60 of its 1000 m piece');
     p.panel.secondOffer(o, 40); p.panel.secondOffer(o, 45);   // one drag, two moves
-    assert.deepEqual(p.opts().changes.phi, [{ from: 500, target: 45 * DEG }], 'exactly one change, at the offer, with the value the drag reached');
+    assert.deepEqual(p.opts().changes.phi, [{ from: 600, target: 45 * DEG }], 'exactly one change, at the offer, with the value the drag reached');
     assert.equal(JSON.stringify(p.opts().changes.w), w0, 'width\'s list unchanged'); assert.equal(p.shell.getState().history.present, doc0, 'the document untouched until Extend');
     let handled = false; p.doc.dispatchEvent(new p.win.CustomEvent('t180-undo-guard', { detail: { handled: () => { handled = true; } } }));
-    assert.equal(handled, true); assert.equal(p.has('then bank 1'), false, 'one Ctrl+Z: the change is gone'); assert.equal('phi' in (p.opts().changes || {}), false);
+    assert.equal(handled, true); assert.equal(p.has(p.nm('bank')), false, 'one Ctrl+Z: the change is gone'); assert.equal('phi' in (p.opts().changes || {}), false);
   });
   p.panel.unmount();
 });

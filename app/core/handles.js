@@ -112,7 +112,20 @@ const BRUSH_KINDS = Object.freeze({
   'brush-sweep': brushKind({ label: 'tube sweep', colour: '#3ddc6e', hollow: true, lat: 1, sides: Object.freeze([1]), words: Object.freeze(['close more', 'open more']) }),
 });
 const ORDER = Object.freeze(['length', 'width', 'bank', 'cup', 'turn', 'climb']);
-const KINDS = Object.freeze({ ...EXTEND_KINDS, ...LANDING, ...BRUSH_KINDS });
+const BASE_KINDS = Object.freeze({ ...EXTEND_KINDS, ...LANDING, ...BRUSH_KINDS });
+// THE EXTRA HANDLES (L140; the user, 2026-11-05 10:15Z: "when you drag turn ... after the first turn, it adds something called extra turn, and its like the same ui as the first grab
+// turn, just added below it or around it in a way to be intuitive"). A kind 'extra:<base>:<i>' is the i-th later change of a field: its base kind's look, arrows, colour, axis
+// and speed, labelled "extra <label>" ("extra <label> 2" for the second), with `extra` set so its drag may slide along the road instead (mount, below). Derived once and frozen;
+// KINDS answers for them, so every lookup in this file and the panel's sees the same object. The table itself is unchanged
+const EXTRA_RE = /^extra:([A-Za-z]+):(\d+)$/, EXTRA_KINDS = new Map();
+function extraKind(k) {
+  if (EXTRA_KINDS.has(k)) return EXTRA_KINDS.get(k);
+  const m = EXTRA_RE.exec(k), B = m && Object.prototype.hasOwnProperty.call(BASE_KINDS, m[1]) && !BASE_KINDS[m[1]].brush && !BASE_KINDS[m[1]].free ? BASE_KINDS[m[1]] : null, i = m ? Number(m[2]) : 0;
+  const K = B ? Object.freeze({ ...B, label: `extra ${B.label}${i ? ` ${i + 1}` : ''}`, extra: true, base: m[1], index: i }) : undefined;
+  EXTRA_KINDS.set(k, K); return K;
+}
+const extraId = (base, i) => `extra:${base}:${i}`;
+const KINDS = new Proxy(BASE_KINDS, { get: (t, k) => (typeof k === 'string' && k.startsWith('extra:') && !(k in t) ? extraKind(k) : t[k]) });
 const LANDING_ORDER = Object.freeze(['landfwd', 'landleft', 'landup', 'landturn']);
 // (2026-10-15, reported: scrubbing a turn from a 1000 m straight jumped 0.08 instead of 0.01, so every handle has to be precisely scrubbable): the PRECISE
 // gesture. While this modifier is held one pixel of drag is exactly one step (0.01), with no hold, for every handle: every value is reachable. It is ONE constant, so the gesture can be changed in one place
@@ -128,6 +141,8 @@ const SPEED_WINDOW_MS = 60;  // the speed is the pointer's path over this long, 
 const DETENT_PX = 6;         // the pointer travel a drag holds at 0 (bank, turn, climb) and at the value it started from
 const EDGE_ON_PX_PER_M = 0.05;   // an axis shorter than this on screen (a view straight along it) is edge-on: the pointer's own motion is used instead. A FAR handle's axis is short too (the far end of a ghost seen from behind: 0.3 px/m, found in the window) but has a direction, so it is not edge-on
 const HIT_PX = 12;
+const SNAP_PX = 12;          // L140: an extra handle's drag lands on level, or on the field's start value, from this far away (his 4.58° was about 10 px short at the bank's 0.45° a pixel)
+const LOCK_PX = 6;           // L140: an extra handle's first this-many px decide its drag: ACROSS the road sets the amount, ALONG it slides where the change starts
 //: THE DOTS, visible handles onto the zone grab on the selected run: rows across the road (the centre, the rims, and on a cup piece
 // halfway out), at stations thinned to DOT_MIN_M (or the radius) and DOT_MIN_PX apart, at most DOT_CAP a row. Hollow, HIT_PX to press; a press on one is the zone
 // grab opened at that dot (the panel's, through dotAt), never a handle's drag. The colours are the brush's: the centre white (height), a rim red (width) and green on its
@@ -175,7 +190,7 @@ function placeHandles(model) {
     for (const side of K.sides) {
       const lat = K.lat * half * side, pos = add(m.pos, m.L, lat);
       const dir = K.axis === 'T' ? m.T : K.axis === 'L' ? m.L : m.U, sgn = K.sign === 'out' || K.sign === 'up' ? side : K.sign === 'back' ? -1 : 1;
-      out.push({ id: `${kind}:${side}`, kind, side, pos, axis: [dir[0] * sgn || 0, dir[1] * sgn || 0, dir[2] * sgn || 0] });   // (|| 0: no negative zeros)
+      out.push({ id: `${kind}:${side}`, kind, side, pos, axis: [dir[0] * sgn || 0, dir[1] * sgn || 0, dir[2] * sgn || 0], ...(K.extra ? { along: [m.T[0] || 0, m.T[1] || 0, m.T[2] || 0] } : {}) });   // (|| 0: no negative zeros)
     }
   }
   return out;
@@ -254,6 +269,10 @@ function targetFor(kind, base, px, ctx = {}, mods = {}) {
     }
     v = round(v, K.step);
   }
+  // THE APPROACH SNAP (L140; B, exo_memory/handback/p-l140-B_2026-11-05.md "THE 4.6°": his second bank ended at 4.58°, a drag let go about 10 px short of level, and the hold at 0 above
+  // catches only a drag that CROSSES it). ctx.snapTo lists values a drag lands on once it comes within SNAP_PX of one (the extra handles give level and the field's start value).
+  // Not with the precise modifier (one pixel, one step) or Ctrl (round numbers)
+  if (!precise && !mods.ctrl && Array.isArray(ctx.snapTo)) for (const t of ctx.snapTo) if (Number.isFinite(t) && Math.abs(v - t) <= SNAP_PX * K.perPx + 1e-9) { v = t; break; }
   return clamp(v, K.min, K.max);
 }
 
@@ -313,7 +332,7 @@ function mount(stage, win, host) {
     model = m; const W = stage.clientWidth, H = stage.clientHeight;
     if (!model || !pose || !(W > 0 && H > 0)) { drawn = []; return; }
     const VP = M.viewProj(pose, W / H);
-    drawn = placeHandles(model).map((h) => ({ ...h, screen: screenAxis(VP, W, H, h.pos, h.axis) }));
+    drawn = placeHandles(model).map((h) => ({ ...h, screen: screenAxis(VP, W, H, h.pos, h.axis), ...(h.along ? { slideAxis: screenAxis(VP, W, H, h.pos, h.along) } : {}) }));
     if (model.dots && !drag) drawn = placeDots(model.dots, VP, W, H).concat(drawn);   // under the handles and the glyph; hidden while a handle is dragged
   };
   const draw = () => {
@@ -380,7 +399,7 @@ function mount(stage, win, host) {
   let lastKey = null;
   const frameKey = (m, pose) => {
     const W = stage.clientWidth, H = stage.clientHeight, k = [W, H, win.devicePixelRatio || 1, pose ? JSON.stringify(pose) : null, hover ? hover.id : null, drag ? `${drag.h.id}:${drag.value}` : null, pre ? `${pre.kind}:${pre.from}:${pre.to}` : null, T.css('--ink', '#0b0d11')];
-    if (m) { k.push(m.mode, m.samples, m.s0, m.s1, m.halfTarget, m.free, m.info, m.kinds.join(',')); if (m.brush) { const B = m.brush; k.push(B.samples, B.s, B.half, B.lat, B.sides ? B.sides.join(',') : null, B.colour, B.open, B.text, B.note, B.words); } if (m.dots) { const Dt = m.dots; k.push(Dt.stations, Dt.run.s0, Dt.run.s1, Dt.radius, Dt.rows.map((r) => `${r.u}:${r.colour}:${r.inner}`).join(',')); } for (const kind of m.kinds) { const c = m.ctx(kind); k.push(m.base(kind), c && c.half, c && c.free); } }
+    if (m) { k.push(m.mode, m.samples, m.s0, m.s1, m.halfTarget, m.free, m.info, m.kinds.join(','), m.at ? JSON.stringify(m.at) : null); if (m.brush) { const B = m.brush; k.push(B.samples, B.s, B.half, B.lat, B.sides ? B.sides.join(',') : null, B.colour, B.open, B.text, B.note, B.words); } if (m.dots) { const Dt = m.dots; k.push(Dt.stations, Dt.run.s0, Dt.run.s1, Dt.radius, Dt.rows.map((r) => `${r.u}:${r.colour}:${r.inner}`).join(',')); } for (const kind of m.kinds) { const c = m.ctx(kind); k.push(m.base(kind), c && c.half, c && c.free); } }
     return k;
   };
   const sameKey = (a, b) => !!a && !!b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
@@ -396,7 +415,15 @@ function mount(stage, win, host) {
   // (scrubGain), so a slow scrub is 0.01 a pixel and a flick is the kind's own perPx.
   const track = (x, y, t, ctrl) => {
     const d = drag, cur = drawn.find((c) => c.id === d.h.id), ax = cur && cur.screen ? cur.screen : d.axis;
-    const raw = dragPixels(ax, x - d.last.x, y - d.last.y, d.h.kind); d.last = { x, y };
+    const mx = x - d.last.x, my = y - d.last.y, raw = dragPixels(ax, mx, my, d.h.kind); d.last = { x, y };
+    if (d.mode !== 'value') {   // an extra handle (L140) before and after its lock: the road's along-motion in metres, and the lock on the first LOCK_PX of travel
+      const sa = d.slideAxis; if (sa && sa.len > 0) d.slideM += (mx * sa.dx + my * sa.dy) / (sa.len * sa.len);
+      if (d.mode === null && Math.hypot(x - d.x0, y - d.y0) >= LOCK_PX) {
+        const ox = x - d.x0, oy = y - d.y0, across = Math.abs(dragPixels(ax, ox, oy, d.h.kind)), along = sa && sa.len > 0 ? Math.abs((ox * sa.dx + oy * sa.dy) / sa.len) : 0;
+        d.mode = along > across ? 'slide' : 'value';
+      }
+      if (d.mode !== 'value') return;
+    }
     d.trail.push({ x, y, t }); while (d.trail.length > 2 && t - d.trail[1].t >= SPEED_WINDOW_MS) d.trail.shift();
     let len = 0; for (let i = 1; i < d.trail.length; i++) len += Math.hypot(d.trail[i].x - d.trail[i - 1].x, d.trail[i].y - d.trail[i - 1].y);
     const span = Math.max(t - d.trail[0].t, 1), g = ctrl ? 1 : scrubGain(d.h.kind, len / span);
@@ -413,6 +440,12 @@ function mount(stage, win, host) {
   };
   const apply = (final) => {
     if (!drag || !waiting) return; const w = waiting; waiting = null;
+    if (drag.mode === null) return;   // an extra handle not yet moved LOCK_PX: nothing is sent (a press and release makes no change)
+    if (drag.mode === 'slide') {   // along the road: where this change starts, in metres from the piece start
+      const from = drag.from0 + drag.slideM; drag.moved = true;
+      if (host.slide) host.slide(drag.h, from, final);
+      return;
+    }
     const mods = { shift: w.shift, ctrl: w.ctrl, alt: w.alt }, d = mods.shift ? drag.pxFine : drag.px;
     const was = drag.value; drag.value = targetFor(drag.h.kind, drag.base, d, { ...drag.ctx, hold: false }, mods); drag.mods = mods;
     host.apply(drag.h, drag.value, mods, final);
@@ -426,7 +459,8 @@ function mount(stage, win, host) {
     const m = model; if (!m) return;
     const now = typeof e.timeStamp === 'number' ? e.timeStamp : Date.now();
     if (lastClick && lastClick.id === h.id && now - lastClick.t < DOUBLE_MS) { lastClick = null; resetHandle(h); return; }
-    drag = { h, x0: x, y0: y, cx: e.clientX, cy: e.clientY, moved: false, v: { x, y }, acc: { x: 0, y: 0 }, warp: null, noWarp: false, misses: 0, axis: h.screen, px: 0, pxFine: 0, last: { x, y }, trail: [{ x, y, t: now }], base: m.base(h.kind), base0: m.base(h.kind), mods: {}, ctx: m.ctx(h.kind), value: m.base(h.kind) };
+    const KX = KINDS[h.kind], lockable = !!(KX && KX.extra);   // L140: an extra handle locks its direction first (mode null), every other drag is a value drag from the start
+    drag = { mode: lockable ? null : 'value', slideM: 0, slideAxis: h.slideAxis || null, from0: lockable && typeof m.slideBase === 'function' ? m.slideBase(h.kind) : 0, h, x0: x, y0: y, cx: e.clientX, cy: e.clientY, moved: false, v: { x, y }, acc: { x: 0, y: 0 }, warp: null, noWarp: false, misses: 0, axis: h.screen, px: 0, pxFine: 0, last: { x, y }, trail: [{ x, y, t: now }], base: m.base(h.kind), base0: m.base(h.kind), mods: {}, ctx: m.ctx(h.kind), value: m.base(h.kind) };
     host.begin(h); stage.style.cursor = 'none';
     if (stage.setPointerCapture && e.pointerId !== undefined) { try { stage.setPointerCapture(e.pointerId); } catch (err) { /* the pointer is gone */ } }
   };
@@ -497,7 +531,7 @@ function mount(stage, win, host) {
     // a release while the cursor is being put back carries a position from before the jump: the drag ends where the last move left it
     if (e && e.clientX !== undefined && !drag.warp) { const [x0, y0] = rel(e), x = x0 + drag.acc.x, y = y0 + drag.acc.y; drag.v = { x, y }; drag.moved = drag.moved || x !== drag.x0 || y !== drag.y0; track(x, y, stamp(e), !!e.ctrlKey); waiting = { x: drag.v.x, y: drag.v.y, shift: !!e.shiftKey, ctrl: !!e.ctrlKey, alt: !!e.altKey }; }
     else if (drag.warp) waiting = { x: drag.v.x, y: drag.v.y, shift: !!(e && e.shiftKey), ctrl: !!(e && e.ctrlKey), alt: !!(e && e.altKey) };
-    apply(true); const h = drag.h, d = drag; if (drag.value !== drag.base0) { pre = { kind: h.kind, from: drag.base0, to: drag.value }; lastClick = null; } else lastClick = { id: h.id, t: e && typeof e.timeStamp === 'number' ? e.timeStamp : Date.now() };
+    apply(true); const h = drag.h, d = drag; if (drag.mode === 'value' && drag.value !== drag.base0) { pre = { kind: h.kind, from: drag.base0, to: drag.value }; lastClick = null; } else lastClick = { id: h.id, t: e && typeof e.timeStamp === 'number' ? e.timeStamp : Date.now() };
     drag = null; stage.style.cursor = ''; putCursorBack(d); host.end(h);
   };
   // a double-click ON a handle resets it: 0 for bank, turn and climb; the value before the last drag for length, width and cup (kept only while the field still reads what that drag set, so a value typed
@@ -532,4 +566,4 @@ function mount(stage, win, host) {
   };
 }
 
-module.exports = { placeDots, dotHit, DOT_MIN_M, DOT_MIN_PX, DOT_CAP, wrapTurn, KINDS, BRUSH_KINDS, BRUSH_CHANNELS, brushFormat, brushWords, ORDER, LANDING_ORDER, DEG, PRECISE_MOD, WARP_WAIT_MS, WARP_MISSES, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, scrubGain, SPEED_SLOW, SPEED_FAST, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };
+module.exports = { extraId, SNAP_PX, LOCK_PX, HIT_PX, placeDots, dotHit, DOT_MIN_M, DOT_MIN_PX, DOT_CAP, wrapTurn, KINDS, BRUSH_KINDS, BRUSH_CHANNELS, brushFormat, brushWords, ORDER, LANDING_ORDER, DEG, PRECISE_MOD, WARP_WAIT_MS, WARP_MISSES, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, scrubGain, SPEED_SLOW, SPEED_FAST, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };

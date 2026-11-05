@@ -90,7 +90,7 @@ async function release(look, length, kind, settleMs) {
   // the view frames the new piece after it is typed (it eases there): the handle is pressed once it has held still for three looks, 100 ms apart
   let list = await handlesNow(), h = null;
   for (let i = 0, still = 0, was = null; i < 60 && still < 3; i++) {
-    await sleep(100); list = await handlesNow(); h = list.find((c) => (kind === 'turn' ? /turn/i.test(c.kind) : c.kind === 'length'));   // of the matching handles, the one nearest the stage's middle
+    await sleep(100); list = await handlesNow(); h = list.find((c) => !/^extra:/.test(c.kind) && (kind === 'turn' ? /turn/i.test(c.kind) : c.kind === 'length'));   // AMENDED (L140, pane C): the field's OWN turn handle; a turn now also has an "extra turn" handle (extra:turnDeg:0), which /turn/ matched   // of the matching handles, the one nearest the stage's middle
     still = h && was && Math.hypot(h.x - was.x, h.y - was.y) < 0.5 ? still + 1 : 0; was = h;
   }
   assert.ok(h, `${look}: the ${kind} handle is on the stage (handles: ${JSON.stringify(list.map((c) => c.kind))})`);

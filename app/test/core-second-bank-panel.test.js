@@ -55,7 +55,8 @@ async function mountPanel() {
   const has = (a) => !!root.all().find((e) => e.attrs && e.attrs['aria-label'] === a);
   const type = (text, v) => { const f = field(text); f.value = String(v); f.oninput(); };
   const set = (f, v) => { f.value = String(v); f.oninput(); };
-  const thenBank = () => byAria('then bank 1'), fromBank = () => byAria('bank from 1');
+  // AMENDED (L140, pane C): the bank's row is named as its handle is labelled, "extra bank" (the user's word, 10:15Z)
+  const thenBank = () => byAria('extra bank'), fromBank = () => byAria('extra bank from');
   const addBank = (then, from = '') => panel.secondAdd('bank', { then: String(then), from: String(from) });   // what an offer's drag does on its first movement
   const button = (text) => root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === text);
   type('length m', 100);   // (the fake DOM's input starts with no .value: the panel's 100 is an attribute here)
@@ -134,7 +135,7 @@ test('L135 C5: Undo gives back the bank\'s change as it was for the undone piece
   assert.equal(p.thenBank().value, '0', 'one more Undo: the first piece\'s'); assert.equal(p.fromBank().value, laid(750), 'its laid from');
   p.type('length m', 1000); assert.equal(p.fromBank().value, laid(1000), 'an untyped from still follows the length after Undo');
   p.shell.newDoc();
-  assert.equal(p.has('then bank 1'), false, 'a new document clears the bank\'s changes');
+  assert.equal(p.has('extra bank'), false, 'a new document clears the bank\'s changes');
   p.panel.unmount();
 });
 

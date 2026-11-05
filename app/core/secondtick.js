@@ -108,6 +108,7 @@ function mount(stage, win, itemsNow, hooks = {}) {
   const down = (e) => {
     if (e.button !== undefined && e.button !== 0) return;
     const p = local(e);
+    if (hooks.yields && hooks.yields(p)) return;   // L140 (B's G4, G10): the press is a handle's
     const offer = drawnOffers.find((d) => Math.hypot(d.at.x - p.x, d.at.y - p.y) <= HIT_PX);
     const mark = offer ? null : drawnMarks.find((d) => d.strokes.some((st) => segDist(p, st.a, st.b) <= HIT_PX));
     if (!offer && !mark) return;
