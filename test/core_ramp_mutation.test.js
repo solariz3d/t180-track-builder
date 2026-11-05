@@ -104,7 +104,9 @@ const MUTANTS = [
   // L135, the second bank (src/core/extend.js `second`; test/core_bank_ramp.test.js and test/core_joint_c2.test.js rows 'L135')
   // AMENDED L139 (by name, the same two mutants): the code they edit moved when one second bank became any number of changes on every field, so their anchors are L139's lines
   { id: 'SB1 the second ramp blends by the route cubic (it starts with a curvature step at from)', pattern: 'L135 1', edits: [[X, "segs.push({ F, f: channelFn({ v: prev, m: 0 }, T, L2, C2_CHANNELS.has(ch) ? ch : 'c', shape2) });", "segs.push({ F, f: channelFn({ v: prev, m: 0 }, T, L2, ch === 'phi' ? 'kh' : C2_CHANNELS.has(ch) ? ch : 'c', ch === 'phi' ? null : shape2) });"]] },
-  { id: 'SB2 the second ramp\'s end is not pinned to zero curvature (the joint after the piece steps)', pattern: 'L135 4a', edits: [[X, 'if (C2_CHANNELS.has(ch)) endC2(out, ch);', "if (C2_CHANNELS.has(ch) && ch !== 'phi') endC2(out, ch);"]] },
+  // AMENDED L139 R2 (rule changed: every change is the quintic now, whose unpinned end, 6.9e-7 on a 300 m bank change, is under L135 4a's C2 tolerance, where the rounded
+  // and swell shapes it was written against were not): the end pin is held by L139 1 phi's 1e-9 bar, added to the pattern; L135 4a stays in it
+  { id: 'SB2 the second ramp\'s end is not pinned to zero curvature (the joint after the piece steps)', pattern: 'L135 4a|L139 1 phi:', edits: [[X, 'if (C2_CHANNELS.has(ch)) endC2(out, ch);', "if (C2_CHANNELS.has(ch) && ch !== 'phi') endC2(out, ch);"]] },
   // L139, one row per family of change (src/core/extend.js changeLists and secondRamp, src/core/turnby.js solveList; test/core_changes.test.js)
   { id: 'CH1 route: a turn or climb change blends by the cubic again (a curvature step in the rate at every mark)', pattern: 'L139 4b', edits: [[X, "C2_CHANNELS.has(ch) ? ch : 'c', shape2) });", 'ch, shape2) });']] },
   { id: 'CH2 cross-section: a cup or edge change is not pinned to zero curvature at its end', pattern: 'L139 1 (c|e|er):', edits: [[X, 'if (C2_CHANNELS.has(ch)) endC2(out, ch);', "if (ch === 'phi') endC2(out, ch);"]] },
