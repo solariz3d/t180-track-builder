@@ -449,8 +449,12 @@ function probePeak(a, b, base, L2) {
     let d = D.appendPiece(pb.hold, secondRamp(copy, { phi: { g: (x) => (x > F ? f(x - F) : 0), from: F, step: b - a, turns } }));
     d = extend(d, { length: AFTER });
     const plan = A.bankPlan(d), ends = [0, HOLD, HOLD + L, HOLD + L + AFTER];
-    const r = (s) => { const i = s < ends[1] ? 0 : s < ends[2] ? 1 : 2, t = Math.min(d.pieces[i].length, Math.max(0, s - ends[i])); return plan[i].fn ? plan[i].fn(t) : D.channelAt(d.pieces[i], 'phi', t).v; };
-    let m = 0; for (let s = HOLD + L - L2 - 20; s <= HOLD + L + 20; s += 0.5) m = Math.max(m, Math.abs(r(s + 2) - 2 * r(s) + r(s - 2)) / 4);
+    const r = (s) => { const i = s < ends[1] ? 0 : s < ends[2] ? 1 : 2, t = Math.min(d.pieces[i].length, Math.max(0, s - ends[i])); return plan[i].fn ? plan[i].fn(t) : D.channelValue(d.pieces[i], 'phi', t); };   // L141: the value alone (channelValue, exactly channelAt's .v)
+    // L141 (pane B; E's review p-l141-E bar 2, the first drag toward level 2.67-3.45 × the early one): r(s + 2) and r(s − 2) are the samples four steps on and back, so each
+    // built roll is read ONCE and reused (kept by the very double s it was asked at, so a step that does not land bit for bit is read afresh: the peak is the same number).
+    // The reader was 38 % of a probe (scratch profile of the first rolling drag: 21.9 of 58.1 ms)
+    const seen = new Map(), rs = (s) => { let v = seen.get(s); if (v === undefined) { v = r(s); seen.set(s, v); } return v; };
+    let m = 0; for (let s = HOLD + L - L2 - 20; s <= HOLD + L + 20; s += 0.5) m = Math.max(m, Math.abs(rs(s + 2) - 2 * rs(s) + rs(s - 2)) / 4);
     return remember(key, m / ROUTE_BAR);
   } finally { probing = false; }
 }

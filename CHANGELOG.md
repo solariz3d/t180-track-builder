@@ -14,6 +14,10 @@ All notable changes to this project are recorded here. The format follows
 
 - **The next piece shows its preview again after a piece whose bank is still rolling at its end, or that rolls on through the joint.** After such a piece no next piece got a preview at all, not even a plain straight ("no preview of this piece: the candidate must extend the placed track"), so nothing could be added and the track could not be grown. Laying a next piece rounds the bank where the two pieces meet, and carries a roll that runs on through the joint, so it reshapes the last few tens of metres of the bank of the piece before it as built (the bump fixes of 0.4.39; the bank you set at the joint is unchanged). The preview took any change to the placed road as a mistake. It now shows the next piece together with that reshaped stretch, exactly as placing it builds them, and still refuses a preview that would change anything further back. Found on a 1,000 m corner banking 88.45° over its whole length; a corkscrew of pieces banking the same way each did the same.
 
+### Changed
+
+- **Dragging a bank, and the extra bank toward level, is quicker.** The road's bank was re-read more slowly than it needed to be, and the check that an extra bank can ride smoothly read each point three times; both now read it once, and the road they build is the same to the last digit.
+
 ## [0.4.39] - 2026-11-03
 
 ### Added
