@@ -15,6 +15,7 @@
 //   7  a 1,000 m piece with a left edge typed, turned after a placed piece: p95 <= 6.9 ms, one frame at 144 Hz (before: 8.6 / 8.9 ms)
 //   8  the same piece stretched on an empty track: at most 120 work frames a second (before: 356 / 362, every frame) and p95 <= 10.0 ms, a PROPOSED bar (the 6.9 ms
 //      standard is not reached there; before: 9.7 / 10.6 ms)
+//   9  after 21 km whose last piece still rolls at its end, the next piece stretched: p95 at most 2 x the same drag with that piece flat (a PROPOSED relative bar, D642)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -81,9 +82,10 @@ const fieldNow = (re) => ev(`const f = [...document.querySelectorAll('#palette i
 const stationsNow = () => ev("let n = null; document.dispatchEvent(new CustomEvent('t180:ghost-request', { detail: { reply: (g) => { n = g ? g.samples.length : null; } } })); return n;");
 
 /** one drag: the look, the piece length, which handle; the work frames' script ms (sorted by time), the rebuild rate, and the ghost's stations during and after the drag */
-async function drag(look, length, kind, ms = DRAG_MS, typed = {}, { placed = false } = {}) {
+async function drag(look, length, kind, ms = DRAG_MS, typed = {}, { placed = false, setup = null } = {}) {
   await load(look);
-  if (placed) { await setLength(100); await ev("[...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Extend').click(); await new Promise((r) => setTimeout(r, 1200)); return true;"); }   // a 100 m piece is placed first
+  if (setup) await setup();   // row 9: a track built first through the page's own fields
+  else if (placed) { await setLength(100); await ev("[...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Extend').click(); await new Promise((r) => setTimeout(r, 1200)); return true;"); }   // a 100 m piece is placed first
   // A review of 41e7595 found: each typed field must read back what was typed, so a renamed label or a field that refuses the value fails here, by name,
   // instead of timing an untyped drag (the field is found again after the input event, since the panel may rebuild it)
   const typedField = (re) => `[...document.querySelectorAll('#palette input')].find((e) => e.type !== 'checkbox' && ${re}.test(e.getAttribute('aria-label') || e.title || ''))`;
@@ -94,9 +96,9 @@ async function drag(look, length, kind, ms = DRAG_MS, typed = {}, { placed = fal
   await setLength(length); await sleep(Math.min(4000, length / 4));   // a long piece's full ghost takes its time (a 20 km one about 2 s)
   const rgb = kind === 'turn' ? [185, 104, 255] : [255, 255, 255];
   // after a placed piece the handles are drawn small: the page's own list of them (t180:handles-request) is read instead of their colour, and the pointer moves along the handle's axis
-  const listed = placed ? await ev("let l = null; document.dispatchEvent(new CustomEvent('t180:handles-request', { detail: { reply: (x) => { l = x; } } })); const r = document.getElementById('stage').getBoundingClientRect(); return { l, left: r.left, top: r.top };") : null;
-  const lh = listed && listed.l ? listed.l.find((x) => x.kind === (kind === 'turn' ? 'turnDeg' : 'length')) : null, len = lh ? Math.hypot(lh.dx, lh.dy) : 0, axis = placed && len > 0 ? [lh.dx / len, lh.dy / len] : kind === 'turn' ? [1, 0] : [0, -1];
-  const h = placed ? (lh ? { x: lh.x + listed.left, y: lh.y + listed.top } : null) : await findHandle(rgb, kind === 'turn'); assert.ok(h, `${look}: the ${kind} handle is on the overlay`);
+  const listed = placed || setup ? await ev("let l = null; document.dispatchEvent(new CustomEvent('t180:handles-request', { detail: { reply: (x) => { l = x; } } })); const r = document.getElementById('stage').getBoundingClientRect(); return { l, left: r.left, top: r.top };") : null;
+  const lh = listed && listed.l ? listed.l.find((x) => x.kind === (kind === 'turn' ? 'turnDeg' : 'length')) : null, len = lh ? Math.hypot(lh.dx, lh.dy) : 0, axis = (placed || setup) && len > 0 ? [lh.dx / len, lh.dy / len] : kind === 'turn' ? [1, 0] : [0, -1];
+  const h = placed || setup ? (lh ? { x: lh.x + listed.left, y: lh.y + listed.top } : null) : await findHandle(rgb, kind === 'turn'); assert.ok(h, `${look}: the ${kind} handle is on the overlay`);
   const amp = kind === 'turn' ? 250 : 220, field = kind === 'turn' ? '/turn/i' : '/metres|length/i', before = await fieldNow(field);
   await mouse('mouseMoved', h.x, h.y); await sleep(50); await mouse('mousePressed', h.x, h.y, { button: 'left', buttons: 1, clickCount: 1 }); await sleep(100);
   await ev('window.__ft.frames.clear(); window.__ft.on = true; return true;');
@@ -191,4 +193,34 @@ test('row 7: a 1,000 m piece with a left edge typed, turned after a placed piece
 // head's span), and since only on a move of the pointer (about 58); at most 120 a second.
 test('row 8: a 1,000 m piece with a left edge typed, stretched on an empty track: the page works only on a move (at most 120 work frames a second), p95 within one frame at 144 Hz (6.9 ms)', { skip }, async (t) => {
   await edgeRow(t, 'stretch', false, BUDGET_EDGE, 120);
+});
+
+// ROW 9 (D642, pane E's review b8872153 §3): after a piece whose bank still rolls at its end, laying a next piece re-lays that piece's built tail (src/core/adapter.js bankPlan),
+// and the ghost of such a candidate grew the WHOLE path afresh: about 123 ms against 30 on a 22 km track (E, in Node). The track here is built through the page's own fields:
+// a 20,000 m straight, then a 1,000 m piece, and the next 100 m piece is stretched by its length handle; once with that piece FLAT (the copy-and-extend ghost), once banking
+// 88.45° over its whole length (his piece, still rolling at its end: the re-laid ghost). THE BAR IS RELATIVE, a PROPOSED one: a 21 km track misses the 6.9 ms standard with the
+// last piece flat too (measured headless, BelowNormal, the machine quiet: p95 30.2 / 28.8 ms), which is the long track's own cost and not this row's. What this row guards is the
+// re-laid ghost's extra cost: its p95 at most RELAID_OVER_FLAT x the flat one's. Measured the same way, the trees alternately: e48a310 (the whole path) 105.8 / 117.5 and 109.0 /
+// 103.6 ms, 3.6 x; 3196884 (branchPathFrom) 47.2 / 52.7 and 56.6 / 50.0 ms, 1.7 x. What is left is the shell's candidate laying the rolling piece's bank corners again on every
+// move (src/core/adapter.js bankPlan: about 13 ms a move in Node against 1.2 with the last piece at rest).
+const RELAID_OVER_FLAT = 2.0;
+const typeInto = (re, v) => ev(`const f = [...document.querySelectorAll('#palette input')].find((e) => e.type !== 'checkbox' && ${re}.test(e.getAttribute('aria-label') || e.title || '')); if (!f) return null; f.value = '${v}'; f.dispatchEvent(new Event('input', { bubbles: true })); await new Promise((r) => setTimeout(r, 100)); return f.value;`);
+const extendNow = (ms) => ev(`[...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Extend').click(); await new Promise((r) => setTimeout(r, ${ms})); return true;`);
+const long = (bank) => async () => {
+  await setLength(20000); await extendNow(4000);
+  if (bank !== null) assert.equal(Number(await typeInto('/^degrees of bank/', bank)), bank, `the bank field reads back ${bank}`);
+  await setLength(1000); await extendNow(3000);
+  if (bank !== null) await typeInto('/^degrees of bank/', '');   // the next piece keeps the bank as it is
+};
+test('row 9: after 21 km whose last piece still rolls at its end (his 88.45°), the next piece stretched by its length handle: p95 at most 2 x the same drag with that piece flat (a proposed bar)', { skip }, async (t) => {
+  const flat = [], rolling = [], best = (a) => Math.min(...a.map((r) => r.p95));
+  for (let i = 0; i < RUNS; i++) {
+    flat.push(await drag('aqua', 100, 'stretch', DRAG_MS, {}, { setup: long(null) }));
+    rolling.push(await drag('aqua', 100, 'stretch', DRAG_MS, {}, { setup: long(88.45) }));
+    if (best(rolling) <= RELAID_OVER_FLAT * best(flat)) break;
+  }
+  const said9 = `p95 rolling ${rolling.map((r) => r.p95.toFixed(1)).join(' / ')} ms, flat ${flat.map((r) => r.p95.toFixed(1)).join(' / ')} ms (${(best(rolling) / best(flat)).toFixed(2)} x)`;
+  t.diagnostic(said9);
+  assert.ok(best(rolling) <= RELAID_OVER_FLAT * best(flat), `${said9}: over ${RELAID_OVER_FLAT} x`);
+  assert.deepEqual(errors, []);
 });

@@ -415,14 +415,15 @@ function docSamples(P) {
   const c = P.channels.phi, hit = BANK_DOC.get(c);
   if (hit && hit.knots === P.knots && hit.length === P.length) return hit.r;
   const n = Math.max(1, Math.round(P.length / BANK_DS)), v = new Float64Array(n + 1);
-  if (constantPhi(P)) v.fill(c[0]); else for (let k = 0; k <= n; k++) v[k] = D.channelAt(P, 'phi', (P.length * k) / n).v;
+  // L141 (pane B): the value alone, by document.js channelValue ("exactly channelAt(P, ch, s).v", the same basis values summed in the same order, its knot vector kept)
+  if (constantPhi(P)) v.fill(c[0]); else for (let k = 0; k <= n; k++) v[k] = D.channelValue(P, 'phi', (P.length * k) / n);
   const r = { n, v }; BANK_DOC.set(c, { knots: P.knots, length: P.length, r });
   return r;
 }
 function bankPlan(doc) {
   const out = doc.pieces.map(() => ({ fn: null, key: '' }));
   const carryFn = doc.pieces.map((P, i) => (P.type === 'road' ? carriedPhiOf(P, carryOf(doc, i - 1), carryOf(doc, i)) : null));
-  const phi1 = (i) => { const P = doc.pieces[i], c = carryFn[i]; return (s) => { const x = c ? c(s) : null; return x === null ? D.channelAt(P, 'phi', s).v : x; }; };
+  const phi1 = (i) => { const P = doc.pieces[i], c = carryFn[i]; return (s) => { const x = c ? c(s) : null; return x === null ? D.channelValue(P, 'phi', s) : x; }; };   // L141: the value alone (channelValue, exactly channelAt's .v)
   doc.pieces.forEach((P, i) => { if (carryFn[i]) out[i] = { fn: phi1(i), key: `c${carryOf(doc, i - 1) ? carryOf(doc, i - 1).key : ''}|${carryOf(doc, i) ? carryOf(doc, i).key : ''}` }; });
   // runs of road pieces, a flight or a tube between them
   const runs = []; let cur = null;
@@ -445,7 +446,10 @@ function bankPlan(doc) {
     const pieceOf = (s) => { let pos = 0; for (const i of run) { const L = doc.pieces[i].length; if (s <= pos + L + 1e-9) return [i, Math.min(L, Math.max(0, s - pos))]; pos += L; } const i = run[run.length - 1]; return [i, doc.pieces[i].length]; };
     const f1 = run.map((i) => phi1(i));
     const val = (s) => { const [i, t] = pieceOf(s); return f1[run.indexOf(i)](t); };
-    const turnsAt = (s) => { const [i, t] = pieceOf(s); return Math.abs(D.channelAt(doc.pieces[i], 'kh', t).v) > TURN_KH; };   // a curved station (D443's)
+    // L141 (pane B): a piece whose turn control points are all exactly 0 turns nowhere (a B-spline of zeros is exactly 0), so it is answered without reading it: a
+    // window's turning test reads 101 stations a try, and on the bank probe's straight road (extend.js probePeak) that was 8.5 of a drag's 58 ms of probes
+    const straight = new Set(run.filter((i) => doc.pieces[i].channels.kh.every((x) => x === 0)));
+    const turnsAt = (s) => { const [i, t] = pieceOf(s); if (straight.has(i)) return false; return Math.abs(D.channelValue(doc.pieces[i], 'kh', t)) > TURN_KH; };   // a curved station (D443's)
     const h = 0.5, d1 = (s) => (val(Math.min(S[N - 1], s + h)) - val(Math.max(0, s - h))) / (Math.min(S[N - 1], s + h) - Math.max(0, s - h));
     const d2 = (s) => { const a = Math.max(h, Math.min(S[N - 1] - h, s)); return (val(a + h) - 2 * val(a) + val(a - h)) / (h * h); };
     // the run's joints (global s): no window crosses one, so a joint keeps the bank, rate and acceleration its pieces give it, and a piece's edit moves no bank

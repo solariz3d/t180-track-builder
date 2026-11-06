@@ -29,6 +29,7 @@ const SPD = require('./spawndrag.js');
 const GT = require('../../src/core/gridturn.js');   // 2026-10-12: Turn to grid, and the end heading line    // and dragged there
 const VO = require('./valuesoverlay.js');   // the values of the piece being edited, large over the 3D view   // the free jump's landing: where its handles are, and its number boxes
 const FL = require('./flightlayer.js');   // the flights drawn as a dashed line across the air
+const ST = require('./secondtick.js');   // the second bank's tick on the ghost (L135)
 const ZG = require('./zonegrab.js');   // Sculpt grabs the road itself (the zone at the press, the drag's axis, the dot rows)
 const SL = require('./selectionlayer.js');   // pieceSpan, the piece under a station (Stretch's glyph stands at its far joint)
 
@@ -50,6 +51,50 @@ const DEG = Math.PI / 180;
 // if that is shorter: the core needs a transition no longer than the piece), then held for the rest of the piece. Unticked, it blends over
 // the whole piece as before. The core takes `transition` as a number OR a per-channel map in metres.
 const AT_START_M = 20;
+// THE LATER CHANGES (L135 the bank's second; L139 every field, any number: the user, 2026-11-05 06:49Z, "what if i want the climb to change more than once per piece,
+// the same with turns?"). A field's list of later changes, each { then, from }: from its mark on, the field changes again, to its then. The CORE holds every rule and
+// every number: src/core/extend.js secondMinM(channel, from, to), a segment's shortest length, and SECOND_FLOOR_M, the room a new change is offered in. The panel
+// copies none (L135 held a copy of the bank's 15; L139's packet: "Do NOT copy the numbers") and reads them THROUGH THE SHELL (shell.secondMinM, shell.secondFloorM):
+// it may not require src/core/extend.js itself, which pulls tools/piecewise.cjs and node's fs, and the app's loader refuses that (app/test/core-spawns-ui.test.js
+// "the panel still loads through the webview's loader"). A shell without them: a first change lays at 85% and no offer is drawn.
+// SECOND_FROM_SHARE: the L135 default for a first change with no from (the user's drawing marks about the last 15% of a 750 m turn)
+const SECOND_FROM_SHARE = 0.85;
+const SECOND_FIELDS = Object.freeze(['turn', 'climb', 'bank', 'width', 'cup', 'edge', 'edgeR']);
+const SECOND_NAME = Object.freeze({ turn: 'turn', climb: 'climb', bank: 'bank', width: 'width', cup: 'cup', edge: 'left edge', edgeR: 'right edge' });
+/** the core's shortest segment for a change of channel ch from a to b, in metres, by the function given (the shell's secondMinM); 0 where none is given or it says nothing */
+// D642 (pane B's additive model, its hand-back §3): a field's first ramp still moving under its later changes, as extend.js secondMinM takes it: { step, length } in the
+// core's units when the ramp runs the whole piece (no early transition); null otherwise (a ramp done early has stopped before any change), and null with no step. `from` is
+// where the ramp starts, read as the core reads it (extend.js changeLists startV): on an empty track the first piece starts AT its typed values (out.first), so it has no
+// ramp; else the head's value, 0 when no head is given (as extendOptions' fromDeg reads it)
+const rampStart = (first, head, ch) => (first && Number.isFinite(first[ch]) ? first[ch] : head && Number.isFinite(head[ch]) ? head[ch] : 0);
+const baseOfRamp = (tr, target, from, L) => { if (tr !== undefined || !Number.isFinite(target) || !Number.isFinite(from) || !(L > 0) || target === from) return null; return { step: target - from, length: L }; };
+const secondMinOf = (minM, ch, a, b) => { if (typeof minM !== 'function' || !Number.isFinite(a) || !Number.isFinite(b)) return 0; const m = minM(ch, a, b); return Number.isFinite(m) && m > 0 ? m : 0; };
+const up2 = (x) => Math.ceil(x * 100 - 1e-9) / 100, down2 = (x) => Math.floor(x * 100 + 1e-9) / 100, near2 = (x) => Math.round(x * 100) / 100;
+/**
+ * Each change's from (m) for one field's list [{ from: number | null, target }]: a from given stays; a missing one is laid: the first at SECOND_FROM_SHARE of the piece,
+ * a later one right after the previous mark plus that segment's minimum (segment k runs from mark k to the next and changes target k−1 to target k; B's core measures
+ * the same), never before `lo` (an early first ramp's end) nor past the room the later segments need (L − the sum of their minimums). With one change this is L135's
+ * clamp, min(85%, L − its minimum).
+ * A CORNER list (L139 corner default, after B's R1 fix): change k is a corner of list[k].target degrees over [mark k, the next mark or L], and the core refuses it below
+ * cornerChangeMinM(doc, opts, deg) = max(cornerMinM, SECOND_MIN_K·√|deg|) (src/core/turnby.js), passed in as cornerMin(deg). A missing mark still prefers the even split of
+ * the piece (his S: +90 then −90 turns at the middle), but within the same bounds as above: after the previous mark plus that corner's minimum, and before the room the
+ * later corners need. Without cornerMin (a shell before R1) the split is plain. The FIRST corner's own shortest (the head's shortestTurnBy) is not passed to the panel.
+ */
+function changeFroms(length, list, first, ch, { lo = 0, corner = false, minM = null, cornerMin = null } = {}) {
+  const L = Number(length), n = list.length, out = [];
+  if (!(L > 0)) return list.map((x) => x.from);
+  const cm = (deg) => { if (typeof cornerMin !== 'function' || !Number.isFinite(deg)) return 0; const v = cornerMin(deg); return Number.isFinite(v) && v > 0 ? v : 0; };
+  // each change's minimum, asked only when a mark is laid here (D642, E's review of d87ba99: asked for every change on every options build, a drag's included, it was 9 of the
+  // 13 searches a move, each a dozen probe roads, though a dragged change always has its mark). Laid marks need m[j] for j from that change on, and m[k - 1] before it
+  const t = [first, ...list.map((x) => x.target)], mm = new Array(n), m = (k) => (mm[k] === undefined ? (mm[k] = corner ? cm(t[k + 1]) : secondMinOf(minM, ch, t[k], t[k + 1])) : mm[k]);
+  for (let k = 0; k < n; k++) {
+    if (list[k].from !== null) { out.push(list[k].from); continue; }
+    let rest = 0; for (let j = k; j < n; j++) rest += m(j);
+    const lower = up2(k === 0 ? lo : out[k - 1] + m(k - 1)), pref = corner ? near2((L * (k + 1)) / (n + 1)) : k === 0 ? near2(L * SECOND_FROM_SHARE) : lower;
+    out.push(Math.max(lower, Math.min(pref, down2(L - rest))));
+  }
+  return out;
+}
 // The CROSS-SECTION at the start (the user, 2026-10-29, a 20° bank at start over 20 m: "keep what it does, but make the transition a lot more smoother gradient"): a
 // ticked bank, cup or edge comes in no faster than the checker's own roll amber (src/validate/index.js ROLL_AMBER_DEG_M, read at a 20 m chord), so its ramp is
 // START_SPREAD × |change| / that rate, at least AT_START_M. START_SPREAD is measured, not derived: Extend lays a short ramp's change inside about three quarters of it,
@@ -128,7 +173,7 @@ const EARLY_TITLE = Object.freeze({
 // change, ending at a climb rate of 0 (a steady pitch, level only when it ends at pitch 0).
 // `head`: the head's end values as coreshell headState gives them (phi in rad; c, e, er in degrees), which a cross-section ramp at the start is measured from;
 // without one (an empty track, or a caller that has none) the change is measured from 0
-function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null }) {
+function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null, changes = null, secondMinM = null, cornerChangeMinM = null }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
   const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup), corner = turnAs === 'corner' && t !== null && t !== 0, climbCorner = turnAs === 'corner' && c !== null && c !== 0;
   if (turnAs !== 'rate' && turnAs !== 'corner') throw new Error(`BAD_TURN_AS: the turn is read as 'rate' or 'corner', got ${turnAs}`);
@@ -166,6 +211,30 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
     if (ch === 'phi') out.bankShape = startShapeOf(transition.phi);
     else (out.startShapes = out.startShapes || {})[ch] = startShapeOf(transition[ch]);
   }
+  // THE LATER CHANGES (L139; L135 the bank's): each field's list in the core's units, each change with its own from (B's names, 2026-11-05):
+  // changes: { kh|kv|phi|w|c|e|er: [{ from, target }, …] }, and as corners changes.turnDeg / climbDeg: [{ from, deg }, …] after the first corner. Only for a field with a
+  // target of its own; a then left blank is no change. NOT clamped: the core refuses a mark out of range, or a segment under its minimum, by name (BAD_SECOND, naming the
+  // field, which change and the minimum), and a clamp here would hide it. No change typed: no `changes`, so the options are as before, byte for byte
+  const later = {};
+  for (const f of SECOND_FIELDS) {
+    const items = ((changes && changes[f]) || []).map((x) => ({ then: num(x.then), from: num(x.from) })).filter((x) => x.then !== null && Number.isFinite(x.then));
+    if (!items.length) continue;
+    if ((f === 'turn' || f === 'climb') && turnAs === 'corner') {
+      const first = f === 'turn' ? t : c; if (first === null) continue;
+      // D642 (pane B's additive model): the first corner still turns under every later one, so each later corner's shortest is asked with the first corner's degrees
+      const cornerMin = typeof cornerChangeMinM === 'function' ? (deg) => cornerChangeMinM(deg, first, out.length) : null;
+      const key = f === 'turn' ? 'turnDeg' : 'climbDeg', froms = changeFroms(out.length, items.map((x) => ({ from: x.from, target: x.then })), first, key, { corner: true, cornerMin });
+      later[key] = items.map((x, k) => ({ from: froms[k], deg: x.then }));
+      continue;
+    }
+    const ch = FIELD_CHANNEL[f]; if (targets[ch] === undefined) continue;
+    const per = f === 'turn' || f === 'climb' ? DEG / 100 : f === 'bank' ? DEG : 1, list = items.map((x) => ({ from: x.from, target: x.then * per }));
+    // D642 (pane B's additive model): a first ramp over the whole piece (no early transition) is still moving under the change, so the change's shortest is asked with it
+    const base = baseOfRamp(transition[ch], targets[ch], rampStart(empty ? targets : null, head, ch), out.length), minM = base && typeof secondMinM === 'function' ? (c, a, b) => secondMinM(c, a, b, base) : secondMinM;
+    const froms = changeFroms(out.length, list, targets[ch], ch, { lo: transition[ch] || 0, minM });
+    later[ch] = list.map((x, k) => ({ from: froms[k], target: x.target }));
+  }
+  if (Object.keys(later).length) out.changes = later;
   if (Object.keys(transition).length) out.transition = transition;
   if (empty && Object.keys(targets).length) out.first = { ...targets };   // on an empty track the typed values are the first piece's start
   return out;
@@ -281,7 +350,7 @@ function mount(root, shell, mountOpts = {}) {
       shown[k] = cornerMode() ? '' : show(HEAD[k][1](h)); f.value = shown[k]; lab.textContent = cornerMode() ? `${unit} °` : `${unit} °/100m`; f.setAttribute('title', title[turnAs.value]);
     }
   };
-  const showHead = () => { const h = shell.headState(); for (const [k, [input, of]] of Object.entries(HEAD)) { shown[k] = show(of(h)); input.value = shown[k]; } showTurnHead(h); for (const [k, f] of [['cup', cup], ['tube', tube]]) { f.disabled = false; f.setAttribute('title', baseTitle[k]); } fillWidthLike(); };   // (baseTitle is set below, before the first draw)
+  const showHead = () => { const h = shell.headState(); for (const [k, [input, of]] of Object.entries(HEAD)) { shown[k] = show(of(h)); input.value = shown[k]; } showTurnHead(h); for (const [k, f] of [['cup', cup], ['tube', tube]]) { f.disabled = false; f.setAttribute('title', baseTitle[k]); } fillWidthLike(); clearSecond(); };   // (baseTitle and clearSecond are set below, before the first draw; the head has no second bank)
   // A PIECE IS A CUP OR A TUBE, never both (contract: `c` and `t` targets together are refused BAD_TARGET). CHOSEN: the field changed
   // LAST wins. Changing one puts the other back to what it shows (so it sends no target) and DISABLES it, with a tooltip saying why; putting
   // the changed one back to its shown value enables the other again, and so does every new document (showHead).
@@ -304,6 +373,68 @@ function mount(root, shell, mountOpts = {}) {
   // (the user, 2026-11-02: "when you make the track go all the way around say -360 degrees, it only hits 359.99 and then glitches out"): exactly one turn is
   // a full turn of roll, sent as typed; wrapTurn read it as 0, so after -270 the piece rolled 270° back to upright. Past one turn it wraps as above.
   const bankTarget = () => { const t = asTyped('bank'); if (t === '') return t; const T = Number(t); return !Number.isFinite(T) ? t : Math.abs(T) === 360 ? String(T) : String(HD.wrapTurn(T)); };
+  // THE LATER CHANGES IN THE PANEL (L139; plan_l139…, amended a third time: changes are made in the 3D view by dragging an OFFER, and these rows mirror them). Under each
+  // field, one row per change: "then" (the field's value from the mark on, in the field's own unit), "from m" (the mark, metres from the piece's start) and a remove. A change
+  // made by a drag keeps its mark's SHARE of the piece, so lengthening the piece spreads the marks apart (the user, 06:53Z: "they get like inflated in between each
+  // other"); a from typed here is metres, as L135's was, and a cleared one is laid again by the rule (changeFroms) and follows the piece. A field's rows are off while it
+  // has no target (the first change is its target). A new document clears them all (showHead); Undo gives back the undone piece's own (fieldsNow, putBack)
+  // the core's minimum and floor, through the shell (a shell without them: null)
+  const shellMinM = (ch, a, b, base) => (typeof shell.secondMinM === 'function' ? shell.secondMinM(ch, a, b, base) : null);
+  // D642: the minimum for one field of the options `o`, its first ramp passed when that ramp still moves under the change (baseOfRamp); a corner's first is its degrees
+  const baseFor = (o, key) => baseOfRamp(o.transition && o.transition[key], o.targets && o.targets[key], rampStart(o.first, shell.headState(), key), Number(o.length));
+  const minOf = (o, key) => { const base = baseFor(o, key); return base ? (c, a, b) => shellMinM(c, a, b, base) : shellMinM; };
+  // a later corner's shortest, by its degrees (B's R1: src/core/turnby.js cornerChangeMinM, through the shell); cornerMinM reads only the family and the knot spacing, so the
+  // document's own (the last road piece's family) is what it is asked with, as extend() would lay it
+  // D642: and the first corner's degrees, and the piece's length, which the share of the first corner still turning under it is read from (turnby.js cornerChangeMinM)
+  const shellCornerMin = (deg, baseDeg, L) => (typeof shell.cornerChangeMinM === 'function' ? shell.cornerChangeMinM(shell.getState().history.present, { length: L }, deg, baseDeg) : null);
+  // a corner's segment: the core's shortest corner of that angle (src/core/turnby.js cornerChangeMinM, through the shell; L139 R1, pane B: max(cornerMinM, 31.5·√|Δθ°|),
+  // smooth to ride), else the shortest after a straight (cornerMinM), else 0
+  // D642: `baseDeg`, the first corner still turning under it (its degrees), as extendOptions asks
+  const cornerMin = (o, deg, baseDeg) => { const doc = shell.getState().history.present, v = typeof shell.cornerChangeMinM === 'function' && Number.isFinite(deg) ? shell.cornerChangeMinM(doc, o, deg, baseDeg) : typeof shell.cornerMinM === 'function' ? shell.cornerMinM(doc, o) : null; return Number.isFinite(v) && v > 0 ? v : 0; };
+  const secondFloor = () => { const v = typeof shell.secondFloorM === 'function' ? shell.secondFloorM() : null; return Number.isFinite(v) && v > 0 ? v : null; };
+  const SEC = Object.fromEntries(SECOND_FIELDS.map((f) => [f, { list: [], box: el('div', { class: 'then-list', 'aria-label': `${SECOND_NAME[f]} changes` }) }]));
+  const secUnit = (f) => (f === 'turn' || f === 'climb' ? (cornerMode() ? '°' : '°/100m') : f === 'width' ? 'm' : '°');
+  const secHasTarget = (f) => (f === 'bank' ? bankTarget() !== '' : f === 'edgeR' ? rightTarget() !== '' : asTyped(f) !== '');
+  const secThen = (f, x) => { const v = x.then.value, T = Number(v); return f !== 'bank' || v === '' || !Number.isFinite(T) || Math.abs(T) === 360 ? v : String(HD.wrapTurn(T)); };   // the bank within one turn
+  const secLive = (f) => SEC[f].list.filter((x) => x.then.value !== '' && Number.isFinite(Number(x.then.value)));   // the changes the options carry, in order
+  // (L140, the user: "it adds something called extra turn"): a row reads "extra turn °" ("extra turn 2 °" for the second), as its handle is labelled, and is named so
+  const secName = (f, k) => `extra ${SECOND_NAME[f]}${k ? ` ${k + 1}` : ''}`;
+  const secRelabel = (f) => SEC[f].list.forEach((x, k) => { x.then.setAttribute('aria-label', secName(f, k)); x.from.setAttribute('aria-label', `${secName(f, k)} from`); x.rm.setAttribute('aria-label', `remove ${secName(f, k)}`); x.unit.textContent = `${secName(f, k)} ${secUnit(f)}`; });
+  const secAdd = (f, { then = '', from = '', share = null } = {}) => {
+    const x = { then: el('input', { type: 'number', step: '1', title: `the ${SECOND_NAME[f]} from this change's mark on: drag its offer on the next piece to make one, then type here to change it` }),
+      from: el('input', { type: 'number', step: '1', title: 'where this change starts, in metres from the start of the piece (its mark on the next piece, dragged along it). Typed, it stays at those metres; cleared, it is laid again' }),
+      unit: el('span', { text: '' }), share, auto: share === null && String(from) === '' };   // no from given: laid by the rule, and shown
+    x.rm = el('button', { text: '−', title: 'remove this change', onclick: () => secRemove(f, x) });
+    x.row = el('label', { class: 'picker inline then-row' }, x.unit, x.then, el('span', { text: 'from m' }), x.from, x.rm);   // a label row, as every field's own
+    x.then.value = String(then); x.from.value = String(from);
+    x.then.oninput = x.then.onchange = () => { lastTouched = x.then; ghost(); };
+    x.from.oninput = x.from.onchange = () => { x.share = null; x.auto = x.from.value === ''; lastTouched = x.from; ghost(); };   // typed: metres; cleared: laid by the rule
+    SEC[f].list.push(x); SEC[f].box.append(x.row); secRelabel(f); return x;
+  };
+  const secRemove = (f, x) => { SEC[f].list = SEC[f].list.filter((y) => y !== x); x.row.remove(); secRelabel(f); ghost(); };
+  const clearSecond = () => { for (const f of SECOND_FIELDS) { for (const x of SEC[f].list) x.row.remove(); SEC[f].list = []; } for (const k of Object.keys(secPending)) delete secPending[k]; };
+  const secChanges = () => Object.fromEntries(SECOND_FIELDS.filter((f) => SEC[f].list.length && secHasTarget(f)).map((f) => [f, SEC[f].list.map((x) => ({ then: secThen(f, x), from: x.from.value }))]));
+  const secKey = (f) => (f === 'turn' || f === 'climb') && cornerMode() ? (f === 'turn' ? 'turnDeg' : 'climbDeg') : FIELD_CHANNEL[f];
+  /** the rows follow their field (off without a target) and the length: a dragged change keeps its share of the piece; a cleared from shows where the rule lays it */
+  const showSecond = () => {
+    const L = Number(len.value);
+    for (const f of SECOND_FIELDS) {
+      const on = secHasTarget(f);
+      for (const x of SEC[f].list) { x.then.disabled = x.from.disabled = x.rm.disabled = !on; if (x.share !== null && L > 0) x.from.value = show(x.share * L); if (x.auto) x.from.value = ''; }
+      secRelabel(f);
+    }
+    // B's G8: a change the length leaves short of its minimum is moved earlier (its share kept), last first, so the piece is not refused for it
+    for (const f of SECOND_FIELDS) {
+      const live = secLive(f); if (!live.length || !secHasTarget(f)) continue;
+      // only a DRAGGED change (kept as its share) moves: a typed from is the user's, refused by name (L135 C11-C13)
+      // (D642: a segment that holds where it is is past nothing, so the one-probe question is asked first and the shortest's search only when it does not)
+      // (D642, the librarian's ruling on B's §9: the place it moves to is walked, like a dragged mark, to the nearest that holds on the built road; none: the latest, as before)
+      for (let k = live.length - 1; k >= 0; k--) { if (live[k].auto || live[k].share === null) continue; const S = secSegs(f); if (!S.arr[k] || S.holds(k)) continue; const r = secRange(S, k); if (S.arr[k].from > r.hi + 1e-9 && r.hi >= r.lo - 1e-9) { const w = walkToHold(f, k, live[k], down2(r.hi), up2(r.lo), down2(r.hi)); live[k].from.value = show(w === null ? down2(r.hi) : w); } }
+    }
+    if (!SECOND_FIELDS.some((f) => SEC[f].list.some((x) => x.auto))) return;
+    const o = opts();
+    for (const f of SECOND_FIELDS) { const arr = o.changes && o.changes[secKey(f)]; if (!arr) continue; secLive(f).forEach((x, k) => { if (x.auto && arr[k]) x.from.value = show(arr[k].from); }); }
+  };
   // "at start": one small box per field, off by default (off = ease to the value over the whole piece, as always). It is kept from
   // piece to piece, like a preference; it does nothing for a field left as shown, which has no target
   // (the user, 2026-10-31: the boxes "need a more informative name and a hover that explains them"): the box reads "early", and its tooltip is EARLY_TITLE's
@@ -328,12 +459,14 @@ function mount(root, shell, mountOpts = {}) {
   const rightTarget = () => { const r = asTyped('edgeR'); return r !== '' || asTyped('edge') === '' ? r : String(HEAD.edgeR[1](shell.headState())); };
   const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), edgeR: rightTarget(), start: asTyped('start'), tube: asTyped('tube'),
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
-    empty: !shell.getState().history.present.pieces.length, turnAs: turnAs.value, head: shell.headState() });
+    empty: !shell.getState().history.present.pieces.length, turnAs: turnAs.value, head: shell.headState(),
+    changes: secChanges(), secondMinM: shellMinM, cornerChangeMinM: shellCornerMin });
   // (the user, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
   // document it made; when Undo steps from that document back to the one it was made from, the fields are put back (the length, every field as typed or left as
   // shown, the at-start ticks), so Extend again rebuilds the same piece. Redo, a brush and open show the head, as before
   const madeWith = new WeakMap();
-  const fieldsNow = () => ({ len: len.value, values: Object.fromEntries(Object.keys(HEAD).map((k) => [k, HEAD[k][0].value])), ticks: Object.fromEntries(Object.entries(atStart).map(([k, b]) => [k, b.checked])), turnAs: turnAs.value });
+  const fieldsNow = () => ({ len: len.value, values: Object.fromEntries(Object.keys(HEAD).map((k) => [k, HEAD[k][0].value])), ticks: Object.fromEntries(Object.entries(atStart).map(([k, b]) => [k, b.checked])), turnAs: turnAs.value,
+    second: Object.fromEntries(SECOND_FIELDS.map((f) => [f, SEC[f].list.map((x) => ({ then: x.then.value, from: x.from.value, share: x.share, auto: x.auto }))])) });
   // (the user, 2026-10-18: a piece after a turn goes straight "because the pieces dont retain the same values"): AS CORNERS, after an Extend the turn and climb fields
   // KEEP the degrees typed for the piece just placed (the new document's draw has just shown the head, blank), so Extend again places the same corner, each ending straight.
   // A blank or a typed 0 is not carried (the field stays blank, as before). Only Extend carries (and Straight, whose 0 never is): Jump, Level, To floor, Turn by, Turn to grid
@@ -346,7 +479,8 @@ function mount(root, shell, mountOpts = {}) {
   };
   const extendHere = () => { const before = shell.getState().history.present, made = fieldsNow(); shell.extend(opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) { madeWith.set(after, { before, made }); carryCorner(made); } };
   //: the mode Undo gives back is saved through S too, or the hidden box and the Settings menu would read two different modes
-  const putBack = (m) => { if (m.turnAs && m.turnAs !== turnAs.value) { turnAs.value = m.turnAs; showTurnHead(shell.headState()); S.set('turnClimbAs', m.turnAs); } len.value = appliedLen = m.len; for (const k of Object.keys(HEAD)) HEAD[k][0].value = m.values[k]; for (const [k, b] of Object.entries(atStart)) b.checked = !!m.ticks[k]; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube); };
+  const putBack = (m) => { if (m.turnAs && m.turnAs !== turnAs.value) { turnAs.value = m.turnAs; showTurnHead(shell.headState()); S.set('turnClimbAs', m.turnAs); } len.value = appliedLen = m.len; for (const k of Object.keys(HEAD)) HEAD[k][0].value = m.values[k]; for (const [k, b] of Object.entries(atStart)) b.checked = !!m.ticks[k]; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube);
+    clearSecond(); if (m.second) for (const f of SECOND_FIELDS) for (const y of m.second[f] || []) { const x = secAdd(f, y); x.auto = !!y.auto; } showSecond(); };
   // the ghost: a candidate the shell cannot build, or the preview cannot draw, says why (it used to vanish without a word)
   // THE READOUT of the piece the fields describe: 16 px bold rows, so its ink is at least 11 device px tall
   // cup reads from → to: the DOCUMENT's values (cupFromDeg / cupToDeg, which for a legacy piece are its rendered edge), never
@@ -395,8 +529,11 @@ function mount(root, shell, mountOpts = {}) {
   // so the chords stay 2 m and only the end is new. The field, the readout and the piece placed keep the exact value; the release builds the exact ghost.
   const previewLength = (o) => (scrubbing && scrubKind === 'length' && o.length > 2 ? { ...o, length: Math.round(o.length / 2) * 2 } : o);
   let releasing = false;   // true while a drag's LAST position is typed in, just before end(): its ghost(RELEASE) builds the exact ghost, so the cheap one between is not built
+  let ghostN = 0, exCache = null;   // L140: the extra handles' cache (extraHandles), declared before ghost() can first run
   const ghost = () => {
+    ghostN++;   // L140: what the extra handles were worked out from may have changed (extraHandles' cache)
     if (releasing) return;
+    showSecond();   // the later changes' rows follow their fields (on with a target) and the length (a dragged mark keeps its share)
     hintNow();   // the straight hint follows the turn field and its box
     readout();   // first, and synchronously: the numbers follow the fields with no timer and no frame wait
     let why = null;
@@ -425,7 +562,15 @@ function mount(root, shell, mountOpts = {}) {
   for (const f of FIELDS) { const prev = f.oninput; f.oninput = f.onchange = (e) => { lastTouched = f; return prev ? prev(e) : undefined; }; }
   // an emptied field shows the 0 it sends once the change is committed (on change, not while typing, so clearing a box to type a new number is not interrupted)
   for (const k of ZERO_WHEN_EMPTIED) { const f = HEAD[k][0], prev = f.onchange; f.onchange = (e) => { if (emptied(k)) f.value = '0'; return prev(e); }; }
+  // D641 (f), E's N2: a bank typed past one turn is laid within it (bankTarget), so once committed the field shows that value, the same way (−654.70 reads −294.70; exactly
+  // ±360 stays, a full turn of roll); never while typing
+  { const prev = bank.onchange; bank.onchange = (e) => { const T = Number(bank.value); if (bank.value !== '' && Number.isFinite(T) && Math.abs(T) > 360) bank.value = show(HD.wrapTurn(T)); return prev(e); }; }
   const onUndoGuard = (e) => {
+    if (lastTouched && typeof lastTouched.secUndo === 'function') {   // the last thing done was a drag on the ghost (L139): one Ctrl+Z undoes that whole drag
+      const u = lastTouched; lastTouched = null; u.secUndo();
+      if (e && e.detail && typeof e.detail.handled === 'function') e.detail.handled();
+      return;
+    }
     const f = [doc.activeElement, lastTouched].find(unapplied);
     if (!f) return;
     f.value = baselineOf(f); lastTouched = null; if (f.oninput) f.oninput();   // the field's own handler refreshes the ghost, the readout and the cup-or-tube rule
@@ -694,7 +839,47 @@ function mount(root, shell, mountOpts = {}) {
     const corner = (k) => cornerMode() && HD.KINDS[k].unit === '°' && Object.values(CORNER_KIND).includes(k);
     const kinds = HD.ORDER.map((k) => (cornerMode() && CORNER_KIND[k] ? CORNER_KIND[k] : k)).filter((k) => !HANDLE_FIELD[k].disabled && (corner(k) || fieldNum(HANDLE_FIELD[k]) !== null));
     const wt = fieldNum(width);   // the width mark sits at the TARGET width (the field), so it follows the drag from the near end
-    return { mode: 'extend', samples: info.samples, s0: info.s0, s1, half, halfTarget: wt === null ? undefined : wt / 2, kinds, base: (k) => fieldNum(HANDLE_FIELD[k]) ?? (corner(k) ? 0 : null), ctx: (k) => ({ half: half(HD.KINDS[k].at) }) };
+    // THE EXTRA HANDLES (L140): beside the field's own kinds, one per change each field already has and, where the piece has room for the next, one more (extraHandles below)
+    const ex = extraHandles(), exOf = new Map(ex.map((x) => [x.id, x])), L = s1 - info.s0;
+    return { mode: 'extend', samples: info.samples, s0: info.s0, s1, half, halfTarget: wt === null ? undefined : wt / 2, kinds: kinds.concat(ex.map((x) => x.id)),
+      at: Object.fromEntries(ex.map((x) => [x.id, x.at])),   // L140 round 2: the handle stands where he drew it; its change's mark, where the change starts
+      base: (k) => (exOf.has(k) ? exOf.get(k).value : fieldNum(HANDLE_FIELD[k]) ?? (corner(k) ? 0 : null)),
+      ctx: (k) => (exOf.has(k) ? { half: halfAt(exOf.get(k).from), snapTo: exOf.get(k).snapTo } : { half: half(HD.KINDS[k].at) }),
+      slideBase: (k) => (exOf.has(k) ? exOf.get(k).from : 0) };
+  };
+  // THE EXTRA HANDLES (L140; the user, 10:15Z: "after the first turn, it adds something called extra turn, and its like the same ui as the first grab turn, just added below it or
+  // around it in a way to be intuitive"; the plan's REVISED reading, option (a)). For each field with a value whose own handle the ghost carries (turn, climb, bank, width, cup;
+  // the left and right edge have no handle of their own, so no extra one): one handle per change the field has, at that change's mark, holding its value; and one more, unused,
+  // where the next change has room (offersAt, form (ii); a slide moves it, secPending). Each is its field's handle in look, arrows and colour (handles.js extraKind), labelled
+  // "extra turn". Its drag ACROSS the road sets the amount and lands on level or on the field's start value on approach (snapTo, handles.js SNAP_PX); ALONG the road it moves
+  // where its change starts. An unused one changes nothing until it is dragged
+  const EX_KIND = { turn: 'turn', climb: 'climb', bank: 'bank', width: 'width', cup: 'cup' };
+  const exKindOf = (f) => (cornerMode() && CORNER_KIND[f] ? CORNER_KIND[f] : EX_KIND[f]);
+  const exFieldOf = (kind) => { const b = HD.KINDS[kind] && HD.KINDS[kind].base; return Object.keys(EX_KIND).find((f) => b === EX_KIND[f] || b === CORNER_KIND[f]) || null; };
+  // worked out once per ghost() (every field, row, drag and slide goes through it) and per document, not on every frame: the handles ask for their model each frame, and this reads
+  // the options and the core's minimums (release-frame.test.js row 1 went over its 6.0 ms bar without it)
+  const extraHandles = () => {
+    const d = shell.getState().history.present; if (exCache && exCache.n === ghostN && exCache.d === d && exCache.c === cornerMode()) return exCache.v;
+    const v = extraHandlesNow(); exCache = { n: ghostN, d, c: cornerMode(), v }; return v;
+  };
+  const extraHandlesNow = () => {
+    const o = opts(), offers = offersAt({ unused: true }), out = [];
+    for (const f of Object.keys(EX_KIND)) {
+      if (!secHasTarget(f)) continue;
+      const kind = exKindOf(f), K = HD.KINDS[kind]; if (!K || (HANDLE_FIELD[kind] && HANDLE_FIELD[kind].disabled)) continue;
+      const start = Number(shown[f]), snapTo = K.zero ? [0].concat(Number.isFinite(start) && start !== 0 && !(K.unit === '°' && CORNER_KIND[f] === kind) ? [start] : []) : (Number.isFinite(start) ? [start] : []);
+      // D641 (E's item 2: his S as one piece landed 0.97° off straight, only to the pixel): a corner's extra also lands on the corner that undoes the first, so the field ends
+      // where the piece started (an S dead straight, a climb back to its pitch)
+      if (CORNER_KIND[f] === kind) { const first = Number(asTyped(f)); if (Number.isFinite(first) && first !== 0) snapTo.push(-first); }
+      const arr = (o.changes && o.changes[secKey(f)]) || [], live = secLive(f);
+      // ONE extra handle per field (the user on c42f985, brief :29: "every subsequent click adds another one, perhaps we should only do two per action on the piece … until we figure
+      // out how to make it work right"): its first change once there is one, else the change it can make. Later changes made another way keep their rows and marks
+      const at = Math.min(1, Math.max(0, EXTRA_AT[f]));
+      if (arr.length) { const v = Number(live[0] && live[0].then.value); out.push({ id: HD.extraId(kind, 0), field: f, index: 0, from: arr[0].from, value: Number.isFinite(v) ? v : 0, snapTo, at }); continue; }
+      const of = offers.find((x) => x.field === f);
+      if (of) out.push({ id: HD.extraId(kind, 0), field: f, index: 0, from: of.from, value: of.base, snapTo, unused: true, at });
+    }
+    return out;
   };
   let sculptSamples = null;   // the selected piece's samples, kept for the track they came from
   const sculptModel = () => {
@@ -771,12 +956,14 @@ function mount(root, shell, mountOpts = {}) {
     pose: () => { const v = askOf('t180:view'); return v ? v.pose : null; },
     begin: (h) => { if (LAND_FIELD[h.kind]) { shell.beginLanding(); landDrag = !!shell.getState().landingDrag; return; } const m = sculptModel(); if (!m) { scrubbing = true; scrubKind = h.kind; } if (m) { shell.beginSculpt({ channel: SCULPT_CH[h.kind], piece: m.info.index, ...(Number.isInteger(m.info.from) && Number.isInteger(m.info.to) ? { from: m.info.from, to: m.info.to } : {}) }); sculptDrag = shell.getState().brush ? { kind: h.kind, base: m.base(h.kind) } : null; } },
     apply: (h, value, mods, final) => {
+      if (HD.KINDS[h.kind] && HD.KINDS[h.kind].extra) { secondExtra(h.kind, value); return; }   // L140: an extra handle's amount
       if (LAND_FIELD[h.kind]) { if (landDrag) shell.landingTo({ [LAND_FIELD[h.kind]]: value }); return; }
       if (sculptDrag) { const delta = value - sculptDrag.base; shell.sculptTo(h.kind === 'bank' ? delta * HD.DEG : delta); return; }
       if (shell.getState().sculpt) return;
       const f = HANDLE_FIELD[h.kind]; f.value = h.kind === 'bank' ? show(HD.wrapTurn(value)) : String(value); if (f.oninput) { releasing = !!final && scrubbing; try { f.oninput(); } finally { releasing = false; } }   // typed: the field's own handler follows it (the bank within one turn)
     },
-    end: () => { if (landDrag) { landDrag = false; shell.endLanding(); } if (sculptDrag) { sculptDrag = null; shell.endSculpt(); } if (scrubbing) { scrubbing = false; scrubKind = null; ghost(); } },   // the release: the full ghost (built a slice a frame by the preview)
+    slide: (h, from) => secondSlide(h.kind, from),   // L140: an extra handle dragged along the road
+    end: () => { exDrag = null; secDragFrom = null; if (landDrag) { landDrag = false; shell.endLanding(); } if (sculptDrag) { sculptDrag = null; shell.endSculpt(); } if (scrubbing) { scrubbing = false; scrubKind = null; ghost(); } },   // the release: the full ghost (built a slice a frame by the preview)
   };
   handlesOn.onchange = () => { triedDoc = null; if (!handlesOn.checked && !shell.getState().sculpt) send('t180-ghost-clear'); };
   // Sculpt's keys (app/core/keys.js sculptKey): Esc drops an open drag (the tool's or a handle's); in Sculpt [ ] the radius and 1-9 the tool. Tab is the shell's own switch
@@ -950,8 +1137,8 @@ function mount(root, shell, mountOpts = {}) {
   const plainMessage = (m) => (m && /BAD_TUBE/.test(m) && /must stay within 0 to 360/.test(m) ? TUBE_SHUT : m);
   // the rest of the shape, always shown: each channel with its "at start" box on its row, width like… and grip like… beside their fields, each note under its field
   wlike.setAttribute('class', 'like-pick'); gripLike.setAttribute('class', 'like-pick');
-  const shapeFields = [fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width', wlike), el('label', { class: 'picker inline' }, el('span', { text: 'grip %' }), gripF, gripLike), gripNote,
-    fieldAt('left edge °', edge, 'edge'), fieldAt('right edge °', edgeR, 'edgeR'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube'), wnote];
+  const shapeFields = [fieldAt('cup °', cup, 'cup'), SEC.cup.box, fieldAt('width m', width, 'width', wlike), SEC.width.box, el('label', { class: 'picker inline' }, el('span', { text: 'grip %' }), gripF, gripLike), gripNote,
+    fieldAt('left edge °', edge, 'edge'), SEC.edge.box, fieldAt('right edge °', edgeR, 'edgeR'), SEC.edgeR.box, fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube'), wnote];
   // the selection box, shown only with a selection (and while a delete it started is previewed: its Apply and Cancel are in it)
   const selBox = el('div', { 'aria-label': 'selected pieces' }, ...pieces.nodes.selection);
   const showSel = (st) => { const d = st.history.present; selBox.style.display = shell.selectionInfo() || (st.deleteProposal && st.deleteProposal.base === d) ? '' : 'none'; };
@@ -959,7 +1146,7 @@ function mount(root, shell, mountOpts = {}) {
     info,   // the track line first, directly under the bar (no heading above it)
     el('div', { class: 'actions' }, extendBtn, straightBtn, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
     sculptStrip,
-    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), turnField, climbField, fieldAt('bank °', bank, 'bank'), ...shapeFields),
+    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), turnField, SEC.turn.box, climbField, SEC.climb.box, fieldAt('bank °', bank, 'bank'), SEC.bank.box, ...shapeFields),
     roBox,
     jumpNote, landingBox,
     el('div', { class: 'actions' }, cancelBtn), proposalBox,
@@ -1031,10 +1218,168 @@ function mount(root, shell, mountOpts = {}) {
   const spawnsLayer = stage ? SPL.mount(stage, shell, win) : null;   // the hand-placed start, drawn when the track has one   // the track coloured by grip, off until "colour by grip" is ticked
   colourOn.onchange = () => { if (gripLayer) gripLayer.setVisible(colourOn.checked); if (labels) labels.setGripView(colourOn.checked); };
   const spawnDrag = stage ? SPD.mount(stage, win, shell, { pose: () => { const v = askOf('t180:view'); return v ? v.pose : null; }, yieldTo: (x, y) => !!(handles && HD.hitTest(handles.handles(), x, y)) }) : null;   // the start line, the pack and the hotlap grabbed with the mouse. Mounted BEFORE the handles (the handles' press listener stays the last registered, as the tests' capture emulation assumes) and it steps aside for a handle under the pointer, whatever the order
+  // THE MARKS AND OFFERS' LAYER (L139) is mounted BEFORE the handles: both take the press in the capture phase, and the first registered runs first, so a press on a
+  // mark or an offer is theirs and any other goes on to the handles (core-pieces-ui.test.js also reads the handles' listener as the stage's last pointerdown).
+  // The hooks are wrappers: marksAt, offersAt, secondDrag and secondOffer are declared further down and read only when a frame or a drag runs
+  // (L140: the faint offer rings go; the extra handles, drawn by handles.js, take their place. The marks stay, to show where each change starts)
+  const secondTick = stage ? ST.mount(stage, win, () => ({ marks: marksAt(), offers: [] }), {
+    onMarkDrag: (m, from) => secondDrag(m, from), onOfferDrag: (o, v) => secondOffer(o, v),
+    onDragStart: () => { secDragFrom = null; secOffer = null; scrubbing = true; },
+    // B's G4 and G10: a press within a handle's reach goes to the handle (an extra handle stands on its own change's mark; a mark sat on the bank handle's station)
+    yields: (p) => !!handles && handles.handles().some((h) => h.screen && Math.hypot(h.screen.x - p.x, h.screen.y - p.y) <= HD.HIT_PX),
+    onDragEnd: (it, moved) => { scrubbing = false; secDragFrom = null; secOffer = null; if (moved) ghost(); },
+  }) : null;
   const handles = stage ? HD.mount(stage, win, handlesHost) : null;   // the drag handles' overlay
   if (spawnDrag) spawnDrag.late();   // (the start drag's hover and move listener goes after the handles': they set the cursor on every move)
   if (labels && handles) labels.setAvoid(() => handles.handles().concat(handles.dots()).filter((h) => h.screen).map((h) => h.screen).concat(handles.tips ? handles.tips() : []));   // the road labels keep clear of the handles drawn over them
   const flights = stage ? FL.mount(stage, win) : null;   // the flights as dashed arcs
+  // THE MARKS AND THE OFFERS ON THE GHOST (L139; app/core/secondtick.js draws and drags them). halfAt: the road's half width at a mark (the head's width to the field's, as
+  // the handles read it). marksAt: one mark per change the options carry, where it starts. offersAt: for each field with a target, ONE fainter handle where its next change
+  // has room. The rule (the plan's third amendment; E's addendum, form (ii) of its Amendment D, chosen here): the free stretch after the field's last change is
+  // R = L − (the last mark + that segment's minimum), or L − the early first ramp's end while there is no change; the offer shows once R ≥ 2·SECOND_FLOOR_M and stands
+  // at the middle of R, so a change dragged where it appears has R/2 ≥ the floor to the piece's end and is not refused for want of room. A corner's segment is the
+  // core's shortest corner (cornerMin); the core refuses a corner too short by name. An offer changes nothing until it is dragged.
+  // ONE FIELD'S SEGMENTS (L140, B's G7-G9: a change laid where it cannot fit made the piece vanish). Segment k runs from mark k to the next (or the piece's end) and changes
+  // target k-1 to target k; it must be at least that change's minimum (the core's, through the shell, as offersAt reads it). lo0: the first change starts after the early
+  // first ramp's end. secRange(S, k): where change k's mark may stand, its neighbours and the minimums held
+  const secSegs = (f, o = opts()) => {
+    const key = secKey(f), corner = key === 'turnDeg' || key === 'climbDeg', arr = (o.changes && o.changes[key]) || [];
+    const first = corner ? Number(f === 'turn' ? asTyped('turn') : asTyped('climb')) : o.targets[key];
+    const mm = corner ? null : minOf(o, key), L = Number(len.value);   // D642: with the first ramp under it (corners: the first corner's degrees)
+    // D642 (E's review of d87ba99: 106 ms a move dragging the extra bank back toward level): each segment's shortest, asked only when a range needs its number (min); and
+    // whether a segment holds at the span it has (holds), which is all the fit check needs: at most ONE probe of the built road (shell.spanHolds, extend.js spanHolds),
+    // where its shortest is a search of a dozen. A core without spanHolds: the span against the shortest, as before
+    const prevOf = (k) => (k === 0 ? first : arr[k - 1].target), spanOf = (k) => (k + 1 < arr.length ? arr[k + 1].from : L) - arr[k].from;
+    const memo = new Array(arr.length), min = (k) => (memo[k] === undefined ? (memo[k] = corner ? cornerMin(o, Number(arr[k].deg), first) : secondMinOf(mm, key, prevOf(k), arr[k].target)) : memo[k]);
+    const holds = (k) => {
+      if (!corner && typeof shell.spanHolds === 'function') { const b = shell.spanHolds(key, prevOf(k), arr[k].target, baseFor(o, key), spanOf(k)); if (typeof b === 'boolean') return b; }
+      return spanOf(k) >= min(k) - 1e-6;
+    };
+    return { key, corner, arr, first, lo0: (o.transition && o.transition[key]) || 0, min, holds, L };
+  };
+  const secRange = (S, k) => ({ lo: k === 0 ? S.lo0 : S.arr[k - 1].from + S.min(k - 1), hi: (k === S.arr.length - 1 ? S.L : S.arr[k + 1].from) - S.min(k) });
+  // every mark inside its range: the first at or after the first ramp's end, and each segment (the span to the next mark, or the end) holding; a mark is past its range's low
+  // end exactly when the segment before it does not hold, so the spans alone say it
+  const secFits = (S) => (!S.arr.length || S.arr[0].from >= S.lo0 - 1e-6) && S.arr.every((c, k) => S.holds(k));
+  const halfAt = (from) => { const L = Number(len.value), f = L > 0 ? Math.min(1, Math.max(0, from / L)) : 1, w1 = fieldNum(width), w0 = fieldNum({ value: shown.width }) ?? w1; return ((w0 ?? 0) + ((w1 ?? w0 ?? 0) - (w0 ?? 0)) * f) / 2; };
+  const marksAt = () => {
+    const o = opts(), out = [];
+    for (const f of SECOND_FIELDS) { const arr = o.changes && o.changes[secKey(f)]; if (arr) arr.forEach((ch, k) => out.push({ field: f, index: k, from: ch.from, half: halfAt(ch.from), ...ST.styleOf(f) })); }
+    return out;
+  };
+  // WHERE AN EXTRA HANDLE STANDS before it is used (L140; the keeper's drawing, 11:43Z, exo_memory/briefs/t180_extra_handles_where_2026-11-05.png): on the road, on its own field's line,
+  // just ahead of its own handle, as a share of the piece from its start (0) to its front (1). Read off the drawing: bank 0.60 (bank's own at 0.50), climb 0.74 (0.50), turn 0.89 (the
+  // front), width 0.11 (the start). Cup is not in the drawing: it takes width's 0.11, as its own handle shares width's place at the start
+  // (round 2: this is where the HANDLE stands; where its change starts is EXTRA_FROM_SHARE, below, and the handle steps back on screen to clear the others, handles.js CLEAR_PX)
+  const EXTRA_AT = Object.freeze({ bank: 0.60, climb: 0.74, turn: 0.89, width: 0.11, cup: 0.11 });
+  const EXTRA_FROM_SHARE = 0.5;
+  // `unused` (D642, E's review of d87ba99): only the fields with no change yet, all the extra handles read (one per field: a field with its change has its handle on it). The
+  // offer after a field's last change asks that change's shortest, a search of a dozen probe roads under a moving first ramp, and while the extra bank is dragged its target
+  // is new every move; nothing on screen reads that offer, so the extra handles do not ask for it
+  const offersAt = ({ unused = false } = {}) => {
+    const floor = secondFloor(), L = Number(len.value); if (floor === null || !(L > 0)) return [];
+    const o = opts(), out = [];
+    for (const f of SECOND_FIELDS) {
+      if (!secHasTarget(f)) continue;
+      const key = secKey(f), corner = key === 'turnDeg' || key === 'climbDeg', arr = (o.changes && o.changes[key]) || [];
+      if (unused && arr.length) continue;
+      const first = corner ? Number(f === 'turn' ? asTyped('turn') : asTyped('climb')) : o.targets[key];
+      if (!Number.isFinite(first)) continue;
+      // D641 (E's item 3; the user on c42f985: "perhaps we should only do two per action on the piece"): a field with no extra handle (the left and right edge) is offered
+      // ONE later change, as the extra handles give the others; more made another way (a typed row) keep their rows and marks
+      if (!Number.isFinite(EXTRA_AT[f]) && arr.length >= 1) continue;
+      let end = (o.transition && o.transition[key]) || 0;
+      const mm = corner ? null : minOf(o, key);   // D642: with the first ramp under it (corners: the first corner's degrees)
+      if (arr.length) { const k = arr.length - 1, prev = k === 0 ? first : (corner ? arr[k - 1].deg : arr[k - 1].target); end = arr[k].from + (corner ? cornerMin(o, Number(arr[k].deg), first) : secondMinOf(mm, key, prev, arr[k].target)); }
+      const R = L - end;
+      // L140, B's G7: the next change's own shortest segment, for the smallest change it can make (to the value it starts from); at least the floor. No room for that: no handle
+      const prevT = arr.length ? (corner ? 0 : arr[arr.length - 1].target) : (corner ? 0 : first), need = Math.max(floor, corner ? cornerMin(o, 0, first) : secondMinOf(mm, key, prevT, prevT));
+      if (Number.isFinite(EXTRA_AT[f]) ? !(R >= need - 1e-9) : !(R >= 2 * floor - 1e-9)) continue;
+      // L140 round 2 (the user, brief :29: the second turn "should ease half way through"; at 0.89 it ran only over his red marks): a change made from an extra handle starts HALFWAY
+      // along the piece (EXTRA_FROM_SHARE), kept inside the room it has; slid, where it was slid. A field with no extra handle (the edges): the room's middle, as L139
+      const drawn = Number.isFinite(EXTRA_AT[f]) ? Math.min(L - need, Math.max(end, EXTRA_FROM_SHARE * L)) : end + R / 2;
+      const from = Number.isFinite(secPending[f]) && secPending[f] > end ? secPending[f] : near2(drawn), st = ST.styleOf(f), last = arr.length ? arr[arr.length - 1] : null;
+      const base = corner ? 0 : f === 'bank' ? Number(last ? last.target / DEG : bankTarget()) : last ? (f === 'turn' || f === 'climb' ? last.target * 100 / DEG : last.target) : Number(f === 'edgeR' ? rightTarget() : asTyped(f));
+      out.push({ field: f, index: arr.length, from, half: halfAt(from), offer: true, base, ...st, kind: corner ? key : st.kind });
+    }
+    return out;
+  };
+  // AN EXTRA HANDLE'S DRAG (L140): one drag is one thing, keyed by the drag from host.begin to host.end (exDrag): on an UNUSED extra handle the first value makes exactly one
+  // change at its place (secPending, or offersAt's), and later moves set that change's value; on a used one each move sets its value. One Ctrl+Z (the undo guard) undoes the drag
+  let exDrag = null; const secPending = {};
+  const secondExtra = (kind, value) => {
+    const K = HD.KINDS[kind], f = exFieldOf(kind); if (!K || !f) return;
+    const live = secLive(f), L = Number(len.value);
+    if (!exDrag || exDrag.kind !== kind) {
+      if (K.index < live.length) { const x = live[K.index]; exDrag = { kind, x, made: false, before: x.then.value }; }
+      else {
+        const of = offersAt({ unused: true }).find((o) => o.field === f); if (!of) return;
+        const x = secAdd(f, { then: show(value), from: show(of.from), share: L > 0 ? of.from / L : null }); delete secPending[f];
+        exDrag = { kind, x, made: true, start: Number(of.base) };
+      }
+    }
+    // D641 (E's N1: a fast flick's FIRST value that could not fit was taken as the value that fits, nothing was held, and B's G8 rule then moved the change to 4.16 m): the
+    // fallback of a change this drag made is the value it starts from (the offer's base: no change, which always has its room), so the hold below searches from there
+    const d = exDrag; if (d.ok === undefined) d.ok = d.made ? d.start : Number(d.before);
+    // B's G7: the amount is held at the furthest it can go toward the drag's and still fit (its segment and the next one keep their minimums), never refused for room
+    // D642 (E's reviews of d87ba99 and 212e78d: a fit check under a moving first ramp is a probe of the built road; the search below asked 40 a move that did not fit, then a
+    // step of it every move a drag was carried on into the hold, 2.5-3 × the early drag). The search runs ONCE, on the first move that does not fit, and finds the EDGE; for
+    // the rest of the drag a target past that edge (the side that did not fit) is held there and asks nothing, and the ghost is not rebuilt when nothing moved. A target that
+    // comes back inside the edge is asked again, as any other
+    const fitsAt = (v) => { d.x.then.value = show(v); return secFits(secSegs(f)); };
+    const was = d.x.then.value, pastEdge = Number.isFinite(d.edge) && Number.isFinite(d.bad) && value !== d.edge && Math.sign(value - d.edge) === Math.sign(d.bad - d.edge);
+    if (pastEdge) d.x.then.value = show(d.edge);
+    else if (fitsAt(value)) d.ok = value;
+    else if (Number.isFinite(d.ok) && fitsAt(d.ok)) {
+      let a = d.ok, b = value; for (let i = 0; i < 40; i++) { const m = (a + b) / 2; if (fitsAt(m)) a = m; else b = m; }
+      let v = Number(show(a)); for (let i = 0; i < 4 && !fitsAt(v); i++) v = Number(show(v + (d.ok > v ? 0.01 : -0.01)));
+      d.ok = v; d.edge = v; d.bad = b; d.x.then.value = show(v);
+    }
+    lastTouched = { secUndo: () => { if (d.made) { if (SEC[f].list.includes(d.x)) secRemove(f, d.x); } else { d.x.then.value = d.before; ghost(); } } };
+    if (!pastEdge || d.x.then.value !== was) ghost();
+  };
+  const secondSlide = (kind, from) => {
+    const K = HD.KINDS[kind], f = exFieldOf(kind), L = Number(len.value); if (!K || !f) return;
+    const at = Math.max(0, Math.min(L > 0 ? L : 0, from));
+    if (K.index < secLive(f).length) { secondDrag({ field: f, index: K.index }, near2(at)); return; }
+    secPending[f] = near2(at); ghost();   // the unused one: where its change will start, once its amount is dragged
+  };
+  // a mark dragged along the piece: that change's from, kept as its share of the piece; one Ctrl+Z puts it back (the undo guard)
+  let secDragFrom = null;
+  // WHERE A MARK MAY STAND (D642): change k of field f with its mark at F holds when its own segment and the one before it both hold on the built road (secSegs holds: the
+  // core's spanHolds, one probe each). From `from`, the nearest such F within [lo, hi], stepping out WALK_STEP_M at a time both ways, up to WALK_M; null when none does.
+  // The row is put back as it was: this only asks
+  const WALK_M = 60, WALK_STEP_M = 1;
+  const walkToHold = (f, k, x, from, lo, hi) => {
+    const was = x.from.value, holdsAt = (F) => { x.from.value = show(F); const S = secSegs(f); return S.holds(k) && (k === 0 || S.holds(k - 1)); };
+    try {
+      if (holdsAt(from)) return from;
+      for (let d = WALK_STEP_M; d <= WALK_M + 1e-9; d += WALK_STEP_M) for (const F of [near2(from - d), near2(from + d)]) if (F >= lo - 1e-9 && F <= hi + 1e-9 && holdsAt(F)) return F;
+      return null;
+    } finally { x.from.value = was; }
+  };
+  const secondDrag = (mark, from) => {
+    const x = secLive(mark.field)[mark.index]; if (!x) return;
+    if (!secDragFrom || secDragFrom.x !== x) secDragFrom = { x, value: x.from.value, share: x.share, auto: x.auto };
+    // B's G9: never past its neighbour (plus the minimum between them), never so late its segment is short; no room at all: it stays
+    const r = secRange(secSegs(mark.field), mark.index); if (!(r.lo <= r.hi + 1e-9)) return; from = Math.min(down2(r.hi), Math.max(up2(r.lo), from));
+    // D642 (pane E's review a99775ef §1; the librarian's ruling on B's §9): past the shortest the built roll is not monotone in the span, so a mark the clamp keeps can still
+    // be refused and the piece vanish (15 of 121 on his p2). The mark walks to the nearest place both its segments hold (walkToHold); none within reach: it stays
+    const w = walkToHold(mark.field, mark.index, x, from, up2(r.lo), down2(r.hi)); if (w === null) return; from = w;
+    const L = Number(len.value); x.share = L > 0 ? from / L : null; x.auto = false; x.from.value = show(from);
+    const before = secDragFrom; lastTouched = { secUndo: () => { x.from.value = before.value; x.share = before.share; x.auto = before.auto; secDragFrom = null; ghost(); } };
+    ghost();
+  };
+  // an offer dragged: exactly one new change for its field, made on the first movement, its then following the drag; one Ctrl+Z removes it
+  let secOffer = null;
+  const secondOffer = (offer, value) => {
+    const L = Number(len.value);
+    if (!secOffer || secOffer.offer !== offer) secOffer = { offer, x: secAdd(offer.field, { then: show(value), from: show(offer.from), share: L > 0 ? offer.from / L : null }) };
+    secOffer.x.then.value = show(value);
+    const made = secOffer; lastTouched = { secUndo: () => { if (SEC[made.offer.field].list.includes(made.x)) secRemove(made.offer.field, made.x); } };
+    ghost();
+  };
+
   // 't180:handles-request' { detail: { reply(list) } }: where the handles are on screen now ([{ id, kind, side, x, y, dx, dy }], css px of the preview), read only, for the window proof as the other requests are
   const onHandlesRequest = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(handles ? handles.handles().filter((h) => h.screen).map((h) => ({ id: h.id, kind: h.kind, side: h.side, x: h.screen.x, y: h.screen.y, dx: h.screen.dx, dy: h.screen.dy })) : []); };
   doc.addEventListener('t180:handles-request', onHandlesRequest);
@@ -1049,7 +1394,7 @@ function mount(root, shell, mountOpts = {}) {
   const offSettings = Object.entries(SETTINGS).map(([k, apply]) => { apply(S.get(k, undefined)); return S.on(k, apply); });
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, flights, pieces, gripLayer, spawnsLayer, spawnDrag, values, sculptStrip, lend, options: opts, unmount() { unsub(); doc.removeEventListener('t180:build-request', onBuildRequest); doc.removeEventListener('t180-sculpt-key', onSculptKey); doc.removeEventListener('t180:sculpt-hover', onSculptHover); doc.removeEventListener('keydown', onAltKey); doc.removeEventListener('keyup', onAltKey); if (winEvents) win.removeEventListener('blur', onBlur); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); stage.removeEventListener('pointerleave', leave); stage.removeEventListener('wheel', wheel, { capture: true }); } root.replaceChildren(); } };
+  return { labels, handles, flights, secondTick, marksAt, offersAt, secondDrag, secondOffer, secondExtra, secondSlide, extraHandles, secondAdd: (f, y) => { const x = secAdd(f, y); ghost(); return x; }, pieces, gripLayer, spawnsLayer, spawnDrag, values, sculptStrip, lend, options: opts, unmount() { unsub(); if (secondTick) secondTick.unmount(); doc.removeEventListener('t180:build-request', onBuildRequest); doc.removeEventListener('t180-sculpt-key', onSculptKey); doc.removeEventListener('t180:sculpt-hover', onSculptHover); doc.removeEventListener('keydown', onAltKey); doc.removeEventListener('keyup', onAltKey); if (winEvents) win.removeEventListener('blur', onBlur); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); stage.removeEventListener('pointerleave', leave); stage.removeEventListener('wheel', wheel, { capture: true }); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };

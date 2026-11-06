@@ -31,9 +31,11 @@ const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 // rest-to-rest quintic across all of it, whose roll acceleration peaks at 10/√3 · Δ/L² (a 100 m piece banking 30° cannot meet the bar: 0.0173 °/m²). The
 // bar a point is held to is the larger of the 3 g bar and that floor, for its own piece and, within 4 m of a joint, the piece across it
 const floorOf = (P) => (P.type === 'road' ? (10 / Math.sqrt(3)) * Math.abs(D.channelAt(P, 'phi', P.length).v - D.channelAt(P, 'phi', 0).v) / (P.length * P.length) : 0);
-const allowedAt = (doc, s) => { let o = 0, m = BAR; for (const P of doc.pieces) { if (s >= o - 4 && s <= o + P.length + 4) m = Math.max(m, floorOf(P)); o += P.length; } return m; };
+// L135: `ramps` adds the floor of a ramp INSIDE a piece ([a, b] in track metres, its own Δ over its own length): a piece that banks 0 → 30° → 0 has no net change, so floorOf
+// reads 0 for it, but its second ramp is a rest-to-rest roll like any piece's and can roll no more gently than its own quintic. Left out, nothing moves.
+const allowedAt = (doc, s, ramps = []) => { let o = 0, m = BAR; for (const P of doc.pieces) { if (s >= o - 4 && s <= o + P.length + 4) m = Math.max(m, floorOf(P)); o += P.length; } for (const x of ramps) if (s >= x.a - 4 && s <= x.b + 4) m = Math.max(m, (10 / Math.sqrt(3)) * Math.abs(x.delta) / ((x.b - x.a) * (x.b - x.a))); return m; };
 
-function joints(doc) {
+function joints(doc, ramps = []) {
   const S = A.toPath(doc).path.samples.map((x) => ({ s: x.s, U: dot(x.kvec, x.U), L: dot(x.kvec, x.L), roll: x.roll })), N = S.length, ds = S[1].s - S[0].s;
   const idx = (s) => Math.max(0, Math.min(N - 1, Math.round(s / ds)));
   const step = (key, i0, i1) => { let m = 0; for (let i = Math.max(4, i0); i <= Math.min(N - 1, i1); i++) m = Math.max(m, Math.abs(S[i][key] - S[i - 4][key])); return m; };
@@ -46,7 +48,7 @@ function joints(doc) {
     // a: no step at the joint beyond the pieces' own
     for (const key of ['U', 'L']) { const at = step(key, idx(j - 2), idx(j + 2)), inside = Math.max(step(key, idx(a.a + 2), idx(a.b - 2)), step(key, idx(b.a + 2), idx(b.b - 2))); if (at > inside * 1.05 + 1e-9) r.bad.push(`a ${key}: a step of ${at.toExponential(2)} across the joint, ${inside.toExponential(2)} at most inside`); }
     // b: the roll's acceleration near the joint under the bar (2 m differences of the 2 m segment-end rates)
-    let acc = 0; for (let i = idx(j - 20); i + 8 <= idx(j + 20); i += 4) acc = Math.max(acc, Math.abs((S[i + 8].roll - S[i + 4].roll) - (S[i + 4].roll - S[i].roll)) / 4); const al = allowedAt(doc, j); if (acc > al * 1.05) r.bad.push(`b: the roll accelerates at ${(acc / DEG).toFixed(5)} °/m², over the ${(al / DEG).toFixed(5)} allowed`);
+    let acc = 0; for (let i = idx(j - 20); i + 8 <= idx(j + 20); i += 4) acc = Math.max(acc, Math.abs((S[i + 8].roll - S[i + 4].roll) - (S[i + 4].roll - S[i].roll)) / 4); const al = allowedAt(doc, j, ramps); if (acc > al * 1.05) r.bad.push(`b: the roll accelerates at ${(acc / DEG).toFixed(5)} °/m², over the ${(al / DEG).toFixed(5)} allowed`);
     // c: no dip to zero where the bank keeps rolling the same way
     const mA = D.channelAt(a.p, 'phi', a.p.length / 2).d1, mB = D.channelAt(b.p, 'phi', b.p.length / 2).d1;
     if (Math.abs(mA) >= 0.02 * DEG && Math.abs(mB) >= 0.02 * DEG && Math.sign(mA) === Math.sign(mB)) { let slow = Infinity; for (let i = idx(j - 4); i <= idx(j + 4); i++) slow = Math.min(slow, Math.abs(rate(i))); if (slow < 0.5 * Math.min(Math.abs(mA), Math.abs(mB))) r.bad.push(`c: the roll slows to ${(slow / DEG).toFixed(4)} °/m at the joint, ${(Math.min(Math.abs(mA), Math.abs(mB)) / DEG).toFixed(4)} mid-piece`); }
@@ -70,3 +72,22 @@ for (const [name, make] of [['his ribbon', ribbon], ['ELYSIUM (the fixture)', el
     assert.equal(bad.length, 0, `${bad.length} of ${J.length} joints bump: ${bad.slice(0, 6).map((r) => `${r.joint}: ${r.bad.join('; ')}`).join(' | ')}`);
   });
 }
+
+// ── L135 4b: THE SECOND BANK, felt. The piece that banks twice and the straight after it, read by the same four measures: the second ramp's end is a joint like
+// any other, and a car crossing it must feel nothing the pieces do not already have inside them.
+// AMENDED L139 (rule changed: K 15 -> 31.5, the keeper 2026-11-05 07:00Z "we dont want the bumps"; pane E 711d7d10): his from 637.5 leaves 112.5 m, under the new
+// minimum (172.5 m for 30°, 140.9 m for 20°), and is now refused by name (test/core_changes.test.js L139 7). The row's rule is unchanged; its from is the latest the rule allows.
+// AMENDED D642 (rule changed, the keeper's ruling of 2026-11-05 19:54Z: the extra ADDS on top of the piece's own change and never squeezes it): the 30° first ramp now eases over the
+// whole piece under the second, so the second needs 177.3 m (its own 172.5 m, with the first ramp's share taken out: extend.js secondMinM `base`), and 577 is refused; 572 is
+// the latest whole metre the rule allows. The row's measures are unchanged.
+// AMENDED D642, C's 35ef2eb6 (by name: the bank's shortest takes its own shape; opts lays the panel's rounded ramp, which rolls near the bar at its end, so the second
+// needs 244.0 m on this piece: the mark moves to 505)
+test('L135 4b: a straight, his 750 m piece banking 30° and back to level from 505 m, a straight: no step, the roll under the bar, no dip, no ripple at either joint', () => {
+  let doc = extend(D.createDoc('twice'), { length: 1000, family: 'bowl' });
+  doc = extend(doc, { ...opts(750, 30, 0), second: { phi: { from: 505, target: 0 } } });
+  doc = extend(doc, opts(300, null, 0));
+  assert.ok(Math.abs(D.channelAt(doc.pieces[1], 'phi', 750).v) <= 1e-9, 'the piece ends level (its second bank)');
+  const J = joints(doc, [{ a: 1000 + 505, b: 1750, delta: 30 * DEG }]), bad = J.filter((r) => r.bad.length);   // the second ramp is held to its own floor, as a piece is (allowedAt)
+  assert.equal(J.length, 2, `${J.length} joints read`);
+  assert.equal(bad.length, 0, bad.map((r) => `${r.joint}: ${r.bad.join('; ')}`).join(' | '));
+});

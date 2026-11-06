@@ -129,3 +129,79 @@ test('D521 row 5: the rounding is a quarter of a short ramp, so a 24 m bank stil
   // the shape's own second derivative goes to 0 at both ends (6u/(a²(1 − a)): 0.067 at u = 1e-4 for a = 0.1, where a rate rising linearly would hold 1/(a(1 − a)) = 11.1) (the rate rises on the Bloss cubic, so the bank is C2 by its shape, not only by the spline's end pinning)
   for (const a of [0.1, 0.25]) { const h = 1e-4, d2 = (u) => (roundedLinear(u + h, a) - 2 * roundedLinear(u, a) + roundedLinear(u - h, a)) / (h * h); assert.ok(Math.abs(d2(h)) < 1 && Math.abs(d2(1 - h)) < 1, `S'' at the ends: ${d2(h)}, ${d2(1 - h)}`); assert.ok(Math.abs(d2(0.5) ) < 1e-6, 'none on the plateau'); }
 });
+
+// ── L135, THE SECOND BANK (src/core/extend.js `second`; plan exo_memory/loop/plan_l135_second_bank_2026-11-04.md, in the lighthouse repo): the contract's edges.
+const DEG = Math.PI / 180;
+const flat135 = () => extend(D.createDoc('g'), { length: 1000, family: 'bowl' });
+
+test('L135 6: a second bank is refused by name where the contract says: from at or before 0, before the first ramp ends, at or past the end; a second change on any channel but the bank; a second bank with no first', () => {
+  const ask = (second, extra = {}) => () => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second, ...extra });
+  for (const from of [0, -10, 299, 750, 800, NaN]) assert.throws(ask({ phi: { from, target: 0 } }), (e) => e.code === 'BAD_SECOND' && /300/.test(e.message) && /750/.test(e.message), `from ${from} is refused, naming the range 300..750`);
+  // AMENDED L139 (rule changed, the keeper 2026-11-05 00:34: "its more than just the banking, its the turns, climb, etc."): a second turn is now laid (test/core_changes.test.js);
+  // what is refused by name is a change on a channel no change moves (the rise rate r here)
+  assert.throws(ask({ r: { from: 600, target: 0 } }), (e) => e.code === 'BAD_TARGET' && /a change moves/.test(e.message), 'a change of the rise rate is refused');
+  assert.throws(ask({ phi: { from: 600, target: NaN } }), (e) => e.code === 'BAD_TARGET', 'a target that is not a number is refused');
+  assert.throws(() => extend(flat135(), { length: 750, second: { phi: { from: 600, target: 0 } } }), (e) => e.code === 'BAD_SECOND', 'a second bank with no first bank target is refused');
+  assert.doesNotThrow(ask({ phi: { from: 300, target: 0 } }), 'from at the first ramp\'s end is allowed (the contract: at or after it)');
+  assert.doesNotThrow(() => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, second: { phi: { from: 1, target: 0 } } }), 'with the first bank easing over the whole piece, any from inside the piece is allowed');
+});
+
+// The bytes of a spread of extend calls at the base d10eacf (sha256 of JSON.stringify(doc), scratch golden.js, run on the unchanged tree before this lap's code): with
+// no `second`, `second: undefined` or `second: null`, every one is the same document as before.
+const GOLDEN_135 = [
+  ['bank default ease', () => extend(flat135(), { length: 750, targets: { phi: 30 * DEG } }), 'e31a13adf9c8b1055f1eab4e88269bd9584dea6dd110c6faa5d03364385aef40'],
+  ['bank rounded', () => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, bankShape: 'rounded' }), '23c3efd420e69293acfdc66c63d0742e37c34e7abfea1f80838db6370d17151a'],
+  ['bank swell', () => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, bankShape: 'swell' }), '894e5d1bc09cf969260205d0edc64105bd049ccb8bbcdb4e6a59b44f421ebcd4'],
+  ['bank shares at start', () => extend(flat135(), { length: 750, targets: { phi: -41.38 * DEG, c: 15.5 }, transition: { phi: 300 }, bankShape: { rise: 0.1, fall: 0.9 } }), '7233fa51de615d38f821d0d1d7edd4188b077ba36dc4cee10ffffece77557686'],
+  ['bank numeric transition', () => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300 }), '7f62551529ffee88cc5ed641691c2ed4f636bd701dfb093d9c8d34db080be579'],
+  ['bank start map', () => extend(flat135(), { length: 400, targets: { phi: 20 * DEG, w: 25 }, transition: { phi: 'start' } }), '58bd3348472fbf9027438f906edb2cd8bc6c8fbefcdfc924dec4a99fd7e00394'],
+  ['cup and edge', () => extend(flat135(), { length: 300, targets: { c: 40, e: 20 } }), 'de2401817557d141029cd6b182c2d68a3faa87edae204471addde9f7562f1c9c'],
+  ['turn only', () => extend(flat135(), { length: 500, targets: { kh: 1 / 300 } }), 'c144288b9917fc979abaf4f0a71826bdb911c18b8994a8226f70dfbbb1e00f20'],
+];
+test('L135 7: no second bank, the same bytes as before: eight extend calls equal their base documents, and `second: undefined` / `second: null` change nothing', () => {
+  const crypto = require('crypto'), sha = (d) => crypto.createHash('sha256').update(JSON.stringify(d)).digest('hex');
+  for (const [what, make, want] of GOLDEN_135) assert.equal(sha(make()), want, what);
+  const base = { length: 750, targets: { phi: 30 * DEG } };
+  for (const second of [undefined, null]) assert.equal(sha(extend(flat135(), { ...base, second })), GOLDEN_135[0][2], `second: ${second}`);
+});
+
+// AMENDED L139 (rule changed: K 15 -> 31.5, the keeper 2026-11-05 07:00Z "we dont want the bumps"; pane E 711d7d10): his from 637.5 leaves 112.5 m, under the new
+// minimum (172.5 m for 30°, 140.9 m for 20°), and is now refused by name (test/core_changes.test.js L139 7). The row's rule is unchanged; its from is the latest the rule allows.
+test('L135 8: mirror on insert negates both banks: a saved piece that banks +30° and then +10° from 609 m goes in mirrored at −30° and −10°', () => {
+  const PC = require('../src/core/piece.js');
+  const src = extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second: { phi: { from: 609, target: 10 * DEG } } });
+  const run = PC.saveRun(src, 1, 1, { name: 'twice' }), into = PC.insert(flat135(), run, { mirror: true }), P = into.pieces[1];
+  const at = (Q, s) => D.channelAt(Q, 'phi', s).v / DEG;
+  for (const s of [300, 500, 609, 700, 750]) assert.ok(Math.abs(at(P, s) + at(src.pieces[1], s)) <= 1e-6, `at ${s} m: ${at(P, s)} mirrored from ${at(src.pieces[1], s)}`);
+  assert.ok(Math.abs(at(P, 500) + 30) <= 0.1 && Math.abs(at(P, 750) + 10) <= 1e-6, `the hold at -30 and the end at -10: ${at(P, 500)}, ${at(P, 750)}`);
+  // a piece holds no "fields" to remember (piece.js ROAD_KEYS): the second bank IS its bank channel, so save and open round-trip it as they do every channel
+  assert.equal(D.serialize(D.parse(D.serialize(src))), D.serialize(src), 'the document with a second bank saves and opens unchanged');
+  assert.equal(PC.serialize(PC.parse(PC.serialize(run))), PC.serialize(run), 'and so does the saved piece');
+});
+
+// ── L135 ROW-6 FIX (E's review §2c and §2d, exo_memory/handback/p-l135-E_2026-11-04.md in the lighthouse repo): a second ramp too short for the road AS BUILT is refused.
+// The adapter re-rounds every roll corner past its acceleration bar (src/core/adapter.js bankPlan), so a short second ramp is spread back over the hold: the document holds
+// to `from` but the road the preview, the checker and the export use does not. Measured (B's scratch minscan2.js / kcheck.js, 1,000 m piece, hold before from, built path
+// against the same piece built with no second bank): the shortest second ramp that keeps the built path within 0.5° of the hold grows as the square root of the change,
+// 15 m × √(change in degrees) (30 m for 5°, 82 m for 30°, 142 m for 90°). Under ~0.57 m the document itself drops early too (§2c: no knot of its own survives the filter).
+// AMENDED L139 (rule changed: K 15 -> 31.5, the keeper 2026-11-05 07:00Z "we dont want the bumps, we want the transmutations to be smooth all around the board";
+// pane E 711d7d10): the bank's quintic is under BANK_BAR from 31.46·√Δ°. The rows below keep their rules; their numbers are the new minimum's (172.5 m for 30°).
+const minSecondM = (deg) => 31.5 * Math.sqrt(Math.abs(deg));
+test('L135 6b: a second ramp of 0.5 m (from 749.5 on a 750 m piece) is refused by name, and the message names the shortest it may be', () => {
+  assert.throws(() => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second: { phi: { from: 749.5, target: 0 } } }),
+    (e) => e.code === 'BAD_SECOND' && e.message.includes(minSecondM(30).toFixed(1)), 'BAD_SECOND, naming 172.5 m');
+});
+test('L135 6c: a second ramp just under the shortest (172.4 m for a 30° change, the minimum 172.5 m) is refused; at the minimum it is laid', () => {
+  const at = (L2) => () => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second: { phi: { from: 750 - L2, target: 0 } } });
+  assert.throws(at(172.4), (e) => e.code === 'BAD_SECOND' && e.message.includes('172.5'), 'just under: refused, naming the minimum');
+  assert.doesNotThrow(at(Math.ceil(minSecondM(30) * 10) / 10), 'at the minimum: laid');
+});
+test('L135 6d (a guard): a second ramp at the minimum is laid and the BUILT road holds within 0.5° of the hold up to from (30° and 90° changes)', () => {
+  const rollOf = (doc) => { const S = toPath(doc).path.samples; return (s) => { let lo = 0, hi = S.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S[m].s <= s) lo = m; else hi = m; } const a = S[lo], b = S[hi], t = b.s > a.s ? (s - a.s) / (b.s - a.s) : 0; return (a.roll + (b.roll - a.roll) * t) / DEG; }; };
+  for (const [T1, T2] of [[30, 0], [20, -70]]) {
+    const L2 = Math.ceil(minSecondM(T2 - T1)), F = 1000 - L2, base = { length: 1000, targets: { phi: T1 * DEG }, transition: 120 };
+    const c = rollOf(extend(flat135(), base)), p = rollOf(extend(flat135(), { ...base, second: { phi: { from: F, target: T2 * DEG } } }));
+    let dev = 0; for (let s = 1000 + Math.max(370, F - 250); s <= 1000 + F; s += 0.5) dev = Math.max(dev, Math.abs(p(s) - c(s)));
+    assert.ok(dev <= 0.5, `${T1}° -> ${T2}° over ${L2} m: the built road leaves the hold by ${dev.toFixed(3)}°`);
+  }
+});

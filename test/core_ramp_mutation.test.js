@@ -11,6 +11,7 @@ const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
 const X = 'core/extend.js';
 const B = 'core/bankswing.js';
+const T = 'core/turnby.js';
 const P = '../app/core/panel.js';   // a file outside src/, given relative to it (the tree copies the app folders the panel loads)
 
 const MUTANTS = [
@@ -100,8 +101,44 @@ const MUTANTS = [
   { id: 'A6 the rise is measured on the ramp asked, not the length laid', pattern: 'his piece', edits: [[P, 'const rise = F_RISE_M / laidOf(R);', 'const rise = F_RISE_M / R;']] },
   // D574, the width at start takes F too (test/core_width_at_start_f.test.js)
   { id: 'A7 the width at start gets no start shape (the 20 m wedge again)', pattern: '32 → 55|mirrored|a 60 m piece', edits: [[P, "    if (!XS_START.has(ch) && ch !== 'w') continue;", '    if (!XS_START.has(ch)) continue;']] },
+  // L135, the second bank (src/core/extend.js `second`; test/core_bank_ramp.test.js and test/core_joint_c2.test.js rows 'L135')
+  // AMENDED L139 (by name, the same two mutants): the code they edit moved when one second bank became any number of changes on every field, so their anchors are L139's lines
+  // AMENDED D642 (by name, the same mutant): the line it edits became the step added on top (channelFn from 0 by T − prev), so its anchor is D642's line
+  { id: 'SB1 the second ramp blends by the route cubic (it starts with a curvature step at from)', pattern: 'L135 1|D642 2f', edits: [[X, "segs.push({ F, f: channelFn({ v: 0, m: 0 }, T - prev, L2, C2_CHANNELS.has(ch) ? ch : 'c', shape2) });", "segs.push({ F, f: channelFn({ v: 0, m: 0 }, T - prev, L2, ch === 'phi' ? 'kh' : C2_CHANNELS.has(ch) ? ch : 'c', ch === 'phi' ? null : shape2) });"]] },
+  // AMENDED L139 R2 (rule changed: every change is the quintic now, whose unpinned end, 6.9e-7 on a 300 m bank change, is under L135 4a's C2 tolerance, where the rounded
+  // and swell shapes it was written against were not): the end pin is held by L139 1 phi's 1e-9 bar, added to the pattern; L135 4a stays in it
+  { id: 'SB2 the second ramp\'s end is not pinned to zero curvature (the joint after the piece steps)', pattern: 'L135 4a|L139 1 phi:', edits: [[X, 'if (C2_CHANNELS.has(ch)) endC2(out, ch);', "if (C2_CHANNELS.has(ch) && ch !== 'phi') endC2(out, ch);"]] },
+  // L139, one row per family of change (src/core/extend.js changeLists and secondRamp, src/core/turnby.js solveList; test/core_changes.test.js)
+  { id: 'CH1 route: a turn or climb change blends by the cubic again (a curvature step in the rate at every mark)', pattern: 'L139 4b', edits: [[X, "C2_CHANNELS.has(ch) ? ch : 'c', shape2) });", 'ch, shape2) });']] },
+  { id: 'CH2 cross-section: a cup or edge change is not pinned to zero curvature at its end', pattern: 'L139 1 (c|e|er):', edits: [[X, 'if (C2_CHANNELS.has(ch)) endC2(out, ch);', "if (ch === 'phi') endC2(out, ch);"]] },
+  // AMENDED D642 (rule changed: the marks no longer aim at the angle so far; each extra's height turns its own angle, added on top of the corner): the same family, on its new line
+  { id: 'CH3 corner: an extra turns half its own angle (the S and the snake end off their heading)', pattern: 'L139 (9|10) |D642 2a', edits: [[T, 'const Aj = angles[j + 1] / t1;', 'const Aj = angles[j + 1] / t1 / 2;']] },
+  // D642, the extra ADDS (src/core/extend.js changeLists, secondRamp; src/core/turnby.js cornerLists, solveList, cornerChangeMinM; test/core_additive.test.js)
+  { id: 'AD1 a whole-piece first ramp is squeezed into [0, its first mark] again', pattern: 'D642 2c|D642 2d', edits: [[X, 'const Lof = Lof0;', 'const Lof = (ch) => (lists[ch] && lists[ch].whole ? lists[ch].items[0].from : Lof0(ch));']] },
+  { id: 'AD2 a change that adds nothing at the end of a list is laid anyway (its knots move the bytes)', pattern: 'D642 1c', edits: [[X, 'items = items.slice(0, n); if (!items.length) continue;', 'if (!items.length) continue;']] },
+  { id: 'AD3 an extra corner of 0 is laid anyway (its knots move the bytes)', pattern: 'D642 1a|D642 1b', edits: [[T, 'while (marks.length && angles[angles.length - 1] === 0) { marks.pop(); angles.pop(); }', '']] },
+  { id: 'AD4 an extra corner rides every basis function, not only those inside its span (it leaks before its mark)', pattern: 'D642 2a|D642 2b|L139 (9|10|11) ', edits: [[T, 'U[i] >= b[j] - 1e-9 && U[i + 4] <= b[j + 1] + 1e-9 ? ', 'true ? ']] },
+  { id: 'AD5 the steps are fitted with nothing held before the first mark', pattern: 'D642 2[cde]|L139 1 |L139 2', edits: [[X, 'for (let i = 0; i < n; i++) if (U[i] < p.from - 1e-9) keep.add(i);', '']] },
+  { id: 'AD6 a step is the target itself, not the target less the one before (it adds the whole value again)', pattern: 'D642 2c|L139 1 |L139 2', edits: [[X, 'channelFn({ v: 0, m: 0 }, T - prev,', 'channelFn({ v: 0, m: 0 }, T,']] },
+  { id: 'AD7 a change\'s shortest ignores the first ramp still moving under it', pattern: 'D642 3[de]', edits: [[X, 'share = Math.min(BASE_SHARE_MAX, baseShare(ch, base, p));', 'share = 0;']] },   // re-anchored (C's 35ef2eb6): the share is baseShare's
+  { id: 'AD8 an extra corner\'s shortest ignores the base corner under it', pattern: 'D642 3 |L139 12', edits: [[T, 'Math.min(BASE_SHARE_MAX, (SECOND_MIN_K * SECOND_MIN_K * Math.abs(baseDeg)) / (L * L))', '0']] },
+  // D642, C's 35ef2eb6 (R2 read 1.174 x the bar): the bank's share is its own shape's (extend.js baseShare)
+  { id: 'AD9 a rounded or swell bank under the change is read as the quintic', pattern: 'D642 3e', edits: [[X, "if (shape === 'rounded' || shape === 'swell') {", 'if (false) {']] },
+  { id: 'AD10 a base with no shape named is read as the quintic, not as the rounded bank of the panel', pattern: 'D642 3e', edits: [[X, "('shape' in base ? base.shape : 'rounded')", "('shape' in base ? base.shape : null)"]] },
+  // D642, E's 9a1a566f §5: the bank's shortest is read off the built road (extend.js builtMin)
+  { id: 'AD11 the built-road search stops where it starts (the change alone at the bar)', pattern: 'D642 3[efg]', edits: [[X, 'while (L2 < top && !ok(L2)) L2 = Math.min(top, L2 + PROBE_STEP_M);', '']] },   // re-anchored (E's 48b2ccf3): the search with no neighbour, in gridMin
+  { id: 'AD12 the probe lays the first ramp as the quintic whatever its shape', pattern: 'D642 3[efg]', edits: [[X, '...(shape ? { bankShape: shape } : {})', '']] },
+  { id: 'AD13 a span past the change\'s own minimum is taken without the built road probed', pattern: 'D642 3h', edits: [[X, ' && probePeak(0, gridded(a, b), base, span) <= PROBE_BAR;', ';']] },   // re-anchored (E's 48b2ccf3): the probe is the gridded change's
+  // D642, E's 48b2ccf3: a drag reuses the built road (extend.js gridded, gridMin)
+  { id: 'AD14 the probes are kept by the exact change, not its grid step (a drag reuses nothing)', pattern: 'D642 3i', edits: [[X, 'const gridded = (a, b) => { const d = (b - a) / (Math.PI / 180); return (Math.sign(d) * Math.ceil(Math.abs(d) / PROBE_GRID_DEG - 1e-9) * PROBE_GRID_DEG * Math.PI) / 180; };', 'const gridded = (a, b) => b - a;']] },
+  { id: 'AD15 a new grid step searches from scratch, not from its neighbour', pattern: 'D642 3i', edits: [[X, 'const lo = Math.abs(dG) > Math.abs(one) + 1e-12 ? PROBE_MEMO.get(memoKey(0, dG - one, base, [-2])) : undefined, hi = PROBE_MEMO.get(memoKey(0, dG + one, base, [-2]));', 'const lo = undefined, hi = undefined;']] },
+  { id: 'AD16 the grid rounds the change down (a smaller change than asked is probed)', pattern: 'D642 3i', edits: [[X, 'Math.ceil(Math.abs(d) / PROBE_GRID_DEG - 1e-9)', 'Math.floor(Math.abs(d) / PROBE_GRID_DEG + 1e-9)']] },
+  // the librarian's ruling on B's §9: the probe's bar is the adapter's own 1.0
+  { id: 'AD17 the bar of the probe is set back to the 0.97 margin', pattern: 'D642 3k', edits: [[X, 'const PROBE_BAR = 1.0, PROBE_STEP_M = 5,', 'const PROBE_BAR = 0.97, PROBE_STEP_M = 5,']] },
+  // pane E's 72b9faf4 §2: the probe asks past the ceiling too
+  { id: 'AD18 a span at or past the closed-form ceiling is taken unprobed again', pattern: 'D642 3l', edits: [[X, "  if (ch === 'phi' && share > 0) return span >= own - 1e-9 && probePeak(0, gridded(a, b), base, span) <= PROBE_BAR;", "  if (span >= ceil - 1e-9) return true;\n  if (ch === 'phi' && share > 0) return span >= own - 1e-9 && probePeak(0, gridded(a, b), base, span) <= PROBE_BAR;"]] },
 ];
-const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js', 'core_width_at_start_f.test.js'];
+const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js', 'core_width_at_start_f.test.js', 'core_changes.test.js', 'core_additive.test.js'];
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-ramp-mut-'));
   for (const d of ['src', 'tools', 'app/core', 'app/camera', 'app/lib', 'app/validate-ui']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });   // the app folders app/core/panel.js loads

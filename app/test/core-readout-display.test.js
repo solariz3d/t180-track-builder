@@ -380,6 +380,10 @@ test('the Extend panel has a "cup °" field beside bank, 0 to 150, and Extend ha
   const S = { stub: null }, P = await mountPanel((s) => (S.stub = stubCup(s)));
   // AMENDED (position only): the cup field moved from right after bank into "More shape", folded under bank; the rest of this row is unchanged
   // AMENDED (the left column laid out for space): "More shape" is gone, so the cup field is right after bank again, in the one list of fields
+  // AMENDED (L135, position only, pane C): the second bank's two fields, "then bank °" and "from (m)", sit directly under bank (the user's ask; plan_l135_second_bank_2026-11-04.md,
+  // "C (panel)"), so the cup is the field after the bank's own three rows; the rest of this row is unchanged
+  // AMENDED (L139, position only, pane C): the bank's two L135 fields became its list of later changes (plan_l139_second_change_every_field_2026-11-05.md), rows with
+  // no label of their own until a change is made, so the cup is again the labelled field after bank; the rest of this row is unchanged
   const pickers = P.root.all().filter((e) => e.tagName === 'LABEL' && e.children[0]).map((e) => e.children[0].textContent);
   assert.equal(pickers[pickers.indexOf('bank °') + 1], 'cup °', `cup is the field after bank (fields: ${pickers.join(', ')})`);
   const f = P.field('cup °'); assert.equal(f.attrs.min, '0'); assert.equal(f.attrs.max, '150');

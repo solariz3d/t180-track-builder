@@ -661,7 +661,8 @@ test('row 14c: the landing\'s four handles (D278: BESIDE the Extend ghost\'s, wh
 test('row 14d (D278, the user: "after placing jump piece, it doesnt go back to regular track manipulation with the base equation, it stays the heading, sideways, and height"): right after Jump the Extend ghost\'s handles are up BESIDE the landing\'s four; an Extend handle types into its field and edits no document; a landing handle still moves the landing in ONE undo step; Extend fixes the landing, and its handles go', async () => {
   const P1 = await handlePanel(), { shell } = P1, box = landingBoxOf(P1);
   const EXT = ['length:0', 'width:1', 'width:-1', 'bank:1', 'bank:-1', 'cup:1', 'cup:-1', 'turn:1', 'turn:-1', 'climb:0'], LAND = ['landfwd:0', 'landleft:0', 'landup:0', 'landturn:0'];
-  const settle = () => { for (let i = 0; i < 40; i++) P1.frame(); }, idsOf = () => P1.panel.handles.handles().map((h) => h.id);
+  // AMENDED (L140, pane C): a field with a value now has its EXTRA handle too (the user, 10:15Z: "it adds something called extra turn"); this row counts the Extend ghost's own ten and the landing's four
+  const settle = () => { for (let i = 0; i < 40; i++) P1.frame(); }, idsOf = () => P1.panel.handles.handles().map((h) => h.id).filter((i) => !i.startsWith('extra:'));
   P1.button('Jump').onclick(); settle();
   // 1  both sets: the landing's four (the landing is the head, still tunable) AND the Extend ghost's ten (the base equation's controls for the piece that comes next)
   assert.deepEqual(idsOf().filter((i) => i.startsWith('land')), LAND, 'the landing\'s four are up'); assert.deepEqual(idsOf().filter((i) => !i.startsWith('land')), EXT, 'and the Extend ghost\'s ten, as before the jump');

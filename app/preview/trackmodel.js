@@ -58,6 +58,8 @@ const DRAG_CHORDS = 24, DRAG_MIN_M = 8, DRAG_TURN = 0.03, DRAG_ROLL = 0.05;
 const WASH = Object.freeze({ length: Object.freeze([1, 1, 1]), kh: Object.freeze([0.725, 0.408, 1]), kv: Object.freeze([1, 0.824, 0.239]) });
 /** The wash of a brush (state.brush, or the page's hover { tool, channel }): its colour, or null for a tool that moves nothing after its window. */
 const washOf = (b) => (!b ? null : b.mode === 'stretch' || b.tool === 'stretch' ? WASH.length : b.channel === 'kh' || b.tool === 'bend' ? WASH.kh : b.channel === 'kv' || b.tool === 'climb' ? WASH.kv : null);
+/** A segment with its roll set aside (roll0, roll1, rollRate0, rollRate1): what re-laying the last placed piece may change (ghostSteps, D642). */
+const unrolled = (g) => { const { roll0, roll1, rollRate0, rollRate1, ...rest } = g; return rest; };
 const RIGID_EPS = 1e-9;   // m and rad: a window end that moved less than this leaves the road after it where it is
 
 // the rigid move of the road after a sculpted window, as the row-vector matrix a batch's node matrix is multiplied by (world = local · M, mesh.js matrixOf)
@@ -80,7 +82,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   // `path` is the BASE path the geometry grows incrementally; `shown` is what everything reads (the mesh, the cameras, the shared
   // track): the base path LIFTED by resolved.lift when the document has offsets (the equation core's hill and swerve,
   // src/core/adapter.js offsetPath, which recomputes the frame from the lifted centreline). With no lift they are the same object.
-  let path = null, shown = null, mesh = null, keys = [], liftKeys = [], closed = false, last = null, startKey = null, startOpt = null;
+  let path = null, shown = null, mesh = null, keys = [], placedSegs = [], liftKeys = [], closed = false, last = null, startKey = null, startOpt = null;
   // `detail` > 1 meshes a COARSER preview (app/preview/coarse.js thins each segment's row grid) while the track is being dragged; 1 is full detail, the export's.
   // A change of detail is a full rebuild. `lastResolved` is the state's document the last update was built from: the very same object builds nothing again.
   let detail = 1, detailMoved = false, lastResolved = null;
@@ -262,7 +264,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       // resolved.start (the equation core): where the track starts, its heading and PITCH; a new start rebuilds in full
       const sk = resolved.start ? JSON.stringify(resolved.start) : null, startMoved = sk !== startKey; startKey = sk; startOpt = resolved.start || null;
       if (!Array.isArray(segs)) throw new Error('trackModel: resolved.segments is missing');
-      if (!segs.length) { path = null; shown = null; mesh = null; keys = []; liftKeys = []; closed = isClosed; lastResolved = resolved; detailMoved = false; last = { path: null, mesh, how: 'empty', batches: [], segments: resolved.segments, g: null, fromS: null }; return last; }
+      if (!segs.length) { path = null; shown = null; mesh = null; keys = []; placedSegs = []; liftKeys = []; closed = isClosed; lastResolved = resolved; detailMoved = false; last = { path: null, mesh, how: 'empty', batches: [], segments: resolved.segments, g: null, fromS: null }; return last; }
       const nk = segs.map(keyOf);
       let g = 0; while (g < keys.length && g < nk.length && keys[g] === nk[g]) g++;
       let how, from = null, fromS = null, adopted = null;
@@ -275,7 +277,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
         snap.path.blocks[snap.path.blocks.length - 1].n = snap.lastN;   // undo extendPath's last.n-- on the shared block
         const sh = lift ? lift(snap.path) : snap.path, lk = segs.map((_, j) => liftOf(snap.path, sh, j));
         if (lk.length === snap.liftKeys.length && lk.every((k, j) => k === snap.liftKeys[j])) {
-          path = snap.path; shown = sh; mesh = snap.mesh; keys = nk; liftKeys = lk; closed = false; lastResolved = resolved; detailMoved = false;
+          path = snap.path; shown = sh; mesh = snap.mesh; keys = nk; placedSegs = segs; liftKeys = lk; closed = false; lastResolved = resolved; detailMoved = false;
           last = { path: shown, mesh, how: 'full', batches: snap.last.batches, bounds: snap.last.bounds, segments: resolved.segments, g: null, fromS: null };
           return last;
         }
@@ -310,7 +312,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
         mesh = geom.reuseMesh(cut, shown, meshSegs(segs, lk), segs.map((_, j) => nk[j] === keys[j] && lk[j] === liftKeys[j]));
         liftKeys = lk; how = 'full';
       } else how = yield* fullSteps(segs, isClosed, lift, nk);   // a removal: the incremental calls only grow or rewrite a track, so rebuild it
-      keys = nk; closed = isClosed;
+      keys = nk; placedSegs = segs; closed = isClosed;   // placedSegs: the segments the keys are of (the re-laid ghost compares their fields, ghostSteps)
       // an adopted ghost: the placed batches as they were, then the ghost's (batchesOf in one order: the old pieces' nodes are the same, the new pieces and the seam onto them are the ghost's), and the box of both
       const batches = how === 'same' && last ? last.batches : adopted ? last.batches.concat(adopted.bs) : batchesOf(mesh);
       const bounds = how === 'same' && last ? last.bounds : adopted ? unionBounds(last.bounds, worldBounds(adopted.bs)) : worldBounds(batches);
@@ -338,7 +340,15 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       // a cheap ghost whose new chords are COARSE (the shell's candidate(opts, { coarse }): longer than 2 m) puts at most CHEAP_STATIONS stations on them; one built from 2 m chords has
       // a station at every chord end whatever the step, so it is built as it always was (and reuses the last one's chords, below)
       const newSegs = cheap ? segs.slice(keys.length) : [], newLen = newSegs.reduce((a, g) => a + (g.length || 0), 0), step = newLen > CHEAP_STATIONS * STEP && newLen > 2.5 * newSegs.length ? newLen / CHEAP_STATIONS : STEP;
-      if (segs.length <= keys.length || keys.some((k, i) => k !== nk[i])) throw new Error('ghost: the candidate must extend the placed track (the same segments, then more)');
+      // THE PLACED TAIL RE-LAID (D642, pane C's finding: after a piece whose bank still rolls at its end NO next piece had a ghost, so the track could not be extended). Laying a next
+      // piece re-lays the LAST placed piece's built bank by design (src/core/adapter.js bankPlan: the joint's bank corner is rounded up to the joint from each side once it has two;
+      // D626's carry rolls through a joint where both pieces roll the same way). Such a candidate is still an extension: its segments differ from the placed ones only inside the last
+      // placed piece, and ONLY IN ITS ROLL (pane E's review b8872153 §2: roll0, roll1, rollRate0 and rollRate1 are all bankPlan and the carry change; a candidate whose turn,
+      // climb or length moved there would truly move the placed road). Anything else that differs is not, and is refused as before.
+      let relaid = 0; while (relaid < keys.length && keys[relaid] === nk[relaid]) relaid++;
+      const lastId = keys.length ? segs[keys.length - 1].id : undefined;
+      const rollOnly = (j) => { const a = placedSegs[j], b = segs[j]; return !!a && !!b && a.id === lastId && b.id === lastId && sameContent(unrolled(a), unrolled(b)); };
+      if (segs.length <= keys.length || (relaid < keys.length && !(placedSegs.length === keys.length && segs.slice(relaid, keys.length).every((_, i) => rollOnly(relaid + i))))) throw new Error('ghost: the candidate must extend the placed track (the same segments, then more)');
       // THE CHEAP GHOST REMEMBERS ITS LAST MESH (2026-10-14, stretching a long piece): a drag rebuilds the candidate on every move, but a length drag leaves most of its
       // segments exactly as they were, so a new piece whose segment key is the last cheap ghost's at the same index keeps its mesh and only moves (geom.reuseMesh, `from`:
       // the placed track is taken as it is). Valid only on the same placed path; any full ghost, update or change of detail forgets it.
@@ -350,6 +360,22 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       const meshNew = function* (p, build) { return remember(reuse ? geom.reuseMesh(reuse.mesh, p, segs, segs.map((g, j) => j >= keys.length && j < reuse.segs.length && sameContent(g, reuse.segs[j])), { from: keys.length, grow: true }) : yield* build()); };
       if (!path) { const p = yield* geom.buildPathSteps(segs, { ...pathOpts, step, ...(step > STEP ? { substep: CHEAP_SUBSTEP } : {}), ...(candidate.start ? { start: candidate.start } : {}) }); const gm0 = yield* meshNew(p, () => geom.buildMeshSteps(p, segs, meshOpts)); yield; const bs0 = batchesOf(gm0); if (!cheap) yield* warmLines(bs0); return { batches: bs0, path: p, head: p.head, segments: segs }; }
       if (closed) throw new Error('ghost: a closed loop has no open end');
+      if (relaid < keys.length) {
+        // the candidate's path BRANCHED from the placed one at the first re-laid segment (geom.branchPathFrom: a new path sharing the placed blocks before it, never writing
+        // them; the placed path is grown in place by extendPath and re-laid in place by rebuildPathFrom, so neither runs on it here). It grows only the re-laid tail and the new
+        // pieces (pane E's review §3: building the whole path afresh cost 123 ms against 30 on a 22 km track); a cheap ghost grows them at its own step. Its mesh is made from
+        // the first re-laid segment on, the pieces before it taken as they are (geom.reuseMesh `from`: a new mesh state, the placed one untouched). The ghost is the re-laid
+        // tail and the new pieces, built as placing builds them (app/test/ghost-relaid-tail.test.js). `relaid` says where it starts.
+        const coarse = step > STEP ? { step, substep: CHEAP_SUBSTEP } : {};
+        const p0 = typeof geom.branchPathFromSteps === 'function' ? yield* geom.branchPathFromSteps(path, segs, relaid, coarse)
+          : yield* stepsOr('buildPathSteps', 'buildPath')(segs, { ...pathOpts, ...(candidate.start ? { start: candidate.start } : startOpt ? { start: startOpt } : {}) });
+        const p = typeof candidate.lift === 'function' ? candidate.lift(p0) : p0, lk = segs.map((_, j) => liftOf(p0, p, j));
+        let from = 0; while (from < relaid && lk[from] === liftKeys[from]) from++;
+        const gm = yield* stepsOr('reuseMeshSteps', 'reuseMesh')(mesh, p, meshSegs(segs, lk), segs.map((_, j) => j < from), { from, grow: true });
+        yield; const bs = batchesOf(gm, from); if (!cheap) yield* warmLines(bs);
+        lastFull = null; lastCheap = null;   // neither is a copy-and-extend of the placed track
+        return { batches: bs, path: p, head: p.head, segments: segs, relaid: from };
+      }
       // copies: extendPath only pops and pushes these arrays and never edits a sample, and of the blocks it changes only the
       // last one's sample count (so that block is copied); extendMesh only sets new pieces and seams
       const blocks = path.blocks.slice(); blocks[blocks.length - 1] = { ...blocks[blocks.length - 1] };
