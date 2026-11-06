@@ -13,7 +13,7 @@
 // second: { phi: { from, target } } (L135, the keeper 2026-11-04: "there is another mark towards the end you can bank again ... instead of having to place it, then flatten it
 // with the next piece"): the bank banks AGAIN inside the piece. Over [from, length] it goes from the first target to `target` (rad, absolute) with the bank's own shape (the
 // same bankShape the first ramp uses), C2 at `from` and ending with slope 0, so the next piece continues as today. `from` is at or after the first ramp's end and before the
-// piece's end; when the first bank eases over the whole piece its ramp is laid over [0, from] instead. Bank only for now: any other channel is refused (BAD_TARGET); a `from`
+// piece's end; when the first bank eases over the whole piece it keeps that ramp and the second is ADDED on top from `from` (D642; until then it was laid over [0, from]). Bank only for now: any other channel is refused (BAD_TARGET); a `from`
 // out of range, or a second bank with no first bank target, is refused (BAD_SECOND). Left out, nothing moves (the bytes are today's). See secondRamp.
 //
 // (ref 09 §10): e (the EDGE angle, degrees >= 0) and s (where the outer zone starts, 0.5 to 0.95 of the half-width) give a piece an edge; t (the TUBE sweep, degrees 0 to 360)
@@ -315,9 +315,14 @@ function secondRamp(piece, plan) {
   const U = D.knotVector(out), n = out.channels.kh.length;
   for (const ch of CHANGE_CHANNELS) {
     const p = plan[ch]; if (!p) continue;
-    const keep = new Set();
-    for (let i = 0; i < n; i++) if (U[i + 4] <= p.from + 1e-9) keep.add(i);   // basis i lives on [U[i], U[i + 4]]: wholly before the first mark, it is the first lay's
-    fitWithHold(out, ch, p.f, Infinity, p.target, keep);
+    // D642, THE EXTRA ADDS (the keeper, 2026-11-05 19:54Z: "it makes it more sharp and takes the original shape away"): the steps alone are fitted, from 0, with every control
+    // point whose basis starts before the first mark held at 0 (basis i lives on [U[i], U[i + 4]]; one that starts at or after the mark starts there as s³, so the joint is C2),
+    // and ADDED to the field as laid. The piece before the mark is the first lay's to the last bit, and the first ramp keeps its own shape under the change.
+    const keep = new Set(), dec = D.DEC[ch], base = out.channels[ch];
+    for (let i = 0; i < n; i++) if (U[i] < p.from - 1e-9) keep.add(i);
+    const step = { ...out, channels: { ...out.channels, [ch]: new Array(n).fill(0) } };
+    fitWithHold(step, ch, p.g, Infinity, p.step, keep);
+    out.channels[ch] = base.map((x, i) => Number((x + step.channels[ch][i]).toFixed(dec)) + 0);
     if (C2_CHANNELS.has(ch)) endC2(out, ch);   // the cross-section ends with curvature 0 too; a route channel ends with slope 0 (fitWithHold's last two points)
     if (ch === 'c') out.channels.c = out.channels.c.map((x) => Math.min(D.CUP_MAX, Math.max(0, x)));   // the fit's ringing never leaves [0, 150], as the first lay's
   }
@@ -349,22 +354,48 @@ const WHEEL_M = 8.4;
  * there is at most the angle, ∂z/∂angle ≤ 8.4 m), so its vertical curvature changes at up to 60·8.4·|Δ rad|/L³, under ROUTE_BAR from L = (60·8.4·|Δ rad|/ROUTE_BAR)^⅓
  * (44.2 m × ∛(Δ in degrees): 138 m for 30°). Never under SECOND_FLOOR_M. Measured on the built road (scratch smooth.js, the hand-back).
  */
-function secondMinM(ch, a, b) {
+function secondMinM(ch, a, b, base = null) {
   if (!CHANGE_CHANNELS.includes(ch)) throw new D.CoreError('BAD_TARGET', `a change moves ${CHANGE_CHANNELS.join(', ')}, got "${ch}"`);
   if (!Number.isFinite(a) || !Number.isFinite(b)) throw new D.CoreError('BAD_TARGET', `a change's minimum needs two finite values, got ${a} and ${b}`);
-  const d = Math.abs(b - a);
-  if (ch === 'phi') return SECOND_MIN_K * Math.sqrt(d / (Math.PI / 180));
-  if (ch === 'kh' || ch === 'kv') return Math.max(SECOND_FLOOR_M, (3 * d) / ROUTE_BAR);
-  if (ch === 'w') return Math.max(SECOND_FLOOR_M, Math.cbrt((30 * d) / (0.9 * ROUTE_BAR)));   // sized for 0.9 of the bar: the cubic's fit of the quintic reads up to ~9% over it (wscan.js)
-  return Math.max(SECOND_FLOOR_M, Math.cbrt((60 * WHEEL_M * d * (Math.PI / 180)) / ROUTE_BAR));   // the cup and the edges, in degrees
+  const d = Math.abs(b - a), [own, p] = minLaw(ch, d);
+  // D642, ON TOP OF A FIRST RAMP STILL MOVING: the change ADDS to it, so the first ramp's own peak (its own shortest over its length, to the field's power p) comes out of the
+  // change's budget, at most BASE_SHARE_MAX of it. Measured on the built road (test/core_additive.test.js D642 3d): his bank 88.45° over 1,000 m with a change back to −30°
+  // read 1.060 × the bar at the change's own minimum. Without base: as before.
+  // THE BANK'S OWN SHAPE (C's 35ef2eb6, after the panel passed the base: R2 read 1.174 × the bar at 272.6 m). The panel lays a typed bank as the ROUNDED ramp (roundedLinear),
+  // whose rate holds and drops over its last BANK_ROUND_M: its roll acceleration there is 1.5·plateau/ℓ, many times the quintic's whole-piece peak, and it sits inside the
+  // change's span. So the bank's share is ITS SHAPE's peak roll acceleration over the bar (baseShare). `base.shape` names it as extend's bankShape does (null: the quintic);
+  // left out, it is the rounded ramp, the panel's own bank, so the panel's call (C's 923e0a3, { step, length }) asks for what the core lays.
+  let share = 0;
+  if (base && Number.isFinite(base.step) && base.length > 0) share = Math.min(BASE_SHARE_MAX, baseShare(ch, base, p));
+  const m = own / Math.pow(1 - share, 1 / p);
+  return ch === 'phi' ? m : Math.max(SECOND_FLOOR_M, m);   // the bank has no floor (L135), the rest SECOND_FLOOR_M
+}
+/** A change's own shortest for a step d, and the power its peak falls with its length (the peak is under the bar when (own / L)^p ≤ 1): the bank a square, the turn and
+ *  climb linear, the width, cup and edges a cube (secondMinM's sources). Not floored. */
+function minLaw(ch, d) {
+  if (ch === 'phi') return [SECOND_MIN_K * Math.sqrt(d / (Math.PI / 180)), 2];
+  if (ch === 'kh' || ch === 'kv') return [(3 * d) / ROUTE_BAR, 1];
+  if (ch === 'w') return [Math.cbrt((30 * d) / (0.9 * ROUTE_BAR)), 3];   // sized for 0.9 of the bar: the cubic's fit of the quintic reads up to ~9% over it (wscan.js)
+  return [Math.cbrt((60 * WHEEL_M * d * (Math.PI / 180)) / ROUTE_BAR), 3];   // the cup and the edges, in degrees
+}
+/** The most of a change's budget a first ramp under it may take (turnby.js keeps its own copy for a corner): a first ramp sharper than that is already the user's to judge. */
+const BASE_SHARE_MAX = 0.5;
+/** A first ramp's peak, as a share of the change's bar: the quintic's (its own shortest over its length, to the field's power p); for the bank, its shape's, its rate's rise
+ *  over its rounding ℓ (the Bloss cubic, 1.5·plateau/ℓ) over the bar (ROUTE_BAR, the same 3 g at a wheel 10 m out at 170 m/s as the adapter's BANK_BAR). Uncapped. */
+function baseShare(ch, base, p) {
+  const step = Math.abs(base.step), L = base.length, shape = ch === 'phi' ? ('shape' in base ? base.shape : 'rounded') : null;
+  if (shape === 'rounded' || shape === 'swell') { const l = roundingOf(shape, L); return (1.5 * (step / (L - l))) / l / ROUTE_BAR; }
+  if (isShares(shape)) { const N = 1 - (shape.rise + shape.fall) / 2; return (1.5 * (step / (L * N))) / (Math.min(shape.rise, shape.fall) * L) / ROUTE_BAR; }
+  return Math.pow(minLaw(ch, step)[0] / L, p);
 }
 /**
  * The changes asked for, checked: { ch: { items: [{ from, target }], whole } } for each field with at least one. `changes` is { ch: [{ from, target }, ...] }; the L135
- * form `second: { ch: { from, target } }` is a one-item list. Change k runs from its mark to the next (or the piece's end) and blends from the value before it (the
- * first target, for change 1) to its own target; it is refused by name (BAD_SECOND: the field, which change, the minimum) when shorter than secondMinM. The first mark is
- * at or after the field's first ramp's end, or anywhere inside the piece when that ramp is the whole piece (it is then laid over [0, the first mark]).
+ * form `second: { ch: { from, target } }` is a one-item list. Change k runs from its mark to the next (or the piece's end) and ADDS the step from the target before it (the
+ * first target, for change 1) to its own on top of the field as already laid (D642, see secondRamp); it is refused by name (BAD_SECOND: the field, which change, the
+ * minimum) when shorter than secondMinM. The first mark is at or after the field's first ramp's end, or anywhere inside the piece when that ramp is the whole piece (which
+ * keeps its whole-piece shape: until D642 it was squeezed into [0, the first mark]). Changes at the end of the list that add nothing are dropped.
  */
-function changeLists(changes, second, targets, typed, length, Lof0) {
+function changeLists(changes, second, targets, typed, length, Lof0, startV = () => null, shapeOf0 = () => null) {
   const given = (v) => v !== undefined && v !== null, raw = {};
   if (given(second)) {
     if (typeof second !== 'object' || Array.isArray(second)) throw new D.CoreError('BAD_SECOND', `second is { field: { from, target } }, got ${second}`);
@@ -384,7 +415,7 @@ function changeLists(changes, second, targets, typed, length, Lof0) {
   const out = {};
   for (const ch of Object.keys(raw)) if (!CHANGE_CHANNELS.includes(ch)) throw new D.CoreError('BAD_TARGET', `a change moves ${CHANGE_CHANNELS.join(', ')} (the turn, climb, bank, width, cup and edges), got "${ch}"`);
   for (const ch of CHANGE_CHANNELS) {
-    const items = raw[ch]; if (!items || !items.length) continue;
+    let items = raw[ch]; if (!items || !items.length) continue;
     const name = `the ${FIELD_NAMES[ch]} (${ch})`;
     if (!given(targets[ch])) throw new D.CoreError('BAD_SECOND', `a change of ${name} follows a first: give it a target too`);
     const R1 = Lof0(ch), whole = R1 >= length - 1e-9, lo = whole ? 0 : R1;
@@ -396,10 +427,14 @@ function changeLists(changes, second, targets, typed, length, Lof0) {
       if (k === 0 && !(Number.isFinite(F) && F > 0 && F >= lo && F < length)) throw new D.CoreError('BAD_SECOND', `${name} ${changeName(ch, 0)} starts ${whole ? 'inside the piece' : `at or after its first ramp's end (${lo} m)`} and before the piece's end (${length} m): from in ${whole ? `(0, ${length})` : `[${lo}, ${length})`}, got ${F}`);
       if (k > 0 && !(Number.isFinite(F) && F > items[k - 1].from && F < length)) throw new D.CoreError('BAD_SECOND', `${name} ${changeName(ch, k)} starts after change ${k} (${items[k - 1].from} m) and before the piece's end (${length} m), got ${F}`);
     });
+    // D642: a change that ends where the value before it already is adds nothing; at the end of the list it is not laid at all, so the bytes are the piece's without it
+    let n = items.length; for (let p = n ? (n > 1 ? items[n - 2].target : targets[ch]) : 0; n && items[n - 1].target === p; p = n > 1 ? items[n - 2].target : targets[ch]) n--;
+    items = items.slice(0, n); if (!items.length) continue;
     // each change, from its mark to the next (or the end), at least the field's minimum (L135 row 6 for the bank; pane E's Amendment A for the rest)
     let prev = targets[ch];
     items.forEach(({ from: F, target: T }, k) => {
-      const end = k + 1 < items.length ? items[k + 1].from : length, minM = secondMinM(ch, prev, T), what = k + 1 < items.length ? `change ${k + 2}'s mark` : "the piece's end";
+      const v0 = startV(ch), base = Lof0(ch) > F + 1e-9 && Number.isFinite(v0) ? { step: targets[ch] - v0, length: Lof0(ch), shape: shapeOf0(ch) } : null;   // D642: the first ramp still moving under it
+      const end = k + 1 < items.length ? items[k + 1].from : length, minM = secondMinM(ch, prev, T, base), what = k + 1 < items.length ? `change ${k + 2}'s mark` : "the piece's end";
       if (end - F < minM - 1e-9) throw new D.CoreError('BAD_SECOND', `${name} ${changeName(ch, k)}, from ${+prev.toPrecision(6)} to ${+T.toPrecision(6)}, needs at least ${minM.toFixed(1)} m before ${what} (the built road rounds a shorter one back over the hold): from at most ${(end - minM).toFixed(1)}, got ${F}`);
       prev = T;
     });
@@ -459,10 +494,10 @@ function extend(doc, opts = {}) {
     if (!(Lt > 0 && Lt <= length)) throw new D.CoreError('BAD_TRANSITION', `the transition must be in (0, length], got ${Lt}`);
   }
   const Lof0 = (ch) => (perChannel ? (ramp[ch] === undefined ? length : ramp[ch]) : transition === undefined ? length : transition);
-  // L135 THE SECOND BANK, L139 ANY NUMBER OF CHANGES ON EVERY FIELD: checked here, where each first ramp's end is known; a first ramp over the whole piece is laid over
-  // [0, its first mark] instead (Lof below). See changeLists.
-  const lists = changeLists(changes, second, targets, opts.targets, length, Lof0);
-  const Lof = (ch) => (lists[ch] && lists[ch].whole ? lists[ch].items[0].from : Lof0(ch));
+  // L135 THE SECOND BANK, L139 ANY NUMBER OF CHANGES ON EVERY FIELD: checked here, where each first ramp's end is known. D642: every first ramp keeps its own length (a
+  // whole-piece one is no longer squeezed into [0, its first mark]: the keeper, 19:54Z, "it makes it more sharp and takes the original shape away"). See changeLists.
+  const head0 = D.endState(doc), lists = changeLists(changes, second, targets, opts.targets, length, Lof0, (ch) => (head0 && head0[ch] ? head0[ch].v : first && Number.isFinite(first[ch]) ? first[ch] : null), (ch) => (ch === 'phi' ? shape : null));   // the bank's own shape, named (null: the quintic)
+  const Lof = Lof0;
   const shortRamps = Object.keys(ramp).filter((ch) => ramp[ch] < length - 1e-9 && targets[ch] !== undefined && targets[ch] !== null);
   const shapeOf = (ch) => (ch === 'phi' ? shape : (startShapes && shortRamps.includes(ch) && startShapes[ch]) || null);   // the bank's shape, or a cup's or edge's at start
   const last = [...doc.pieces].reverse().find((P) => P.type === 'road');
@@ -565,18 +600,18 @@ function extend(doc, opts = {}) {
     const plan = {};
     for (const ch of CHANGE_CHANNELS) {
       const li = lists[ch]; if (!li) continue;
-      const f1 = channels[ch], shape2 = ch === 'phi' ? secondShape(shape) : null, segs = [], turns = [];
+      const shape2 = ch === 'phi' ? secondShape(shape) : null, segs = [], turns = [];
       li.items.forEach(({ from: F, target: T }, k) => {
         const end = k + 1 < li.items.length ? li.items[k + 1].from : length, prev = k ? li.items[k - 1].target : targets[ch], L2 = end - F;
         // every change blends by the C2 quintic, the route's too (read as the cup's: no shape), so the rate meets each mark with no curvature step: measured on five lists
         // (scratch slopes.js), the cubic left the turn 1.2e-6 /m off its first value and sloping 1.2e-6 /m² at a mark, the quintic 2e-8 and 1e-10; its peak, 1.875·Δ/L, is 0.625 of the
-        // route's bar at the turn's and climb's minimum (secondMinM)
-        segs.push({ F, f: channelFn({ v: prev, m: 0 }, T, L2, C2_CHANNELS.has(ch) ? ch : 'c', shape2) });
+        // route's bar at the turn's and climb's minimum (secondMinM). D642: each is the STEP T − prev, from 0, added on top of the field as laid
+        segs.push({ F, f: channelFn({ v: 0, m: 0 }, T - prev, L2, C2_CHANNELS.has(ch) ? ch : 'c', shape2) });
         if (shape2) turns.push(...turnsOf(shape2, L2).map((x) => F + x));   // a rounded or swell bank ramp gets knots where its rate turns, as the first does
         for (let j = 0; j < SECOND_SUB; j++) turns.push(F + (L2 * j) / SECOND_SUB);   // in L135's order, the turns then the even knots: the insertion order is in the bytes
       });
-      const f = (s) => { if (s < segs[0].F) return f1(s); let g = segs[0]; for (const x of segs) if (s >= x.F) g = x; return g.f(s - g.F); };
-      plan[ch] = { f, from: segs[0].F, target: li.items[li.items.length - 1].target, turns };
+      const g = (s) => segs.reduce((a, x) => (s > x.F ? a + x.f(s - x.F) : a), 0);   // the steps added: 0 before the first mark, each one held once it is made
+      plan[ch] = { g, from: segs[0].F, step: li.items[li.items.length - 1].target - targets[ch], turns };
     }
     laid = secondRamp(laid, plan);
   }

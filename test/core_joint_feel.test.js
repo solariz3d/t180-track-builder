@@ -77,12 +77,17 @@ for (const [name, make] of [['his ribbon', ribbon], ['ELYSIUM (the fixture)', el
 // any other, and a car crossing it must feel nothing the pieces do not already have inside them.
 // AMENDED L139 (rule changed: K 15 -> 31.5, the keeper 2026-11-05 07:00Z "we dont want the bumps"; pane E 711d7d10): his from 637.5 leaves 112.5 m, under the new
 // minimum (172.5 m for 30°, 140.9 m for 20°), and is now refused by name (test/core_changes.test.js L139 7). The row's rule is unchanged; its from is the latest the rule allows.
-test('L135 4b: a straight, his 750 m piece banking 30° and back to level from 577 m, a straight: no step, the roll under the bar, no dip, no ripple at either joint', () => {
+// AMENDED D642 (rule changed, the keeper's ruling of 2026-11-05 19:54Z: the extra ADDS on top of the piece's own change and never squeezes it): the 30° first ramp now eases over the
+// whole piece under the second, so the second needs 177.3 m (its own 172.5 m, with the first ramp's share taken out: extend.js secondMinM `base`), and 577 is refused; 572 is
+// the latest whole metre the rule allows. The row's measures are unchanged.
+// AMENDED D642, C's 35ef2eb6 (by name: the bank's shortest takes its own shape; opts lays the panel's rounded ramp, which rolls near the bar at its end, so the second
+// needs 244.0 m on this piece: the mark moves to 505)
+test('L135 4b: a straight, his 750 m piece banking 30° and back to level from 505 m, a straight: no step, the roll under the bar, no dip, no ripple at either joint', () => {
   let doc = extend(D.createDoc('twice'), { length: 1000, family: 'bowl' });
-  doc = extend(doc, { ...opts(750, 30, 0), second: { phi: { from: 577, target: 0 } } });
+  doc = extend(doc, { ...opts(750, 30, 0), second: { phi: { from: 505, target: 0 } } });
   doc = extend(doc, opts(300, null, 0));
   assert.ok(Math.abs(D.channelAt(doc.pieces[1], 'phi', 750).v) <= 1e-9, 'the piece ends level (its second bank)');
-  const J = joints(doc, [{ a: 1000 + 577, b: 1750, delta: 30 * DEG }]), bad = J.filter((r) => r.bad.length);   // the second ramp is held to its own floor, as a piece is (allowedAt)
+  const J = joints(doc, [{ a: 1000 + 505, b: 1750, delta: 30 * DEG }]), bad = J.filter((r) => r.bad.length);   // the second ramp is held to its own floor, as a piece is (allowedAt)
   assert.equal(J.length, 2, `${J.length} joints read`);
   assert.equal(bad.length, 0, bad.map((r) => `${r.joint}: ${r.bad.join('; ')}`).join(' | '));
 });

@@ -108,17 +108,25 @@ const curvAt = (P, s, dir) => { const g = (k) => bankOf(P, s + dir * k * Hh); re
 const monotone = (P, a, b, sign) => { let prev = bankOf(P, a); for (let s = a + 0.5; s <= b + 1e-9; s += 0.5) { const v = bankOf(P, s); if (sign * (v - prev) < -1e-3) return `turns back at ${s} m (${prev.toFixed(4)} -> ${v.toFixed(4)})`; prev = v; } return null; };
 // AMENDED L139 (rule changed: K 15 -> 31.5, the keeper 2026-11-05 07:00Z "we dont want the bumps"; pane E 711d7d10): his from 637.5 leaves 112.5 m, under the new
 // minimum (172.5 m for 30°, 140.9 m for 20°), and is now refused by name (test/core_changes.test.js L139 7). The row's rule is unchanged; its from is the latest the rule allows.
-const twice = (extra = {}) => extend(flat(), { length: 750, targets: { phi: 30 * DEG }, second: { phi: { from: 577, target: 0 } }, ...extra });
+// AMENDED D642 (rule changed, the keeper's ruling of 2026-11-05 19:54Z: the extra ADDS on top of the piece's own change and never squeezes it): the 30° first ramp now eases over the
+// whole piece under the second, so the second needs 177.3 m (its own 172.5 m, with the first ramp's share taken out: extend.js secondMinM `base`), and 577 is refused; 572 is
+// the latest whole metre the rule allows. The row's measures are unchanged.
+const twice = (extra = {}) => extend(flat(), { length: 750, targets: { phi: 30 * DEG }, second: { phi: { from: 572, target: 0 } }, ...extra });
 
-test('L135 1: his 750 m piece, bank 30° (default ease) then back to level from 577 m: 30° at 577, 0 at 750 with slope 0, one way on each ramp, no curvature either side of 577', () => {
-  const P = twice().pieces[1], F = 577;
-  assert.ok(Math.abs(bankOf(P, F) - 30) <= 0.1, `30° where the second bank starts: ${bankOf(P, F)}`);
+// AMENDED D642 (rule changed, as twice above): at the mark the bank is the whole-piece ramp's own (27.3°), not 30°; that ramp still rises a little under the second, so after the
+// mark the bank tops out once (27.7° at 588.5 m) and then falls one way: one turn, no ripple
+test('L135 1 (AMENDED D642): his 750 m piece, bank 30° (default ease) then back to level from 572 m: at 572 the bank of the whole-piece ramp alone, 0 at 750 with slope 0, one way up to the mark, one top after it, no curvature either side of 572', () => {
+  const P = twice().pieces[1], F = 572, base = extend(flat(), { length: 750, targets: { phi: 30 * DEG } }).pieces[1];
+  assert.ok(Math.abs(bankOf(P, F) - bankOf(base, F)) <= 1e-6, `the whole-piece ramp's bank where the second bank starts: ${bankOf(P, F)} against ${bankOf(base, F)}`);
+  let top = F; for (let s = F; s <= 750; s += 0.5) if (bankOf(P, s) > bankOf(P, top)) top = s;
+  assert.equal(monotone(P, F, top, 1), null, 'from the mark to the top it rises one way');
+  assert.ok(bankOf(P, top) - bankOf(P, F) <= 1, `the top is a little over the mark's bank: ${bankOf(P, top)} at ${top} m`);
   assert.ok(Math.abs(bankOf(P, 750)) <= 1e-6, `level at the end: ${bankOf(P, 750)}`);
   assert.ok(Math.abs(D.channelAt(P, 'phi', 750).d1 / DEG) <= 1e-6, `the end slope is 0: ${D.channelAt(P, 'phi', 750).d1 / DEG} °/m`);
   assert.equal(monotone(P, 0, F, 1), null, 'the first ramp rises one way');
-  assert.equal(monotone(P, F, 750, -1), null, 'the second ramp falls one way');
+  assert.equal(monotone(P, top, 750, -1), null, 'from the top the second ramp falls one way');
   const left = curvAt(P, F, -1), right = curvAt(P, F, 1);
-  assert.ok(Math.abs(left) <= C2_TOL && Math.abs(right) <= C2_TOL && Math.abs(right - left) <= C2_TOL, `curvature at 577: ${left.toFixed(5)} before, ${right.toFixed(5)} after (°/m²)`);
+  assert.ok(Math.abs(left) <= C2_TOL && Math.abs(right) <= C2_TOL && Math.abs(right - left) <= C2_TOL, `curvature at 572: ${left.toFixed(5)} before, ${right.toFixed(5)} after (°/m²)`);
 });
 
 // AMENDED L139 (rule changed: K 15 -> 31.5, the keeper 2026-11-05 07:00Z "we dont want the bumps"; pane E 711d7d10): his from 637.5 leaves 112.5 m, under the new
@@ -140,7 +148,9 @@ test('L135 5: the roll rate, read by the checker (src/validate rollRates over it
   // 0.9338 amber only past Δ ≈ 246°. The fast case is now a 270° change (30° to -240°) over its 518 m minimum (1.875·270/518 = 0.98 °/m), read over its own ramp.
   // AMENDED (L135 row-6 fix): the fast case was 30° undone in 20 m, which the shortest-second-ramp rule now refuses (BAD_SECOND, 82.2 m for 30°: core_extend 'L135 6b/6c').
   // The fastest roll the rule still allows is a large change at its minimum, 15·√90 = 142.3 m for 90°, whose quintic peaks at 1.875·90/145 ≈ 1.16 °/m: the checker must warn on it
-  const his = worst(twice()), fast = worst(twice({ second: { phi: { from: 750 - 518, target: -240 * DEG } } }));
+  // AMENDED D642 (rule changed: the extra adds on top of the 30° whole-piece ramp, whose share comes out of its budget, so a change at its minimum is a little longer and
+  // slower): 30° to -240° needs 531.9 m and rolls 0.888 °/m, under the amber; the fast case is now 30° to -300° over its 588.0 m minimum (587.996), 0.984 °/m
+  const his = worst(twice()), fast = worst(twice({ second: { phi: { from: 750 - 588, target: -300 * DEG } } }));
   assert.ok(his > 0.2 && his < V.ROLL_AMBER_DEG_M, `his piece rolls at most ${his.toFixed(4)} °/m (amber ${V.ROLL_AMBER_DEG_M}; over 0.2 means the second ramp is there)`);
-  assert.ok(fast > V.ROLL_AMBER_DEG_M, `30° to -240° in 518 m rolls at ${fast.toFixed(4)} °/m: over the amber, so the checker warns`);
+  assert.ok(fast > V.ROLL_AMBER_DEG_M, `30° to -300° in 588 m rolls at ${fast.toFixed(4)} °/m: over the amber, so the checker warns`);
 });

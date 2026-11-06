@@ -62,6 +62,12 @@ const SECOND_FROM_SHARE = 0.85;
 const SECOND_FIELDS = Object.freeze(['turn', 'climb', 'bank', 'width', 'cup', 'edge', 'edgeR']);
 const SECOND_NAME = Object.freeze({ turn: 'turn', climb: 'climb', bank: 'bank', width: 'width', cup: 'cup', edge: 'left edge', edgeR: 'right edge' });
 /** the core's shortest segment for a change of channel ch from a to b, in metres, by the function given (the shell's secondMinM); 0 where none is given or it says nothing */
+// D642 (pane B's additive model, its hand-back §3): a field's first ramp still moving under its later changes, as extend.js secondMinM takes it: { step, length } in the
+// core's units when the ramp runs the whole piece (no early transition); null otherwise (a ramp done early has stopped before any change), and null with no step. `from` is
+// where the ramp starts, read as the core reads it (extend.js changeLists startV): on an empty track the first piece starts AT its typed values (out.first), so it has no
+// ramp; else the head's value, 0 when no head is given (as extendOptions' fromDeg reads it)
+const rampStart = (first, head, ch) => (first && Number.isFinite(first[ch]) ? first[ch] : head && Number.isFinite(head[ch]) ? head[ch] : 0);
+const baseOfRamp = (tr, target, from, L) => { if (tr !== undefined || !Number.isFinite(target) || !Number.isFinite(from) || !(L > 0) || target === from) return null; return { step: target - from, length: L }; };
 const secondMinOf = (minM, ch, a, b) => { if (typeof minM !== 'function' || !Number.isFinite(a) || !Number.isFinite(b)) return 0; const m = minM(ch, a, b); return Number.isFinite(m) && m > 0 ? m : 0; };
 const up2 = (x) => Math.ceil(x * 100 - 1e-9) / 100, down2 = (x) => Math.floor(x * 100 + 1e-9) / 100, near2 = (x) => Math.round(x * 100) / 100;
 /**
@@ -213,13 +219,17 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
     if (!items.length) continue;
     if ((f === 'turn' || f === 'climb') && turnAs === 'corner') {
       const first = f === 'turn' ? t : c; if (first === null) continue;
-      const key = f === 'turn' ? 'turnDeg' : 'climbDeg', froms = changeFroms(out.length, items.map((x) => ({ from: x.from, target: x.then })), first, key, { corner: true, cornerMin: cornerChangeMinM });
+      // D642 (pane B's additive model): the first corner still turns under every later one, so each later corner's shortest is asked with the first corner's degrees
+      const cornerMin = typeof cornerChangeMinM === 'function' ? (deg) => cornerChangeMinM(deg, first, out.length) : null;
+      const key = f === 'turn' ? 'turnDeg' : 'climbDeg', froms = changeFroms(out.length, items.map((x) => ({ from: x.from, target: x.then })), first, key, { corner: true, cornerMin });
       later[key] = items.map((x, k) => ({ from: froms[k], deg: x.then }));
       continue;
     }
     const ch = FIELD_CHANNEL[f]; if (targets[ch] === undefined) continue;
     const per = f === 'turn' || f === 'climb' ? DEG / 100 : f === 'bank' ? DEG : 1, list = items.map((x) => ({ from: x.from, target: x.then * per }));
-    const froms = changeFroms(out.length, list, targets[ch], ch, { lo: transition[ch] || 0, minM: secondMinM });
+    // D642 (pane B's additive model): a first ramp over the whole piece (no early transition) is still moving under the change, so the change's shortest is asked with it
+    const base = baseOfRamp(transition[ch], targets[ch], rampStart(empty ? targets : null, head, ch), out.length), minM = base && typeof secondMinM === 'function' ? (c, a, b) => secondMinM(c, a, b, base) : secondMinM;
+    const froms = changeFroms(out.length, list, targets[ch], ch, { lo: transition[ch] || 0, minM });
     later[ch] = list.map((x, k) => ({ from: froms[k], target: x.target }));
   }
   if (Object.keys(later).length) out.changes = later;
@@ -367,13 +377,17 @@ function mount(root, shell, mountOpts = {}) {
   // other"); a from typed here is metres, as L135's was, and a cleared one is laid again by the rule (changeFroms) and follows the piece. A field's rows are off while it
   // has no target (the first change is its target). A new document clears them all (showHead); Undo gives back the undone piece's own (fieldsNow, putBack)
   // the core's minimum and floor, through the shell (a shell without them: null)
-  const shellMinM = (ch, a, b) => (typeof shell.secondMinM === 'function' ? shell.secondMinM(ch, a, b) : null);
+  const shellMinM = (ch, a, b, base) => (typeof shell.secondMinM === 'function' ? shell.secondMinM(ch, a, b, base) : null);
+  // D642: the minimum for one field of the options `o`, its first ramp passed when that ramp still moves under the change (baseOfRamp); a corner's first is its degrees
+  const minOf = (o, key) => { const base = baseOfRamp(o.transition && o.transition[key], o.targets && o.targets[key], rampStart(o.first, shell.headState(), key), Number(o.length)); return base ? (c, a, b) => shellMinM(c, a, b, base) : shellMinM; };
   // a later corner's shortest, by its degrees (B's R1: src/core/turnby.js cornerChangeMinM, through the shell); cornerMinM reads only the family and the knot spacing, so the
   // document's own (the last road piece's family) is what it is asked with, as extend() would lay it
-  const shellCornerMin = (deg) => (typeof shell.cornerChangeMinM === 'function' ? shell.cornerChangeMinM(shell.getState().history.present, {}, deg) : null);
+  // D642: and the first corner's degrees, and the piece's length, which the share of the first corner still turning under it is read from (turnby.js cornerChangeMinM)
+  const shellCornerMin = (deg, baseDeg, L) => (typeof shell.cornerChangeMinM === 'function' ? shell.cornerChangeMinM(shell.getState().history.present, { length: L }, deg, baseDeg) : null);
   // a corner's segment: the core's shortest corner of that angle (src/core/turnby.js cornerChangeMinM, through the shell; L139 R1, pane B: max(cornerMinM, 31.5·√|Δθ°|),
   // smooth to ride), else the shortest after a straight (cornerMinM), else 0
-  const cornerMin = (o, deg) => { const doc = shell.getState().history.present, v = typeof shell.cornerChangeMinM === 'function' && Number.isFinite(deg) ? shell.cornerChangeMinM(doc, o, deg) : typeof shell.cornerMinM === 'function' ? shell.cornerMinM(doc, o) : null; return Number.isFinite(v) && v > 0 ? v : 0; };
+  // D642: `baseDeg`, the first corner still turning under it (its degrees), as extendOptions asks
+  const cornerMin = (o, deg, baseDeg) => { const doc = shell.getState().history.present, v = typeof shell.cornerChangeMinM === 'function' && Number.isFinite(deg) ? shell.cornerChangeMinM(doc, o, deg, baseDeg) : typeof shell.cornerMinM === 'function' ? shell.cornerMinM(doc, o) : null; return Number.isFinite(v) && v > 0 ? v : 0; };
   const secondFloor = () => { const v = typeof shell.secondFloorM === 'function' ? shell.secondFloorM() : null; return Number.isFinite(v) && v > 0 ? v : null; };
   const SEC = Object.fromEntries(SECOND_FIELDS.map((f) => [f, { list: [], box: el('div', { class: 'then-list', 'aria-label': `${SECOND_NAME[f]} changes` }) }]));
   const secUnit = (f) => (f === 'turn' || f === 'climb' ? (cornerMode() ? '°' : '°/100m') : f === 'width' ? 'm' : '°');
@@ -543,6 +557,9 @@ function mount(root, shell, mountOpts = {}) {
   for (const f of FIELDS) { const prev = f.oninput; f.oninput = f.onchange = (e) => { lastTouched = f; return prev ? prev(e) : undefined; }; }
   // an emptied field shows the 0 it sends once the change is committed (on change, not while typing, so clearing a box to type a new number is not interrupted)
   for (const k of ZERO_WHEN_EMPTIED) { const f = HEAD[k][0], prev = f.onchange; f.onchange = (e) => { if (emptied(k)) f.value = '0'; return prev(e); }; }
+  // D641 (f), E's N2: a bank typed past one turn is laid within it (bankTarget), so once committed the field shows that value, the same way (−654.70 reads −294.70; exactly
+  // ±360 stays, a full turn of roll); never while typing
+  { const prev = bank.onchange; bank.onchange = (e) => { const T = Number(bank.value); if (bank.value !== '' && Number.isFinite(T) && Math.abs(T) > 360) bank.value = show(HD.wrapTurn(T)); return prev(e); }; }
   const onUndoGuard = (e) => {
     if (lastTouched && typeof lastTouched.secUndo === 'function') {   // the last thing done was a drag on the ghost (L139): one Ctrl+Z undoes that whole drag
       const u = lastTouched; lastTouched = null; u.secUndo();
@@ -846,6 +863,9 @@ function mount(root, shell, mountOpts = {}) {
       if (!secHasTarget(f)) continue;
       const kind = exKindOf(f), K = HD.KINDS[kind]; if (!K || (HANDLE_FIELD[kind] && HANDLE_FIELD[kind].disabled)) continue;
       const start = Number(shown[f]), snapTo = K.zero ? [0].concat(Number.isFinite(start) && start !== 0 && !(K.unit === '°' && CORNER_KIND[f] === kind) ? [start] : []) : (Number.isFinite(start) ? [start] : []);
+      // D641 (E's item 2: his S as one piece landed 0.97° off straight, only to the pixel): a corner's extra also lands on the corner that undoes the first, so the field ends
+      // where the piece started (an S dead straight, a climb back to its pitch)
+      if (CORNER_KIND[f] === kind) { const first = Number(asTyped(f)); if (Number.isFinite(first) && first !== 0) snapTo.push(-first); }
       const arr = (o.changes && o.changes[secKey(f)]) || [], live = secLive(f);
       // ONE extra handle per field (the user on c42f985, brief :29: "every subsequent click adds another one, perhaps we should only do two per action on the piece … until we figure
       // out how to make it work right"): its first change once there is one, else the change it can make. Later changes made another way keep their rows and marks
@@ -1220,7 +1240,8 @@ function mount(root, shell, mountOpts = {}) {
   const secSegs = (f, o = opts()) => {
     const key = secKey(f), corner = key === 'turnDeg' || key === 'climbDeg', arr = (o.changes && o.changes[key]) || [];
     const first = corner ? Number(f === 'turn' ? asTyped('turn') : asTyped('climb')) : o.targets[key];
-    const mins = arr.map((c, k) => (corner ? cornerMin(o, Number(c.deg)) : secondMinOf(shellMinM, key, k === 0 ? first : arr[k - 1].target, c.target)));
+    const mm = corner ? null : minOf(o, key);   // D642: with the first ramp under it (corners: the first corner's degrees)
+    const mins = arr.map((c, k) => (corner ? cornerMin(o, Number(c.deg), first) : secondMinOf(mm, key, k === 0 ? first : arr[k - 1].target, c.target)));
     return { key, corner, arr, first, lo0: (o.transition && o.transition[key]) || 0, mins, L: Number(len.value) };
   };
   const secRange = (S, k) => ({ lo: k === 0 ? S.lo0 : S.arr[k - 1].from + S.mins[k - 1], hi: (k === S.arr.length - 1 ? S.L : S.arr[k + 1].from) - S.mins[k] });
@@ -1245,11 +1266,15 @@ function mount(root, shell, mountOpts = {}) {
       const key = secKey(f), corner = key === 'turnDeg' || key === 'climbDeg', arr = (o.changes && o.changes[key]) || [];
       const first = corner ? Number(f === 'turn' ? asTyped('turn') : asTyped('climb')) : o.targets[key];
       if (!Number.isFinite(first)) continue;
+      // D641 (E's item 3; the user on c42f985: "perhaps we should only do two per action on the piece"): a field with no extra handle (the left and right edge) is offered
+      // ONE later change, as the extra handles give the others; more made another way (a typed row) keep their rows and marks
+      if (!Number.isFinite(EXTRA_AT[f]) && arr.length >= 1) continue;
       let end = (o.transition && o.transition[key]) || 0;
-      if (arr.length) { const k = arr.length - 1, prev = k === 0 ? first : (corner ? arr[k - 1].deg : arr[k - 1].target); end = arr[k].from + (corner ? cornerMin(o, Number(arr[k].deg)) : secondMinOf(shellMinM, key, prev, arr[k].target)); }
+      const mm = corner ? null : minOf(o, key);   // D642: with the first ramp under it (corners: the first corner's degrees)
+      if (arr.length) { const k = arr.length - 1, prev = k === 0 ? first : (corner ? arr[k - 1].deg : arr[k - 1].target); end = arr[k].from + (corner ? cornerMin(o, Number(arr[k].deg), first) : secondMinOf(mm, key, prev, arr[k].target)); }
       const R = L - end;
       // L140, B's G7: the next change's own shortest segment, for the smallest change it can make (to the value it starts from); at least the floor. No room for that: no handle
-      const prevT = arr.length ? (corner ? 0 : arr[arr.length - 1].target) : (corner ? 0 : first), need = Math.max(floor, corner ? cornerMin(o, 0) : secondMinOf(shellMinM, key, prevT, prevT));
+      const prevT = arr.length ? (corner ? 0 : arr[arr.length - 1].target) : (corner ? 0 : first), need = Math.max(floor, corner ? cornerMin(o, 0, first) : secondMinOf(mm, key, prevT, prevT));
       if (Number.isFinite(EXTRA_AT[f]) ? !(R >= need - 1e-9) : !(R >= 2 * floor - 1e-9)) continue;
       // L140 round 2 (the user, brief :29: the second turn "should ease half way through"; at 0.89 it ran only over his red marks): a change made from an extra handle starts HALFWAY
       // along the piece (EXTRA_FROM_SHARE), kept inside the room it has; slid, where it was slid. A field with no extra handle (the edges): the room's middle, as L139
@@ -1271,10 +1296,12 @@ function mount(root, shell, mountOpts = {}) {
       else {
         const of = offersAt().find((o) => o.field === f); if (!of) return;
         const x = secAdd(f, { then: show(value), from: show(of.from), share: L > 0 ? of.from / L : null }); delete secPending[f];
-        exDrag = { kind, x, made: true };
+        exDrag = { kind, x, made: true, start: Number(of.base) };
       }
     }
-    const d = exDrag; if (d.ok === undefined) d.ok = d.made ? Number(d.x.then.value) : Number(d.before);
+    // D641 (E's N1: a fast flick's FIRST value that could not fit was taken as the value that fits, nothing was held, and B's G8 rule then moved the change to 4.16 m): the
+    // fallback of a change this drag made is the value it starts from (the offer's base: no change, which always has its room), so the hold below searches from there
+    const d = exDrag; if (d.ok === undefined) d.ok = d.made ? d.start : Number(d.before);
     // B's G7: the amount is held at the furthest it can go toward the drag's and still fit (its segment and the next one keep their minimums), never refused for room
     const fitsAt = (v) => { d.x.then.value = show(v); return secFits(secSegs(f)); };
     if (fitsAt(value)) d.ok = value;

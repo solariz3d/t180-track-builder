@@ -125,12 +125,12 @@ test('L135 C5: Undo gives back the bank\'s change as it was for the undone piece
   const p = await mountPanel();
   const laid = (L) => String(Math.min(Math.round(L * 0.85 * 100) / 100, Math.floor((L - p.shell.secondMinM('phi', 30 * DEG, 0)) * 100 + 1e-9) / 100));
   p.type('length m', 750); p.type('bank °', 30); p.addBank(0); p.extend();
-  p.type('length m', 400); p.type('bank °', -20); p.addBank(-45, 200); p.extend();
+  p.type('length m', 400); p.type('bank °', -20); p.addBank(-45, 170); p.extend();   // AMENDED D642, C's 35ef2eb6 (by name): the rounded bank's own share (extend.js baseShare) needs 222.7 m here, so the typed from moves 200 -> 170
   assert.equal(p.shell.getState().history.past.length >= 2, true, `both pieces placed (${msgText(p)})`);
   p.shell.undo();
-  assert.equal(p.thenBank().value, '-45', 'Undo: the undone piece\'s then bank'); assert.equal(p.fromBank().value, '200', 'and its typed from');
+  assert.equal(p.thenBank().value, '-45', 'Undo: the undone piece\'s then bank'); assert.equal(p.fromBank().value, '170', 'and its typed from');
   assert.equal(p.thenBank().disabled, false, 'on, with the bank put back');
-  assert.deepEqual(p.opts().changes.phi, [{ from: 200, target: -45 * DEG }], 'so Extend again rebuilds the same piece');
+  assert.deepEqual(p.opts().changes.phi, [{ from: 170, target: -45 * DEG }], 'so Extend again rebuilds the same piece');
   p.shell.undo();
   assert.equal(p.thenBank().value, '0', 'one more Undo: the first piece\'s'); assert.equal(p.fromBank().value, laid(750), 'its laid from');
   p.type('length m', 1000); assert.equal(p.fromBank().value, laid(1000), 'an untyped from still follows the length after Undo');
@@ -231,8 +231,10 @@ test('L135 C13: on a 300 m piece, 30° then 0, the default from is clamped to 30
   p.type('length m', 300); p.type('bank °', 30); p.addBank(0);
   assert.equal(p.fromBank().value, String(clamp), `the default, clamped (85% = 255 leaves 45 m, under the ${min.toFixed(2)} m minimum)`);
   assert.deepEqual(p.opts().changes, { phi: [{ from: clamp, target: 0 }] }, 'and sent as shown');
-  assert.equal(extendOptions({ length: 300, turn: '', climb: '', width: '', cup: '', bank: '30', changes: { bank: [{ then: '0', from: '' }] }, secondMinM: p.shell.secondMinM }).changes.phi[0].from, clamp, 'a blank from in the pure options, with the shell\'s minimum: the same clamp');
-  assert.equal(extendOptions({ length: 1500, turn: '', climb: '', width: '', cup: '', bank: '30', changes: { bank: [{ then: '0', from: '' }] }, secondMinM: p.shell.secondMinM }).changes.phi[0].from, 1275, 'where 85% is allowed it is still 85%');
+  // AMENDED D642 (the rule changed: pane B's additive model asks a change's minimum with the first ramp still moving under it, and on an EMPTY track the first piece starts
+  // at its typed values, so it has none; the panel above is on an empty track and sends empty: true, so the pure options say so too to be "the same")
+  assert.equal(extendOptions({ length: 300, turn: '', climb: '', width: '', cup: '', bank: '30', empty: true, changes: { bank: [{ then: '0', from: '' }] }, secondMinM: p.shell.secondMinM }).changes.phi[0].from, clamp, 'a blank from in the pure options, with the shell\'s minimum: the same clamp');
+  assert.equal(extendOptions({ length: 1500, turn: '', climb: '', width: '', cup: '', bank: '30', empty: true, changes: { bank: [{ then: '0', from: '' }] }, secondMinM: p.shell.secondMinM }).changes.phi[0].from, 1275, 'where 85% is allowed it is still 85%');
   const n = p.shell.getState().history.present.pieces.length; p.extend();
   assert.equal(p.shell.getState().history.present.pieces.length, n + 1, `the clamped default is laid by the core (${msgText(p)})`);
   p.shell.undo();

@@ -103,16 +103,30 @@ const MUTANTS = [
   { id: 'A7 the width at start gets no start shape (the 20 m wedge again)', pattern: '32 → 55|mirrored|a 60 m piece', edits: [[P, "    if (!XS_START.has(ch) && ch !== 'w') continue;", '    if (!XS_START.has(ch)) continue;']] },
   // L135, the second bank (src/core/extend.js `second`; test/core_bank_ramp.test.js and test/core_joint_c2.test.js rows 'L135')
   // AMENDED L139 (by name, the same two mutants): the code they edit moved when one second bank became any number of changes on every field, so their anchors are L139's lines
-  { id: 'SB1 the second ramp blends by the route cubic (it starts with a curvature step at from)', pattern: 'L135 1', edits: [[X, "segs.push({ F, f: channelFn({ v: prev, m: 0 }, T, L2, C2_CHANNELS.has(ch) ? ch : 'c', shape2) });", "segs.push({ F, f: channelFn({ v: prev, m: 0 }, T, L2, ch === 'phi' ? 'kh' : C2_CHANNELS.has(ch) ? ch : 'c', ch === 'phi' ? null : shape2) });"]] },
+  // AMENDED D642 (by name, the same mutant): the line it edits became the step added on top (channelFn from 0 by T − prev), so its anchor is D642's line
+  { id: 'SB1 the second ramp blends by the route cubic (it starts with a curvature step at from)', pattern: 'L135 1|D642 2f', edits: [[X, "segs.push({ F, f: channelFn({ v: 0, m: 0 }, T - prev, L2, C2_CHANNELS.has(ch) ? ch : 'c', shape2) });", "segs.push({ F, f: channelFn({ v: 0, m: 0 }, T - prev, L2, ch === 'phi' ? 'kh' : C2_CHANNELS.has(ch) ? ch : 'c', ch === 'phi' ? null : shape2) });"]] },
   // AMENDED L139 R2 (rule changed: every change is the quintic now, whose unpinned end, 6.9e-7 on a 300 m bank change, is under L135 4a's C2 tolerance, where the rounded
   // and swell shapes it was written against were not): the end pin is held by L139 1 phi's 1e-9 bar, added to the pattern; L135 4a stays in it
   { id: 'SB2 the second ramp\'s end is not pinned to zero curvature (the joint after the piece steps)', pattern: 'L135 4a|L139 1 phi:', edits: [[X, 'if (C2_CHANNELS.has(ch)) endC2(out, ch);', "if (C2_CHANNELS.has(ch) && ch !== 'phi') endC2(out, ch);"]] },
   // L139, one row per family of change (src/core/extend.js changeLists and secondRamp, src/core/turnby.js solveList; test/core_changes.test.js)
   { id: 'CH1 route: a turn or climb change blends by the cubic again (a curvature step in the rate at every mark)', pattern: 'L139 4b', edits: [[X, "C2_CHANNELS.has(ch) ? ch : 'c', shape2) });", 'ch, shape2) });']] },
   { id: 'CH2 cross-section: a cup or edge change is not pinned to zero curvature at its end', pattern: 'L139 1 (c|e|er):', edits: [[X, 'if (C2_CHANNELS.has(ch)) endC2(out, ch);', "if (ch === 'phi') endC2(out, ch);"]] },
-  { id: 'CH3 corner: each mark aims at its own corner, not the angle so far (the S and the snake end off their heading)', pattern: 'L139 (9|10) ', edits: [[T, 'angles.slice(0, r + 1)', 'angles.slice(r, r + 1)']] },
+  // AMENDED D642 (rule changed: the marks no longer aim at the angle so far; each extra's height turns its own angle, added on top of the corner): the same family, on its new line
+  { id: 'CH3 corner: an extra turns half its own angle (the S and the snake end off their heading)', pattern: 'L139 (9|10) |D642 2a', edits: [[T, 'const Aj = angles[j + 1] / t1;', 'const Aj = angles[j + 1] / t1 / 2;']] },
+  // D642, the extra ADDS (src/core/extend.js changeLists, secondRamp; src/core/turnby.js cornerLists, solveList, cornerChangeMinM; test/core_additive.test.js)
+  { id: 'AD1 a whole-piece first ramp is squeezed into [0, its first mark] again', pattern: 'D642 2c|D642 2d', edits: [[X, 'const Lof = Lof0;', 'const Lof = (ch) => (lists[ch] && lists[ch].whole ? lists[ch].items[0].from : Lof0(ch));']] },
+  { id: 'AD2 a change that adds nothing at the end of a list is laid anyway (its knots move the bytes)', pattern: 'D642 1c', edits: [[X, 'items = items.slice(0, n); if (!items.length) continue;', 'if (!items.length) continue;']] },
+  { id: 'AD3 an extra corner of 0 is laid anyway (its knots move the bytes)', pattern: 'D642 1a|D642 1b', edits: [[T, 'while (marks.length && angles[angles.length - 1] === 0) { marks.pop(); angles.pop(); }', '']] },
+  { id: 'AD4 an extra corner rides every basis function, not only those inside its span (it leaks before its mark)', pattern: 'D642 2a|D642 2b|L139 (9|10|11) ', edits: [[T, 'U[i] >= b[j] - 1e-9 && U[i + 4] <= b[j + 1] + 1e-9 ? ', 'true ? ']] },
+  { id: 'AD5 the steps are fitted with nothing held before the first mark', pattern: 'D642 2[cde]|L139 1 |L139 2', edits: [[X, 'for (let i = 0; i < n; i++) if (U[i] < p.from - 1e-9) keep.add(i);', '']] },
+  { id: 'AD6 a step is the target itself, not the target less the one before (it adds the whole value again)', pattern: 'D642 2c|L139 1 |L139 2', edits: [[X, 'channelFn({ v: 0, m: 0 }, T - prev,', 'channelFn({ v: 0, m: 0 }, T,']] },
+  { id: 'AD7 a change\'s shortest ignores the first ramp still moving under it', pattern: 'D642 3[de]', edits: [[X, 'share = Math.min(BASE_SHARE_MAX, baseShare(ch, base, p));', 'share = 0;']] },   // re-anchored (C's 35ef2eb6): the share is baseShare's
+  { id: 'AD8 an extra corner\'s shortest ignores the base corner under it', pattern: 'D642 3 |L139 12', edits: [[T, 'Math.min(BASE_SHARE_MAX, (SECOND_MIN_K * SECOND_MIN_K * Math.abs(baseDeg)) / (L * L))', '0']] },
+  // D642, C's 35ef2eb6 (R2 read 1.174 x the bar): the bank's share is its own shape's (extend.js baseShare)
+  { id: 'AD9 a rounded or swell bank under the change is read as the quintic', pattern: 'D642 3e', edits: [[X, "if (shape === 'rounded' || shape === 'swell') {", 'if (false) {']] },
+  { id: 'AD10 a base with no shape named is read as the quintic, not as the rounded bank of the panel', pattern: 'D642 3e', edits: [[X, "('shape' in base ? base.shape : 'rounded')", "('shape' in base ? base.shape : null)"]] },
 ];
-const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js', 'core_width_at_start_f.test.js', 'core_changes.test.js'];
+const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js', 'core_width_at_start_f.test.js', 'core_changes.test.js', 'core_additive.test.js'];
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-ramp-mut-'));
   for (const d of ['src', 'tools', 'app/core', 'app/camera', 'app/lib', 'app/validate-ui']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });   // the app folders app/core/panel.js loads

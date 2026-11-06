@@ -121,7 +121,12 @@ const EXTRA_RE = /^extra:([A-Za-z]+):(\d+)$/, EXTRA_KINDS = new Map();
 function extraKind(k) {
   if (EXTRA_KINDS.has(k)) return EXTRA_KINDS.get(k);
   const m = EXTRA_RE.exec(k), B = m && Object.prototype.hasOwnProperty.call(BASE_KINDS, m[1]) && !BASE_KINDS[m[1]].brush && !BASE_KINDS[m[1]].free ? BASE_KINDS[m[1]] : null, i = m ? Number(m[2]) : 0;
-  const K = B ? Object.freeze({ ...B, label: `extra ${B.label}${i ? ` ${i + 1}` : ''}`, extra: true, base: m[1], index: i }) : undefined;
+  // D641 (the user on d91227f: "the extra turn works, but the extra banking breaks"; his HUD read bank −294.70 and the road rolled past a full turn): the extra bank HOLDS at
+  // one turn (±360, the base bank's range: within one turn, a full turn allowed) instead of the base kind's ±720, which the field then wrapped back round. The base handle stops
+  // by itself (the road rolls under it and turns its axis away); the extra handle stands where its own change has hardly rolled the road, so its drag wound on with no stop.
+  // The base bank's own winding is not bounded here (held for his ruling: his corkscrew needs full rolls)
+  const held = m && m[1] === 'bank' ? { min: -360, max: 360 } : {};
+  const K = B ? Object.freeze({ ...B, ...held, label: `extra ${B.label}${i ? ` ${i + 1}` : ''}`, extra: true, base: m[1], index: i }) : undefined;
   EXTRA_KINDS.set(k, K); return K;
 }
 const extraId = (base, i) => `extra:${base}:${i}`;
@@ -186,7 +191,14 @@ function clearExtras(model, list, place) {
       if (g > best.g) best = { g, list: moved };
       if (g > CLEAR_PX) break;
     }
-    // no step back clears: the farthest it got from the others (a piece too small on screen for all of them)
+    // D641 (E's item 1: the extra width and cup stand at 0.11, so zoomed out there is almost no road behind them to step back onto; 16.99 px from the width handle at 2.4×):
+    // when no step back clears, steps FORWARD from where it began, the same way; the ones that clear going back (turn, bank, climb) keep the place they had
+    if (best.g <= CLEAR_PX) for (let a = at0 + CLEAR_STEP; a <= 1 + 1e-9; a += CLEAR_STEP) {
+      const moved = placeHandles({ ...model, kinds: [kind], at: { ...(model.at || {}), [kind]: Math.min(1, a) } }).map(place), g = gap(moved);
+      if (g > best.g) best = { g, list: moved };
+      if (g > CLEAR_PX) break;
+    }
+    // no step either way clears: the farthest it got from the others (a piece too small on screen for all of them)
     out = out.filter((h) => h.kind !== kind).concat(best.list);
   }
   return out;

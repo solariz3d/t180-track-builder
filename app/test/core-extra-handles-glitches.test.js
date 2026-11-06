@@ -187,3 +187,54 @@ test('L140 R3: seen from far off, his 1,000 m piece about 500 px long on screen 
   for (const h of ex) for (const o of list) if (o.kind !== h.kind) { const d = Math.hypot(o.screen.x - h.screen.x, o.screen.y - h.screen.y); assert.ok(d > 36, `${h.id} is ${d.toFixed(1)} px from ${o.id}`); }
   p.panel.unmount();
 });
+
+// D641 (pane C), the chair's widening of the extra-bank lap with E's round-2 review (lighthouse exo_memory/handback/p-d641-l140r2-review-E_2026-11-05.md, items 1 and N1, and
+// item 2's S): R4 the extra width and cup clear the other handles zoomed out; R5 a first value that cannot fit is held where it fits from its own start; R6 a corner extra
+// lands on the exact S (the first corner undone) from within the snap.
+// E's cameras for item 1 (evidence/drive-full.js :129): the default view scaled k times as far
+const D641_POSE = (k) => (L) => ({ eye: [0, k * 0.6 * L, 1000 - k * 0.25 * L], target: [0, 0, 1000 + 0.5 * L], up: [0, 1, 0], fov: Math.PI / 3 });
+// The bar is CLEAR_PX (36), at 1.6× only. At 2.4× (E's 16.99 px) the piece is about 304 px on screen and the eight places along it (three of base handles, five extras) do not
+// fit 36 px apart in the order they stand: stepping both ways it reaches 32.9 px, under the 34 px where two glyphs touch (handles.js `reach`). Not met, and no row for it here:
+// clearing it needs a design call (fewer handles, or smaller ones, on a piece that small on screen)
+for (const [k, bar] of [[1.6, 36]]) {
+  test(`D641 R4 (${k}×): every field set and the camera ${k}× as far as the default (E's cameras), the extra width and cup stand more than ${bar} px from every other handle too (E's item 1: 26.54 / 16.99 px to the width handle)`, async () => {
+    const p = await mount({ pose: D641_POSE(k) }); p.type('length m', 1000); p.type('turn °', -90); p.type('bank °', 30); p.type('climb °', 4); p.type('width m', 30); p.type('cup °', 15);
+    const list = p.panel.handles.handles().filter((h) => h.screen), ex = list.filter((h) => /^extra:(width|cup):/.test(h.kind));
+    assert.ok(new Set(ex.map((h) => h.kind)).size === 2, `the extra width and cup are up (${ex.map((h) => h.id)})`);
+    for (const h of ex) for (const o of list) if (o.kind !== h.kind) { const d = Math.hypot(o.screen.x - h.screen.x, o.screen.y - h.screen.y); assert.ok(d > bar, `${h.id} is ${d.toFixed(1)} px from ${o.id}`); }
+    p.panel.unmount();
+  });
+}
+
+test('D641 R5 (E\'s N1): on 300 m with bank 30, a FIRST extra-bank value that cannot fit (-58.2, one call, as a fast flick\'s first frame) is held where it fits from its own start (150), and the first bank keeps its room', async () => {
+  const p = await mount(); p.type('length m', 300); p.type('bank °', 30);
+  const x = p.panel.extraHandles().find((e) => e.field === 'bank' && e.unused); assert.ok(x, 'the unused extra bank'); assert.equal(x.from, 150, 'it starts halfway');
+  p.panel.secondExtra(x.id, -58.2); p.tick();
+  const ch = p.changes().phi; assert.ok(ch && ch.length === 1, `one bank change (${JSON.stringify(p.changes())})`);
+  assert.equal(ch[0].from, 150, `the change still starts at its own start, not moved earlier to fit (from ${ch[0].from})`);
+  const deg = ch[0].target / DEG; assert.ok(deg > -58.2 && deg < 30, `held between the bank and the asked value (${deg.toFixed(2)})`);
+  assert.equal(p.refusal(), null, 'the core lays it');
+  // the built piece's bank, every 2 m: no roll faster than 1°/m (E's flick: 14.97°/m in the first 4 m)
+  const doc = TB.extendCorner(p.shell.getState().history.present, p.panel.options()), P = doc.pieces[doc.pieces.length - 1], Dc = require('../../src/core/document.js');
+  let worst = 0; for (let s = 2; s <= P.length; s += 2) worst = Math.max(worst, Math.abs(Dc.channelAt(P, 'phi', s).v - Dc.channelAt(P, 'phi', s - 2).v) / DEG / 2);
+  assert.ok(worst < 1, `the largest roll rate is ${worst.toFixed(2)}°/m`);
+  p.panel.unmount();
+});
+
+test('D641 R6 (E\'s item 2): on 1,000 m with a -90 corner, the extra turn dragged to within the snap of +90 lands on +90 exactly, so the S ends dead straight (E: -1,100 px gave +90.97)', async () => {
+  const p = await mount(); p.type('length m', 1000); p.type('turn °', -90);
+  const h = p.handle('extra:turnDeg:0', 1); assert.ok(h, 'the extra turn handle is on screen');
+  p.drag(h, -1096, 0);   // the turn's 0.083°/px, its 6 px hold dead: about +90.47, inside the 12 px snap (0.996°)
+  const ch = p.changes().turnDeg; assert.ok(ch && ch.length === 1, `one later corner (${JSON.stringify(p.changes())})`);
+  assert.equal(ch[0].deg, 90, `the later corner undoes the first exactly (${ch[0].deg})`);
+  p.panel.unmount();
+});
+
+test('D641 R7 (E\'s item 3, the edges): with the left edge set on 1,000 m, one later change made from its offer leaves no second offer for that edge (E: three changes, from 500, 797.63, 930.7)', async () => {
+  const p = await mount(); p.type('length m', 1000); p.type('left edge °', 20);
+  const o = p.panel.offersAt().find((e) => e.field === 'edge'); assert.ok(o, `an offer for the left edge (${JSON.stringify(p.panel.offersAt().map((e) => e.field))})`);
+  p.panel.secondOffer(o, 5); p.tick();
+  const arr = p.changes().e || []; assert.equal(arr.length, 1, `one left-edge change (${JSON.stringify(p.changes())})`);
+  assert.equal(p.panel.offersAt().filter((e) => e.field === 'edge').length, 0, 'no second offer for the left edge');
+  p.panel.unmount();
+});

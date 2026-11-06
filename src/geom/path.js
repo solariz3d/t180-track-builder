@@ -428,6 +428,32 @@ function rebuildPathFrom(path, segments, g) {
   return finish(path, segments, work);
 }
 
+/**
+ * branchPathFrom(path, segments, g, { step, substep }): a NEW open path that is `path` up to segment g, then segments[g..] grown from block g's own start (its placement and
+ * local start, as rebuildPathFrom regrows: the same chain, so the result is a full build of `segments` to the bit). `path` is not changed: its blocks before g are SHARED
+ * (never written; a block's views read its placement, which is not touched), and every array is a copy. D642 (pane E's review b8872153 §3): the preview's ghost of a
+ * candidate that re-lays the last placed piece's built tail grew the WHOLE path (123 ms against 30 ms on a 22 km track); this grows only from the re-laid segment.
+ * `step` and `substep`, given, are the regrown blocks' own (the preview's cheap ghost); left out, the path's.
+ */
+function branchPathFrom(path, segments, g, opts) {
+  const it = branchPathFromSteps(path, segments, g, opts); let r = it.next();
+  while (!r.done) r = it.next();
+  return r.value;
+}
+/** branchPathFrom as a generator: a yield after each regrown block; branchPathFrom is this run to the end, so the path is the same to the bit. */
+function* branchPathFromSteps(path, segments, g, opts = {}) {
+  if (path.closed) throw new Error('branchPathFrom: a closed loop is rebuilt in full (its closure is the connector job)');
+  if (!(Number.isInteger(g) && g >= 0 && g < path._nseg && g < segments.length)) throw new Error(`branchPathFrom: no segment ${g}`);
+  checkSegments(segments, g);
+  const a = path.segFirst[g], b0 = path.blocks[g], work = { n: 0 };
+  const p = { ...path, samples: path.samples.slice(0, a), blocks: path.blocks.slice(0, g), segFirst: path.segFirst.slice(0, g), starts: path.starts.slice(0, g), segEnd: path.segEnd.slice(0, g) };
+  delete p.replaced;
+  if (opts.step > 0) p.step = opts.step;
+  if (opts.substep > 0) p.substep = opts.substep;
+  yield* growIntoSteps(p, segments, g, segments.length, { pl: b0.pl, p0: b0.p0, R0: b0.R0 }, work);
+  return finish(p, segments, work);
+}
+
 /** The build head: the open end's frame. The build-view camera sits behind and above it, looking along T. */
 function buildHead(path) {
   const e = path.samples[path.samples.length - 1];
@@ -438,4 +464,4 @@ function headCamera(head, { back = 15, up = 6 } = {}) {
   return { eye: add(sub(head.pos, mul(head.T, back)), mul(head.U, up)), look: head.T.slice(), up: head.U.slice(), target: add(head.pos, mul(head.T, back)) };
 }
 
-module.exports = { buildPath, buildPathSteps, extendPath, extendPathSteps, rebuildPathFrom, buildHead, headCamera, doubleReflect, tangent, rotate, angleAbout, flightLength, _vec: { add, sub, mul, dot, cross, len, unit } };
+module.exports = { buildPath, buildPathSteps, extendPath, extendPathSteps, rebuildPathFrom, branchPathFrom, branchPathFromSteps, buildHead, headCamera, doubleReflect, tangent, rotate, angleAbout, flightLength, _vec: { add, sub, mul, dot, cross, len, unit } };

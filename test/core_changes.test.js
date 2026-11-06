@@ -160,22 +160,27 @@ test('L139 8: mirror negates the turn and the bank changes and not the width or 
 });
 
 // ── corners: a list of corners, each exact, the piece straight after the last
-test('L139 9 (E §M2, the S): a corner +90 then −90 from 300 on a 600 m piece ends on the heading it started on (0.01°), its turn 0 and slope 0', () => {
-  const d = TB.extendCorner(flat(), { length: 600, turnDeg: 90, changes: { turnDeg: [{ from: 300, deg: -90 }] } });
+// AMENDED D642 (rule changed, the keeper's ruling of 2026-11-05 19:54Z: the extra ADDS on top of the piece's own change and never squeezes it). Rows 9-11 asserted each corner
+// exact and straight at its mark (the first corner squeezed into [0, mark]); now the first corner keeps its whole-piece shape and each extra adds its own angle over its span,
+// so a mark is no longer straight. What they still pin: the whole change, the end straight, and each extra's own angle over its own span (test/core_additive.test.js is the rest).
+const cornerAlone = (o) => { const { changes: _c, ...a } = o; return TB.extendCorner(flat(), a); };
+test('L139 9 (E §M2, the S; AMENDED D642): a corner +90 with an extra −90 from 350 on a 700 m piece ends on the heading it started on (0.01°), its turn 0 and slope 0', () => {
+  // was 600 m from 300: the extra −90 now has the base's own rate under it, and needs 344.6 m on 600 m (turnby.js cornerChangeMinM with the base)
+  const o = { length: 700, turnDeg: 90, changes: { turnDeg: [{ from: 350, deg: -90 }] } }, d = TB.extendCorner(flat(), o);
   assert.ok(Math.abs(pathTurn(d)) <= 0.01, `the S turns ${pathTurn(d)}°`);
-  assert.ok(Math.abs(integral(d, 'kh', 300) / DEG - 90) <= 0.01, `the first corner turns ${integral(d, 'kh', 300) / DEG}° to its mark`);
+  assert.ok(Math.abs((integral(d, 'kh', 350) - integral(cornerAlone(o), 'kh', 350)) / DEG) <= 0.01, `to its mark the corner is its own: ${integral(d, 'kh', 350) / DEG}°`);
   const e = endOf(d, 'kh'); assert.ok(Math.abs(e.v) <= 1e-9 && Math.abs(e.d1) <= 1e-9, `ends at ${e.v}, slope ${e.d1}`);
 });
-test('L139 10 (the amendment): a snake, +60, −60, +60 over 900 m (marks 300, 600), ends at +60 and straight, each corner exact to its mark', () => {
-  const d = TB.extendCorner(flat(), { length: 900, turnDeg: 60, changes: { turnDeg: [{ from: 300, deg: -60 }, { from: 600, deg: 60 }] } });
+test('L139 10 (the amendment; AMENDED D642): a snake, +60 with extras −60 from 300 and +60 from 600 over 900 m, ends at +60 and straight, each extra turning its own angle over its span', () => {
+  const o = { length: 900, turnDeg: 60, changes: { turnDeg: [{ from: 300, deg: -60 }, { from: 600, deg: 60 }] } }, d = TB.extendCorner(flat(), o), a = cornerAlone(o);
   assert.ok(Math.abs(pathTurn(d) - 60) <= 0.01, `the snake turns ${pathTurn(d)}°`);
-  assert.ok(Math.abs(integral(d, 'kh', 300) / DEG - 60) <= 0.01, `to 300: ${integral(d, 'kh', 300) / DEG}°`);
-  assert.ok(Math.abs(integral(d, 'kh', 600) / DEG) <= 0.01, `to 600: ${integral(d, 'kh', 600) / DEG}°`);
+  assert.ok(Math.abs((integral(d, 'kh', 300) - integral(a, 'kh', 300)) / DEG) <= 0.01, `to 300 the corner is its own: ${integral(d, 'kh', 300) / DEG}°`);
+  assert.ok(Math.abs((integral(d, 'kh', 600) - integral(a, 'kh', 600)) / DEG + 60) <= 0.01, `over 300-600 the first extra adds −60: ${(integral(d, 'kh', 600) - integral(a, 'kh', 600)) / DEG}°`);
   const e = endOf(d, 'kh'); assert.ok(Math.abs(e.v) <= 1e-9 && Math.abs(e.d1) <= 1e-9, `ends at ${e.v}, slope ${e.d1}`);
 });
-test('L139 11 (the amendment): a climb list over an inversion (+120°, then −120° from 500 on 1,000 m) pitches exactly to each mark and ends at a steady pitch', () => {
-  const d = TB.extendCorner(flat(), { length: 1000, climbDeg: 120, changes: { climbDeg: [{ from: 500, deg: -120 }] } });
-  assert.ok(Math.abs(integral(d, 'kv', 500) / DEG - 120) <= 0.01, `to 500: ${integral(d, 'kv', 500) / DEG}°`);
+test('L139 11 (the amendment; AMENDED D642): a climb list over an inversion (+120°, an extra −120° from 500 on 1,000 m) pitches the corner\'s own to 500 and ends at a steady pitch, 0° in all', () => {
+  const o = { length: 1000, climbDeg: 120, changes: { climbDeg: [{ from: 500, deg: -120 }] } }, d = TB.extendCorner(flat(), o);
+  assert.ok(Math.abs((integral(d, 'kv', 500) - integral(cornerAlone(o), 'kv', 500)) / DEG) <= 0.01, `to 500 the climb is its own: ${integral(d, 'kv', 500) / DEG}°`);
   assert.ok(Math.abs(integral(d, 'kv', 1000) / DEG) <= 0.01, `to the end: ${integral(d, 'kv', 1000) / DEG}°`);
   const e = endOf(d, 'kv'); assert.ok(Math.abs(e.v) <= 1e-9 && Math.abs(e.d1) <= 1e-9, `ends at ${e.v}, slope ${e.d1}`);
 });
@@ -183,10 +188,14 @@ test('L139 12 (E §M2): a corner after a corner needs the shortest corner from t
   // AMENDED L139 R1 (rule changed, pane E's review §3: a later corner at cornerMinM read 194 × the bar): the minimum is max(cornerMinM, 31.5·√|Δθ°|), 172.5 m for 30°;
   // cornerMinM, the shortest corner from a straight, is still its floor
   assert.ok(TB.cornerMinM(flat(), { length: 1000 }) >= 20 && TB.cornerMinM(flat(), { length: 1000 }) <= 25, 'the shortest corner from a straight, the floor');
-  const min = TB.cornerChangeMinM(flat(), { length: 1000 }, 30), make = (L2) => () => TB.extendCorner(flat(), { length: 1000, turnDeg: 90, changes: { turnDeg: [{ from: 1000 - L2, deg: 30 }] } });
+  // AMENDED D642 (rule changed: the extra adds on top of the base corner, so the base's own rate under it comes out of its budget, cornerChangeMinM's baseDeg; and the base
+  // corner spans the whole piece, so it no longer has to fit before the first mark: it is refused as turnDeg alone is)
+  const min = TB.cornerChangeMinM(flat(), { length: 1000 }, 30, 90), make = (L2) => () => TB.extendCorner(flat(), { length: 1000, turnDeg: 90, changes: { turnDeg: [{ from: 1000 - L2, deg: 30 }] } });
+  assert.ok(min > TB.cornerChangeMinM(flat(), { length: 1000 }, 30), `the base's rate is in it: ${min} against ${TB.cornerChangeMinM(flat(), { length: 1000 }, 30)}`);
   assert.throws(make(min - 0.1), (e) => e.code === 'TURN_TOO_SHORT' && e.message.includes('change 1') && e.message.includes(min.toFixed(1)), `refused at ${min - 0.1}`);
   assert.doesNotThrow(make(min), `laid at ${min}`);
-  assert.throws(() => TB.extendCorner(flat(), { length: 1000, turnDeg: 90, changes: { turnDeg: [{ from: 5, deg: 30 }] } }), (e) => e.code === 'TURN_TOO_SHORT' && e.message.includes('change 0'), 'the first corner must fit before its mark');
+  assert.doesNotThrow(() => TB.extendCorner(flat(), { length: 1000, turnDeg: 90, changes: { turnDeg: [{ from: 5, deg: 30 }] } }), 'an extra from 5 m: the base corner spans the piece, nothing to fit before the mark');
+  assert.throws(() => TB.extendCorner(flat(), { length: 10, turnDeg: 90, changes: { turnDeg: [{ from: 5, deg: 0 }] } }), (e) => e.code === 'TURN_TOO_SHORT' && /needs at least \d+ m$/.test(e.message), 'a base corner too short is refused as turnDeg alone');
 });
 test('L139 13: corner lists are refused by name when they make no sense: no first corner, a turn rate change on a corner, marks out of order', () => {
   assert.throws(() => TB.extendCorner(flat(), { length: 600, changes: { turnDeg: [{ from: 300, deg: -90 }] } }), (e) => e.code === 'BAD_SECOND' && e.message.includes('turnDeg'));
@@ -239,11 +248,15 @@ for (const [what, f] of [
 // its shortest is max(cornerMinM, SECOND_MIN_K·√|Δθ in degrees|), the bank's own constant from the same ease physics
 for (const [k, deg] of [['turnDeg', 90], ['turnDeg', 30], ['climbDeg', 40]]) {
   test(`L139 R1 ${k} ${deg}°: a corner change shorter than max(cornerMinM, 31.5·√Δθ°) by 0.1 m is refused by name; at it, the built road's ${k === 'turnDeg' ? 'turn' : 'pitch'} rate is under the bar (× 1.05)`, () => {
-    const min = Math.max(TB.cornerMinM(flat(), { length: 1000 }), 31.5 * Math.sqrt(deg)), seg = (L2) => ({ length: 3 * L2, [k]: deg, changes: { [k]: [{ from: L2, deg: -deg }, { from: 2 * L2, deg }] } });
-    assert.throws(() => TB.extendCorner(flat(), { ...seg(min), changes: { [k]: [{ from: min, deg: -deg }, { from: 2 * min, deg }] }, length: 3 * min - 0.1 }),
-      (e) => /TOO_SHORT/.test(e.code) && e.message.includes('change 2') && e.message.includes(min.toFixed(1)), `refused 0.1 m under ${min}`);
-    assert.ok(typeof TB.cornerChangeMinM === 'function' && Math.abs(TB.cornerChangeMinM(flat(), { length: 1000 }, deg) - min) <= 1e-9, 'exported, for the panel (the shell)');
-    const d = extend(TB.extendCorner(flat(), seg(Math.ceil(min * 10) / 10)), { length: 200 }), pk = builtTurnPeak(d, 1000 + min - 20, 1000 + 3 * min + 20, k === 'climbDeg');
+    // AMENDED D642 (rule changed: the later corners ADD on top of the base corner, which spans the whole piece, so its own rate comes out of their budget; cornerChangeMinM's
+    // baseDeg). The segment is the shortest that holds on a piece three of it long: L2 = cornerChangeMinM({ length: 3·L2 }, deg, base deg), found by iterating to its fixed point
+    const own = Math.max(TB.cornerMinM(flat(), { length: 1000 }), 31.5 * Math.sqrt(deg)), seg = (L2) => ({ length: 3 * L2, [k]: deg, changes: { [k]: [{ from: L2, deg: -deg }, { from: 2 * L2, deg }] } });
+    assert.ok(typeof TB.cornerChangeMinM === 'function' && Math.abs(TB.cornerChangeMinM(flat(), { length: 1000 }, deg) - own) <= 1e-9, 'exported, for the panel (the shell); without a base, as before');
+    let min = own; for (let i = 0; i < 50; i++) min = TB.cornerChangeMinM(flat(), { length: 3 * Math.ceil(min * 10) / 10 }, deg, deg);
+    const L2 = Math.ceil(min * 10) / 10, need = TB.cornerChangeMinM(flat(), { length: 3 * L2 }, deg, deg);
+    assert.throws(() => TB.extendCorner(flat(), { length: 3 * L2, [k]: deg, changes: { [k]: [{ from: L2, deg: -deg }, { from: 2 * L2 + 0.2, deg }] } }),
+      (e) => /TOO_SHORT/.test(e.code) && e.message.includes('change 2') && e.message.includes(need.toFixed(1)), `refused 0.2 m under ${need}`);
+    const d = extend(TB.extendCorner(flat(), seg(L2)), { length: 200 }), pk = builtTurnPeak(d, 1000 + L2 - 20, 1000 + 3 * L2 + 20, k === 'climbDeg');
     assert.ok(pk <= 1.05, `the built ${k === 'turnDeg' ? 'heading' : 'pitch'} rate reads ${pk.toFixed(3)} × the bar over the later corners`);
   });
 }

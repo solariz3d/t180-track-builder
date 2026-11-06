@@ -78,6 +78,14 @@ const MUTATIONS = [
     from: 'for (let c = 0; c < 8; c++) {', to: 'for (let c = 0; c < 1; c++) {', caughtBy: 'overhead fit' },
   { id: 'B10 the ghost is built on the live path (no copy)', file: 'preview/trackmodel.js',
     from: 'const p = { ...path, samples: path.samples.slice(), starts: path.starts.slice(), segFirst: path.segFirst.slice(), segEnd: path.segEnd.slice(), blocks };', to: 'const p = path;', caughtBy: 'ghost: the ghost of a segment tail' },
+  // D642: the ghost of a candidate that re-lays the last placed piece's tail (app/test/ghost-relaid-tail.test.js)
+  { id: 'GR1 a candidate that differs anywhere in the placed track is taken as re-laying its tail', file: 'preview/trackmodel.js', from: 'a.id === lastId && b.id === lastId && ', to: '', caughtBy: 'D642 4' },   // re-anchored (D642 E's review): the id check moved into rollOnly
+  { id: 'GR2 a candidate that re-lays the placed tail is refused again (no next ghost after a rolling bank end)', file: 'preview/trackmodel.js', from: '(relaid < keys.length && !(placedSegs.length === keys.length && segs.slice(relaid, keys.length).every((_, i) => rollOnly(relaid + i))))', to: 'relaid < keys.length', caughtBy: 'D642 1' },
+  // D642, pane E's review (b8872153): only the roll may differ in the re-laid stretch, and the ghost grows only from it
+  { id: 'GR3 the re-laid stretch is taken whatever its fields (a true move of the last placed piece is drawn as re-laid)', file: 'preview/trackmodel.js', from: ' && sameContent(unrolled(a), unrolled(b))', to: '', caughtBy: 'D642 6' },
+  { id: 'GR4 the re-laid ghost builds the whole path afresh again', file: 'preview/trackmodel.js', from: "typeof geom.branchPathFromSteps === 'function' ? yield*", to: 'false ? yield*', caughtBy: 'D642 7' },
+  { id: 'GP1 the branch grows from the block before g (the chain one block off)', file: '../src/geom/path.js', from: 'const a = path.segFirst[g], b0 = path.blocks[g], work = { n: 0 };', to: 'const a = path.segFirst[g], b0 = path.blocks[Math.max(0, g - 1)], work = { n: 0 };', caughtBy: 'D642 1' },
+  { id: 'GP2 the branch writes into the arrays of the placed path (no copies)', file: '../src/geom/path.js', from: 'const p = { ...path, samples: path.samples.slice(0, a), blocks: path.blocks.slice(0, g), segFirst: path.segFirst.slice(0, g), starts: path.starts.slice(0, g), segEnd: path.segEnd.slice(0, g) };', to: 'path.samples.length = a; path.blocks.length = g; path.segFirst.length = g; path.starts.length = g; path.segEnd.length = g; const p = path;', caughtBy: 'D642 3' },
   { id: 'B11 placing the word does not retire its ghost', file: 'preview/preview.js',
     from: "if (track.how !== 'same' && track.how !== 'kept') ghost = null;", to: '', caughtBy: 'preview: showGhost draws the ghost' },
   { id: 'B12 the candidate ignores the font picker', file: 'testhook/ghostword.js',
@@ -180,7 +188,7 @@ function runMutant(m, extra = []) {
     const f = m.root === 'scripts' ? path.join(dir, 'scripts', m.file) : path.join(app, m.file), src = fs.readFileSync(f, 'utf8'), applied = m.from === null || src.includes(m.from);
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, m.to));
     const tap = path.join(dir, '.inner-run.tap');   // a TAP copy, the only place a dead file's exit code shows
-    const files = [path.join(__dirname, 'camera.test.js'), path.join(__dirname, 'preview.test.js'), path.join(__dirname, 'render_proof.test.js'), path.join(__dirname, 'look.test.js'), path.join(__dirname, 'texmaker-panel.test.js'), path.join(__dirname, 'aclook.test.js'), path.join(ROOT, 'test', 'perf.test.js'), path.join(ROOT, 'test', 'perf_soak.test.js'), path.join(ROOT, 'test', 'prove_render.test.js')];   // the run's test files, counted by the crash-after-a-failing-row check
+    const files = [path.join(__dirname, 'camera.test.js'), path.join(__dirname, 'preview.test.js'), path.join(__dirname, 'render_proof.test.js'), path.join(__dirname, 'look.test.js'), path.join(__dirname, 'texmaker-panel.test.js'), path.join(__dirname, 'aclook.test.js'), path.join(ROOT, 'test', 'perf.test.js'), path.join(ROOT, 'test', 'perf_soak.test.js'), path.join(ROOT, 'test', 'prove_render.test.js'), path.join(__dirname, 'ghost-relaid-tail.test.js')];   // the run's test files, counted by the crash-after-a-failing-row check
     const r = spawnSync(process.execPath, ['--test', ...IR.reporterArgs(tap), ...extra, '--test-concurrency=4', ...files],
       { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), APP_DIR: app, SCRIPTS_DIR: path.join(dir, 'scripts') }, encoding: 'utf8', timeout: 300000 });
     if (r.error) throw r.error;

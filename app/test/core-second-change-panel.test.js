@@ -333,13 +333,19 @@ test('L139 O5: on the real core, his snake through the panel (corner +60, then �
   assert.equal(p.shell.getState().history.present.pieces.length, n + 1, `one piece laid (${msgText(p)})`);
   near(((p.shell.endHeadingDeg() - h0 + 540) % 360) - 180, 60, 0.01, 'the heading turned +60 in all');
   near(p.shell.headState().kh, 0, 1e-9, 'and it ends straight');
-  // inside the piece (one +60 corner alone would also end +60 and straight, so the snake is read where it bends back): +60 at its first mark, back to 0 at its second
-  const AD = require('../../src/core/adapter.js'), d = p.shell.getState().history.present, path = AD.toPath(d).path, s0 = path.lengthM - 900;
-  const T = (s) => path.samples.reduce((a, m) => (Math.abs(m.s - s) < Math.abs(a.s - s) ? m : a)).T, yaw = (t) => Math.atan2(t[0], t[2]) * 180 / Math.PI;
-  const turned = (s) => ((yaw(T(s)) - yaw(T(s0)) + 540) % 360) - 180;
-  near(Math.abs(turned(s0 + 300)), 60, 0.5, 'at the first mark (300 m) it has turned 60'); near(turned(s0 + 600), 0, 0.5, 'at the second (600 m) it is back to the start heading');
-  assert.ok(Math.sign(turned(s0 + 300)) === Math.sign(turned(s0 + 900)), 'the first and last corners turn the same way');
-  p.panel.unmount();
+  // inside the piece (one +60 corner alone would also end +60 and straight, so the snake is read where it bends back).
+  // AMENDED D642 (the rule changed, his ruling 2026-11-05 19:54Z, pane B's additive model: a later change ADDS on top of the piece's own and never squeezes it; before, the
+  // first corner was squeezed to finish by the first mark, so this row read +60 there and 0 at the second). Now each later corner turns its own angle ON TOP of the
+  // first corner laid alone over the whole piece: against that piece, the snake is the same up to its first mark (300 m) and back by its own −60 at its second (600 m)
+  const AD = require('../../src/core/adapter.js'), turnedOf = (pp) => { const d = pp.shell.getState().history.present, path = AD.toPath(d).path, s0 = path.lengthM - 900;
+    const T = (s) => path.samples.reduce((a, m) => (Math.abs(m.s - s) < Math.abs(a.s - s) ? m : a)).T, yaw = (t) => Math.atan2(t[0], t[2]) * 180 / Math.PI;
+    return (s) => ((yaw(T(s0 + s)) - yaw(T(s0)) + 540) % 360) - 180; };
+  const q = await mountPanel(); q.type('length m', 900); q.type('turn °', 60); q.extend();   // the same +60 corner, alone
+  const snake = turnedOf(p), alone = turnedOf(q);
+  near(snake(300) - alone(300), 0, 0.5, 'up to the first mark (300 m) the snake is the corner alone');
+  near(snake(600) - alone(600), -60, 0.5, 'at the second mark (600 m) it has turned back by its own −60 on top of the corner alone');
+  assert.ok(snake(600) < snake(300), 'it bends back between its marks');
+  q.panel.unmount(); p.panel.unmount();
 });
 
 // THE CORNER DEFAULT (after B's R1 fix, cd8b7fd: a corner after the first is refused below cornerChangeMinM = max(cornerMinM, SECOND_MIN_K·√|Δθ°|)). The panel's default

@@ -747,10 +747,11 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
     // THE LATER CHANGES' NUMBERS FOR THE PANEL (L139, pane C, at B's word): the core's own, passed through, because the panel may not require src/core/extend.js
     // (it pulls node's fs, which the app's loader refuses). null where this core does not export them: the panel then lays 85% and offers nothing
-    secondMinM: (ch, a, b) => (typeof EXT.secondMinM === 'function' ? EXT.secondMinM(ch, a, b) : null),
+    // D642 (pane B's additive model): a fourth argument, the field's own first ramp still moving under the change ({ step, length }, extend.js secondMinM), passed through
+    secondMinM: (ch, a, b, base) => (typeof EXT.secondMinM === 'function' ? EXT.secondMinM(ch, a, b, base) : null),
     secondFloorM: () => (Number.isFinite(EXT.SECOND_FLOOR_M) ? EXT.SECOND_FLOOR_M : null),
     cornerMinM: (d, o) => (typeof TB.cornerMinM === 'function' ? TB.cornerMinM(d, o) : null),
-    cornerChangeMinM: (d, o, deg) => (typeof TB.cornerChangeMinM === 'function' ? TB.cornerChangeMinM(d, o, deg) : null),   // L139 R1 (pane B): a later corner's shortest, by its angle
+    cornerChangeMinM: (d, o, deg, baseDeg) => (typeof TB.cornerChangeMinM === 'function' ? TB.cornerChangeMinM(d, o, deg, baseDeg) : null),   // L139 R1 (pane B): a later corner's shortest, by its angle; D642: and the first corner's degrees under it
     /** The GHOST of an extension: the track as it would be, not committed (the preview's 't180-ghost' candidate). */
     candidate: (opts, { coarse = false } = {}) => {
       if (coarse) { const n0 = doc().pieces.length, dc = TB.extendCorner(doc(), opts); return { segments: segmentsOf(dc, { segMFor: (P, pi) => (pi >= n0 && P.type === 'road' ? ghostSegM(P) : undefined) }), closed: false, start: startOf(dc) }; }   // the drag's ghost

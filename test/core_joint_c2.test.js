@@ -218,12 +218,17 @@ test("row 10: through Finish and through bankLap, the added bank is C2: the bank
 // curvature step (continuity.js c2Breaks reads every joint's step from the control points, closed form) and no value or slope step.
 // Both the core's default ease and the panel's rounded bank (app/core/panel.js extendOptions sends bankShape 'rounded'): unpinned, the fitted second ramp ended at 0.00093 °/m²
 // on the first (under the bar) and 0.0058 on the second (5.8 times over it), measured with endC2 removed (L135 mutant SB2's first run)
-for (const [how, extra] of [['default ease', {}], ['the panel\'s rounded bank', { bankShape: 'rounded' }]]) {
+// AMENDED D642, C's 35ef2eb6 (by name: the bank's shortest takes its own shape; the panel's rounded ramp rolls near the bar at its end, so 30° back to 0 over a rounded
+// 750 m piece needs 244.0 m: that case's mark moves to 505; the default ease keeps 572)
+for (const [how, extra, F] of [['default ease', {}, 572], ['the panel\'s rounded bank', { bankShape: 'rounded' }, 505]]) {
 // AMENDED L139 (rule changed: K 15 -> 31.5, the keeper 2026-11-05 07:00Z "we dont want the bumps"; pane E 711d7d10): his from 637.5 leaves 112.5 m, under the new
 // minimum (172.5 m for 30°, 140.9 m for 20°), and is now refused by name (test/core_changes.test.js L139 7). The row's rule is unchanged; its from is the latest the rule allows.
-  test(`L135 4a: after a piece that banks 30° and back to level from 577 m (${how}), the next piece continues with no bank step: value, slope and curvature continuous at both joints`, () => {
+  // AMENDED D642 (rule changed, the keeper's ruling of 2026-11-05 19:54Z: the extra ADDS on top of the piece's own change and never squeezes it): the 30° first ramp now eases over the
+  // whole piece under the second, so the second needs 177.3 m (its own 172.5 m, with the first ramp's share taken out: extend.js secondMinM `base`), and 577 is refused; 572 is
+  // the latest whole metre the rule allows. The row's measures are unchanged.
+  test(`L135 4a: after a piece that banks 30° and back to level from ${F} m (${how}), the next piece continues with no bank step: value, slope and curvature continuous at both joints`, () => {
     let doc = extend(D.createDoc('twice'), { length: 1000, family: 'bowl' });
-    doc = extend(doc, { length: 750, targets: { phi: 30 * DEG }, second: { phi: { from: 577, target: 0 } }, ...extra });
+    doc = extend(doc, { length: 750, targets: { phi: 30 * DEG }, second: { phi: { from: F, target: 0 } }, ...extra });
     doc = extend(doc, { length: 300 });
     assert.ok(Math.abs(at(doc.pieces[1], 'phi', 750)) <= 1e-6, `the piece ends level (its second bank): ${at(doc.pieces[1], 'phi', 750)}°`);
     assert.deepEqual(Cn.c2Breaks(doc, { channels: ['phi'], tol: TOL_D2 }).map((e) => `${e.joint} ${e.dkDeg}`), [], 'no curvature step in the bank at any joint');
