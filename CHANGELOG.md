@@ -29,7 +29,7 @@ All notable changes to this project are recorded here. The format follows
 
 - **Dragging the extra bank quickly toward level costs more than a plain drag:** 1.6 to 2.5 times a plain drag's time a move, depending on how busy the machine is, against a target of 2 times. The road it builds is right; only the drag is slower.
 - **Dragging the extra bank on past what fits, into the hold, is slower still:** 2.07 to 2.38 times a plain drag. Its check is marked to-do in the tests (marked so in fb5b91c, with the extra bank's shortest-length work), so it is known and not yet held to the 2 times target.
-- **Two frame-time checks have been over their bar on main since before 0.4.39:** stretching a 1,000 m piece with a left edge on an empty track (the drag check's row 8, 6.9 ms at 144 Hz), and letting go of a 1,000 m turn in the aurora look (the release check's row 1, 6.0 ms). This release makes the first about 0.8 ms slower at the median, so it is over its bar more often (3 runs of 4).
+- **Two frame-time checks have been over their bar on main since before 0.4.39:** stretching a 1,000 m piece with a left edge on an empty track (the drag check's row 8, 6.9 ms at 144 Hz), and letting go of a 1,000 m turn or its length handle in the aurora look (the release check's row 1, 6.0 ms). This release makes the first about 0.8 ms slower at the median, so it is over its bar more often (3 runs of 4).
 
 ## [0.4.38] - 2026-11-02
 
