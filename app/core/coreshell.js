@@ -749,6 +749,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     // (it pulls node's fs, which the app's loader refuses). null where this core does not export them: the panel then lays 85% and offers nothing
     // D642 (pane B's additive model): a fourth argument, the field's own first ramp still moving under the change ({ step, length }, extend.js secondMinM), passed through
     secondMinM: (ch, a, b, base) => (typeof EXT.secondMinM === 'function' ? EXT.secondMinM(ch, a, b, base) : null),
+    // D642 (E's review of d87ba99: the panel's fit check ran secondMinM's full search, a dozen probe roads, on every drag move): whether a change of `span` metres holds, as
+    // secondMinM would say, at most ONE probe (extend.js spanHolds, what changeLists asks). null where this core does not export it: the panel then compares with secondMinM
+    spanHolds: (ch, a, b, base, span) => (typeof EXT.spanHolds === 'function' ? EXT.spanHolds(ch, a, b, base, span) : null),
     secondFloorM: () => (Number.isFinite(EXT.SECOND_FLOOR_M) ? EXT.SECOND_FLOOR_M : null),
     cornerMinM: (d, o) => (typeof TB.cornerMinM === 'function' ? TB.cornerMinM(d, o) : null),
     cornerChangeMinM: (d, o, deg, baseDeg) => (typeof TB.cornerChangeMinM === 'function' ? TB.cornerChangeMinM(d, o, deg, baseDeg) : null),   // L139 R1 (pane B): a later corner's shortest, by its angle; D642: and the first corner's degrees under it

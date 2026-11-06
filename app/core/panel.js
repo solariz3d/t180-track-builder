@@ -84,11 +84,13 @@ function changeFroms(length, list, first, ch, { lo = 0, corner = false, minM = n
   const L = Number(length), n = list.length, out = [];
   if (!(L > 0)) return list.map((x) => x.from);
   const cm = (deg) => { if (typeof cornerMin !== 'function' || !Number.isFinite(deg)) return 0; const v = cornerMin(deg); return Number.isFinite(v) && v > 0 ? v : 0; };
-  const t = [first, ...list.map((x) => x.target)], m = list.map((x, k) => (corner ? cm(x.target) : secondMinOf(minM, ch, t[k], t[k + 1])));
+  // each change's minimum, asked only when a mark is laid here (D642, E's review of d87ba99: asked for every change on every options build, a drag's included, it was 9 of the
+  // 13 searches a move, each a dozen probe roads, though a dragged change always has its mark). Laid marks need m[j] for j from that change on, and m[k - 1] before it
+  const t = [first, ...list.map((x) => x.target)], mm = new Array(n), m = (k) => (mm[k] === undefined ? (mm[k] = corner ? cm(t[k + 1]) : secondMinOf(minM, ch, t[k], t[k + 1])) : mm[k]);
   for (let k = 0; k < n; k++) {
     if (list[k].from !== null) { out.push(list[k].from); continue; }
-    let rest = 0; for (let j = k; j < n; j++) rest += m[j];
-    const lower = up2(k === 0 ? lo : out[k - 1] + m[k - 1]), pref = corner ? near2((L * (k + 1)) / (n + 1)) : k === 0 ? near2(L * SECOND_FROM_SHARE) : lower;
+    let rest = 0; for (let j = k; j < n; j++) rest += m(j);
+    const lower = up2(k === 0 ? lo : out[k - 1] + m(k - 1)), pref = corner ? near2((L * (k + 1)) / (n + 1)) : k === 0 ? near2(L * SECOND_FROM_SHARE) : lower;
     out.push(Math.max(lower, Math.min(pref, down2(L - rest))));
   }
   return out;
@@ -379,7 +381,8 @@ function mount(root, shell, mountOpts = {}) {
   // the core's minimum and floor, through the shell (a shell without them: null)
   const shellMinM = (ch, a, b, base) => (typeof shell.secondMinM === 'function' ? shell.secondMinM(ch, a, b, base) : null);
   // D642: the minimum for one field of the options `o`, its first ramp passed when that ramp still moves under the change (baseOfRamp); a corner's first is its degrees
-  const minOf = (o, key) => { const base = baseOfRamp(o.transition && o.transition[key], o.targets && o.targets[key], rampStart(o.first, shell.headState(), key), Number(o.length)); return base ? (c, a, b) => shellMinM(c, a, b, base) : shellMinM; };
+  const baseFor = (o, key) => baseOfRamp(o.transition && o.transition[key], o.targets && o.targets[key], rampStart(o.first, shell.headState(), key), Number(o.length));
+  const minOf = (o, key) => { const base = baseFor(o, key); return base ? (c, a, b) => shellMinM(c, a, b, base) : shellMinM; };
   // a later corner's shortest, by its degrees (B's R1: src/core/turnby.js cornerChangeMinM, through the shell); cornerMinM reads only the family and the knot spacing, so the
   // document's own (the last road piece's family) is what it is asked with, as extend() would lay it
   // D642: and the first corner's degrees, and the piece's length, which the share of the first corner still turning under it is read from (turnby.js cornerChangeMinM)
@@ -424,7 +427,9 @@ function mount(root, shell, mountOpts = {}) {
     for (const f of SECOND_FIELDS) {
       const live = secLive(f); if (!live.length || !secHasTarget(f)) continue;
       // only a DRAGGED change (kept as its share) moves: a typed from is the user's, refused by name (L135 C11-C13)
-      for (let k = live.length - 1; k >= 0; k--) { if (live[k].auto || live[k].share === null) continue; const S = secSegs(f); if (!S.arr[k]) continue; const r = secRange(S, k); if (S.arr[k].from > r.hi + 1e-9 && r.hi >= r.lo - 1e-9) live[k].from.value = show(down2(r.hi)); }
+      // (D642: a segment that holds where it is is past nothing, so the one-probe question is asked first and the shortest's search only when it does not)
+      // (D642, the librarian's ruling on B's §9: the place it moves to is walked, like a dragged mark, to the nearest that holds on the built road; none: the latest, as before)
+      for (let k = live.length - 1; k >= 0; k--) { if (live[k].auto || live[k].share === null) continue; const S = secSegs(f); if (!S.arr[k] || S.holds(k)) continue; const r = secRange(S, k); if (S.arr[k].from > r.hi + 1e-9 && r.hi >= r.lo - 1e-9) { const w = walkToHold(f, k, live[k], down2(r.hi), up2(r.lo), down2(r.hi)); live[k].from.value = show(w === null ? down2(r.hi) : w); } }
     }
     if (!SECOND_FIELDS.some((f) => SEC[f].list.some((x) => x.auto))) return;
     const o = opts();
@@ -858,7 +863,7 @@ function mount(root, shell, mountOpts = {}) {
     const v = extraHandlesNow(); exCache = { n: ghostN, d, c: cornerMode(), v }; return v;
   };
   const extraHandlesNow = () => {
-    const o = opts(), offers = offersAt(), out = [];
+    const o = opts(), offers = offersAt({ unused: true }), out = [];
     for (const f of Object.keys(EX_KIND)) {
       if (!secHasTarget(f)) continue;
       const kind = exKindOf(f), K = HD.KINDS[kind]; if (!K || (HANDLE_FIELD[kind] && HANDLE_FIELD[kind].disabled)) continue;
@@ -1240,12 +1245,22 @@ function mount(root, shell, mountOpts = {}) {
   const secSegs = (f, o = opts()) => {
     const key = secKey(f), corner = key === 'turnDeg' || key === 'climbDeg', arr = (o.changes && o.changes[key]) || [];
     const first = corner ? Number(f === 'turn' ? asTyped('turn') : asTyped('climb')) : o.targets[key];
-    const mm = corner ? null : minOf(o, key);   // D642: with the first ramp under it (corners: the first corner's degrees)
-    const mins = arr.map((c, k) => (corner ? cornerMin(o, Number(c.deg), first) : secondMinOf(mm, key, k === 0 ? first : arr[k - 1].target, c.target)));
-    return { key, corner, arr, first, lo0: (o.transition && o.transition[key]) || 0, mins, L: Number(len.value) };
+    const mm = corner ? null : minOf(o, key), L = Number(len.value);   // D642: with the first ramp under it (corners: the first corner's degrees)
+    // D642 (E's review of d87ba99: 106 ms a move dragging the extra bank back toward level): each segment's shortest, asked only when a range needs its number (min); and
+    // whether a segment holds at the span it has (holds), which is all the fit check needs: at most ONE probe of the built road (shell.spanHolds, extend.js spanHolds),
+    // where its shortest is a search of a dozen. A core without spanHolds: the span against the shortest, as before
+    const prevOf = (k) => (k === 0 ? first : arr[k - 1].target), spanOf = (k) => (k + 1 < arr.length ? arr[k + 1].from : L) - arr[k].from;
+    const memo = new Array(arr.length), min = (k) => (memo[k] === undefined ? (memo[k] = corner ? cornerMin(o, Number(arr[k].deg), first) : secondMinOf(mm, key, prevOf(k), arr[k].target)) : memo[k]);
+    const holds = (k) => {
+      if (!corner && typeof shell.spanHolds === 'function') { const b = shell.spanHolds(key, prevOf(k), arr[k].target, baseFor(o, key), spanOf(k)); if (typeof b === 'boolean') return b; }
+      return spanOf(k) >= min(k) - 1e-6;
+    };
+    return { key, corner, arr, first, lo0: (o.transition && o.transition[key]) || 0, min, holds, L };
   };
-  const secRange = (S, k) => ({ lo: k === 0 ? S.lo0 : S.arr[k - 1].from + S.mins[k - 1], hi: (k === S.arr.length - 1 ? S.L : S.arr[k + 1].from) - S.mins[k] });
-  const secFits = (S) => S.arr.every((c, k) => { const r = secRange(S, k); return c.from >= r.lo - 1e-6 && c.from <= r.hi + 1e-6; });
+  const secRange = (S, k) => ({ lo: k === 0 ? S.lo0 : S.arr[k - 1].from + S.min(k - 1), hi: (k === S.arr.length - 1 ? S.L : S.arr[k + 1].from) - S.min(k) });
+  // every mark inside its range: the first at or after the first ramp's end, and each segment (the span to the next mark, or the end) holding; a mark is past its range's low
+  // end exactly when the segment before it does not hold, so the spans alone say it
+  const secFits = (S) => (!S.arr.length || S.arr[0].from >= S.lo0 - 1e-6) && S.arr.every((c, k) => S.holds(k));
   const halfAt = (from) => { const L = Number(len.value), f = L > 0 ? Math.min(1, Math.max(0, from / L)) : 1, w1 = fieldNum(width), w0 = fieldNum({ value: shown.width }) ?? w1; return ((w0 ?? 0) + ((w1 ?? w0 ?? 0) - (w0 ?? 0)) * f) / 2; };
   const marksAt = () => {
     const o = opts(), out = [];
@@ -1258,12 +1273,16 @@ function mount(root, shell, mountOpts = {}) {
   // (round 2: this is where the HANDLE stands; where its change starts is EXTRA_FROM_SHARE, below, and the handle steps back on screen to clear the others, handles.js CLEAR_PX)
   const EXTRA_AT = Object.freeze({ bank: 0.60, climb: 0.74, turn: 0.89, width: 0.11, cup: 0.11 });
   const EXTRA_FROM_SHARE = 0.5;
-  const offersAt = () => {
+  // `unused` (D642, E's review of d87ba99): only the fields with no change yet, all the extra handles read (one per field: a field with its change has its handle on it). The
+  // offer after a field's last change asks that change's shortest, a search of a dozen probe roads under a moving first ramp, and while the extra bank is dragged its target
+  // is new every move; nothing on screen reads that offer, so the extra handles do not ask for it
+  const offersAt = ({ unused = false } = {}) => {
     const floor = secondFloor(), L = Number(len.value); if (floor === null || !(L > 0)) return [];
     const o = opts(), out = [];
     for (const f of SECOND_FIELDS) {
       if (!secHasTarget(f)) continue;
       const key = secKey(f), corner = key === 'turnDeg' || key === 'climbDeg', arr = (o.changes && o.changes[key]) || [];
+      if (unused && arr.length) continue;
       const first = corner ? Number(f === 'turn' ? asTyped('turn') : asTyped('climb')) : o.targets[key];
       if (!Number.isFinite(first)) continue;
       // D641 (E's item 3; the user on c42f985: "perhaps we should only do two per action on the piece"): a field with no extra handle (the left and right edge) is offered
@@ -1294,7 +1313,7 @@ function mount(root, shell, mountOpts = {}) {
     if (!exDrag || exDrag.kind !== kind) {
       if (K.index < live.length) { const x = live[K.index]; exDrag = { kind, x, made: false, before: x.then.value }; }
       else {
-        const of = offersAt().find((o) => o.field === f); if (!of) return;
+        const of = offersAt({ unused: true }).find((o) => o.field === f); if (!of) return;
         const x = secAdd(f, { then: show(value), from: show(of.from), share: L > 0 ? of.from / L : null }); delete secPending[f];
         exDrag = { kind, x, made: true, start: Number(of.base) };
       }
@@ -1303,15 +1322,21 @@ function mount(root, shell, mountOpts = {}) {
     // fallback of a change this drag made is the value it starts from (the offer's base: no change, which always has its room), so the hold below searches from there
     const d = exDrag; if (d.ok === undefined) d.ok = d.made ? d.start : Number(d.before);
     // B's G7: the amount is held at the furthest it can go toward the drag's and still fit (its segment and the next one keep their minimums), never refused for room
+    // D642 (E's reviews of d87ba99 and 212e78d: a fit check under a moving first ramp is a probe of the built road; the search below asked 40 a move that did not fit, then a
+    // step of it every move a drag was carried on into the hold, 2.5-3 × the early drag). The search runs ONCE, on the first move that does not fit, and finds the EDGE; for
+    // the rest of the drag a target past that edge (the side that did not fit) is held there and asks nothing, and the ghost is not rebuilt when nothing moved. A target that
+    // comes back inside the edge is asked again, as any other
     const fitsAt = (v) => { d.x.then.value = show(v); return secFits(secSegs(f)); };
-    if (fitsAt(value)) d.ok = value;
+    const was = d.x.then.value, pastEdge = Number.isFinite(d.edge) && Number.isFinite(d.bad) && value !== d.edge && Math.sign(value - d.edge) === Math.sign(d.bad - d.edge);
+    if (pastEdge) d.x.then.value = show(d.edge);
+    else if (fitsAt(value)) d.ok = value;
     else if (Number.isFinite(d.ok) && fitsAt(d.ok)) {
       let a = d.ok, b = value; for (let i = 0; i < 40; i++) { const m = (a + b) / 2; if (fitsAt(m)) a = m; else b = m; }
       let v = Number(show(a)); for (let i = 0; i < 4 && !fitsAt(v); i++) v = Number(show(v + (d.ok > v ? 0.01 : -0.01)));
-      d.ok = v; d.x.then.value = show(v);
+      d.ok = v; d.edge = v; d.bad = b; d.x.then.value = show(v);
     }
     lastTouched = { secUndo: () => { if (d.made) { if (SEC[f].list.includes(d.x)) secRemove(f, d.x); } else { d.x.then.value = d.before; ghost(); } } };
-    ghost();
+    if (!pastEdge || d.x.then.value !== was) ghost();
   };
   const secondSlide = (kind, from) => {
     const K = HD.KINDS[kind], f = exFieldOf(kind), L = Number(len.value); if (!K || !f) return;
@@ -1321,11 +1346,26 @@ function mount(root, shell, mountOpts = {}) {
   };
   // a mark dragged along the piece: that change's from, kept as its share of the piece; one Ctrl+Z puts it back (the undo guard)
   let secDragFrom = null;
+  // WHERE A MARK MAY STAND (D642): change k of field f with its mark at F holds when its own segment and the one before it both hold on the built road (secSegs holds: the
+  // core's spanHolds, one probe each). From `from`, the nearest such F within [lo, hi], stepping out WALK_STEP_M at a time both ways, up to WALK_M; null when none does.
+  // The row is put back as it was: this only asks
+  const WALK_M = 60, WALK_STEP_M = 1;
+  const walkToHold = (f, k, x, from, lo, hi) => {
+    const was = x.from.value, holdsAt = (F) => { x.from.value = show(F); const S = secSegs(f); return S.holds(k) && (k === 0 || S.holds(k - 1)); };
+    try {
+      if (holdsAt(from)) return from;
+      for (let d = WALK_STEP_M; d <= WALK_M + 1e-9; d += WALK_STEP_M) for (const F of [near2(from - d), near2(from + d)]) if (F >= lo - 1e-9 && F <= hi + 1e-9 && holdsAt(F)) return F;
+      return null;
+    } finally { x.from.value = was; }
+  };
   const secondDrag = (mark, from) => {
     const x = secLive(mark.field)[mark.index]; if (!x) return;
     if (!secDragFrom || secDragFrom.x !== x) secDragFrom = { x, value: x.from.value, share: x.share, auto: x.auto };
     // B's G9: never past its neighbour (plus the minimum between them), never so late its segment is short; no room at all: it stays
     const r = secRange(secSegs(mark.field), mark.index); if (!(r.lo <= r.hi + 1e-9)) return; from = Math.min(down2(r.hi), Math.max(up2(r.lo), from));
+    // D642 (pane E's review a99775ef §1; the librarian's ruling on B's §9): past the shortest the built roll is not monotone in the span, so a mark the clamp keeps can still
+    // be refused and the piece vanish (15 of 121 on his p2). The mark walks to the nearest place both its segments hold (walkToHold); none within reach: it stays
+    const w = walkToHold(mark.field, mark.index, x, from, up2(r.lo), down2(r.hi)); if (w === null) return; from = w;
     const L = Number(len.value); x.share = L > 0 ? from / L : null; x.auto = false; x.from.value = show(from);
     const before = secDragFrom; lastTouched = { secUndo: () => { x.from.value = before.value; x.share = before.share; x.auto = before.auto; secDragFrom = null; ghost(); } };
     ghost();

@@ -125,6 +125,18 @@ const MUTANTS = [
   // D642, C's 35ef2eb6 (R2 read 1.174 x the bar): the bank's share is its own shape's (extend.js baseShare)
   { id: 'AD9 a rounded or swell bank under the change is read as the quintic', pattern: 'D642 3e', edits: [[X, "if (shape === 'rounded' || shape === 'swell') {", 'if (false) {']] },
   { id: 'AD10 a base with no shape named is read as the quintic, not as the rounded bank of the panel', pattern: 'D642 3e', edits: [[X, "('shape' in base ? base.shape : 'rounded')", "('shape' in base ? base.shape : null)"]] },
+  // D642, E's 9a1a566f §5: the bank's shortest is read off the built road (extend.js builtMin)
+  { id: 'AD11 the built-road search stops where it starts (the change alone at the bar)', pattern: 'D642 3[efg]', edits: [[X, 'while (L2 < top && !ok(L2)) L2 = Math.min(top, L2 + PROBE_STEP_M);', '']] },   // re-anchored (E's 48b2ccf3): the search with no neighbour, in gridMin
+  { id: 'AD12 the probe lays the first ramp as the quintic whatever its shape', pattern: 'D642 3[efg]', edits: [[X, '...(shape ? { bankShape: shape } : {})', '']] },
+  { id: 'AD13 a span past the change\'s own minimum is taken without the built road probed', pattern: 'D642 3h', edits: [[X, ' && probePeak(0, gridded(a, b), base, span) <= PROBE_BAR;', ';']] },   // re-anchored (E's 48b2ccf3): the probe is the gridded change's
+  // D642, E's 48b2ccf3: a drag reuses the built road (extend.js gridded, gridMin)
+  { id: 'AD14 the probes are kept by the exact change, not its grid step (a drag reuses nothing)', pattern: 'D642 3i', edits: [[X, 'const gridded = (a, b) => { const d = (b - a) / (Math.PI / 180); return (Math.sign(d) * Math.ceil(Math.abs(d) / PROBE_GRID_DEG - 1e-9) * PROBE_GRID_DEG * Math.PI) / 180; };', 'const gridded = (a, b) => b - a;']] },
+  { id: 'AD15 a new grid step searches from scratch, not from its neighbour', pattern: 'D642 3i', edits: [[X, 'const lo = Math.abs(dG) > Math.abs(one) + 1e-12 ? PROBE_MEMO.get(memoKey(0, dG - one, base, [-2])) : undefined, hi = PROBE_MEMO.get(memoKey(0, dG + one, base, [-2]));', 'const lo = undefined, hi = undefined;']] },
+  { id: 'AD16 the grid rounds the change down (a smaller change than asked is probed)', pattern: 'D642 3i', edits: [[X, 'Math.ceil(Math.abs(d) / PROBE_GRID_DEG - 1e-9)', 'Math.floor(Math.abs(d) / PROBE_GRID_DEG + 1e-9)']] },
+  // the librarian's ruling on B's §9: the probe's bar is the adapter's own 1.0
+  { id: 'AD17 the bar of the probe is set back to the 0.97 margin', pattern: 'D642 3k', edits: [[X, 'const PROBE_BAR = 1.0, PROBE_STEP_M = 5,', 'const PROBE_BAR = 0.97, PROBE_STEP_M = 5,']] },
+  // pane E's 72b9faf4 §2: the probe asks past the ceiling too
+  { id: 'AD18 a span at or past the closed-form ceiling is taken unprobed again', pattern: 'D642 3l', edits: [[X, "  if (ch === 'phi' && share > 0) return span >= own - 1e-9 && probePeak(0, gridded(a, b), base, span) <= PROBE_BAR;", "  if (span >= ceil - 1e-9) return true;\n  if (ch === 'phi' && share > 0) return span >= own - 1e-9 && probePeak(0, gridded(a, b), base, span) <= PROBE_BAR;"]] },
 ];
 const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js', 'core_width_at_start_f.test.js', 'core_changes.test.js', 'core_additive.test.js'];
 function tree() {
