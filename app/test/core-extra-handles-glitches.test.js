@@ -238,3 +238,25 @@ test('D641 R7 (E\'s item 3, the edges): with the left edge set on 1,000 m, one l
   assert.equal(p.panel.offersAt().filter((e) => e.field === 'edge').length, 0, 'no second offer for the left edge');
   p.panel.unmount();
 });
+
+// His words (2026-11-06): "the turn from needs to be placed on the actual purple line and not on the turn part for the
+// extra turn. i mean where you click to drag the length of the extra turn or where it kicks in u know". His testturn1: after a 1,000 m straight, a 1,000 m piece with a +90° corner and an
+// extra turn of -45° from 500. The extra turn's grab (its drag ALONG the road slides where the extra turn kicks in) stands on the purple from mark, not beside the turn handle at the front
+test('the extra turn\'s grab stands on its purple from mark, and a press there dragged along the road slides where the extra turn kicks in (the bank keeps its value)', async () => {
+  const M = require('../camera/math.js'), near = (a, b, tol, what) => assert.ok(Math.abs(a - b) <= tol, `${what}: ${a}, not ${b} (±${tol})`);
+  const p = await mount(); p.type('length m', 1000); p.type('turn °', 90);
+  assert.equal(p.make('turn', -45), 500, 'the extra turn kicks in halfway'); p.tick();
+  const bank0 = p.field('bank °').value, h0 = p.handle('extra:turnDeg:0', 1); assert.ok(h0, 'the extra turn handle is on screen');
+  const VP = M.viewProj(POSE(1000), 1200 / 800), scr = (q) => { const c = M.apply(VP, q); return { x: (c[0] / c[3] * 0.5 + 0.5) * 1200, y: (1 - (c[1] / c[3] * 0.5 + 0.5)) * 800 }; };
+  // the purple from mark: across the road at the from station (s0 1000 + 500), at the handle's own side of the road
+  const mark = scr([h0.pos[0], h0.pos[1], 1500]), to = scr([h0.pos[0], h0.pos[1], 1600]);
+  p.stage.fire('pointerdown', { clientX: mark.x, clientY: mark.y, pointerId: 1, button: 0 });
+  for (let i = 1; i <= 10; i++) p.stage.fire('pointermove', { clientX: mark.x + (to.x - mark.x) * i / 10, clientY: mark.y + (to.y - mark.y) * i / 10, pointerId: 1 });
+  p.stage.fire('pointerup', { clientX: to.x, clientY: to.y, pointerId: 1 }); p.tick();
+  const ch = p.changes().turnDeg || [], h1 = p.handle('extra:turnDeg:0', 1);
+  assert.ok(Math.abs(h0.pos[2] - 1500) < 1, `before the drag the extra turn's grab stands at its from mark (1500 m along), not at ${h0.pos[2].toFixed(1)} m`);
+  assert.equal(ch.length, 1, 'still one extra turn'); near(ch[0].from, 600, 10, 'the press on the mark, dragged 100 m along, slid where the extra turn kicks in');
+  assert.equal(ch[0].deg, -45, `its amount kept (${JSON.stringify(ch[0])})`); assert.equal(p.field('bank °').value, bank0, 'the bank beneath kept its value');
+  assert.ok(h1 && Math.abs(h1.pos[2] - (1000 + ch[0].from)) < 1, `after it, the grab is on the mark again (${h1 && h1.pos[2].toFixed(1)} m against ${1000 + ch[0].from})`);
+  p.panel.unmount();
+});

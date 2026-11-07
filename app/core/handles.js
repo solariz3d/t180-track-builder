@@ -176,9 +176,11 @@ function sampleNear(samples, s) {
  * width mark where it was). Each handle: { id: 'width:1', kind, side, pos: [x, y, z], axis: [x, y, z] (the unit vector a POSITIVE drag moves along) }.
  */
 /** L140 round 2: each extra kind steps back along the piece (CLEAR_STEP of it at a time, toward its start) until every one of its sides is more than CLEAR_PX on screen from
- *  every other handle; it keeps its own place when it already clears, and the place it began at when no step back clears. `place(h)` puts one handle on screen. */
+ *  every other handle; it keeps its own place when it already clears, and the place it began at when no step back clears. `place(h)` puts one handle on screen.
+ *  A kind in `model.pinned` (the extra turn on its from mark) never steps, and the kinds in `model.yields` (the bank and climb it lands on) step as the extras do. */
 function clearExtras(model, list, place) {
-  const extras = [...new Set(list.filter((h) => KINDS[h.kind] && KINDS[h.kind].extra).map((h) => h.kind))];
+  const pinned = new Set(model.pinned || []), yields = (model.yields || []).filter((k) => list.some((h) => h.kind === k));
+  const extras = [...new Set(list.filter((h) => KINDS[h.kind] && KINDS[h.kind].extra && !pinned.has(h.kind)).map((h) => h.kind))].concat(pinned.size ? yields : []);
   if (!extras.length) return list;
   let out = list;
   // gap(mine): the nearest any of this kind's sides comes to another handle on screen (Infinity: none to come near)

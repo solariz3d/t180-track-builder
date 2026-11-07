@@ -841,8 +841,13 @@ function mount(root, shell, mountOpts = {}) {
     const wt = fieldNum(width);   // the width mark sits at the TARGET width (the field), so it follows the drag from the near end
     // THE EXTRA HANDLES (L140): beside the field's own kinds, one per change each field already has and, where the piece has room for the next, one more (extraHandles below)
     const ex = extraHandles(), exOf = new Map(ex.map((x) => [x.id, x])), L = s1 - info.s0;
+    // (the user, 2026-11-06: "the turn from needs to be placed on the actual purple line and not on the turn part for the extra turn. i mean where you click to drag the length of
+    // the extra turn or where it kicks in"): the extra turn's handle stands ON its change's purple from mark (its from as a share of the piece), and is never stepped off it
+    // (handles.js clearExtras, model.pinned); the mid-piece handles it lands on (the bank and climb, at 0.5 where a new change starts) step back by clearExtras' own rule instead
+    const onMark = ex.filter((x) => x.field === 'turn' && Number.isFinite(Number(x.from)) && L > 0), pinAt = new Map(onMark.map((x) => [x.id, Math.min(1, Math.max(0, Number(x.from) / L))]));
     return { mode: 'extend', samples: info.samples, s0: info.s0, s1, half, halfTarget: wt === null ? undefined : wt / 2, kinds: kinds.concat(ex.map((x) => x.id)),
-      at: Object.fromEntries(ex.map((x) => [x.id, x.at])),   // L140 round 2: the handle stands where he drew it; its change's mark, where the change starts
+      at: Object.fromEntries(ex.map((x) => [x.id, pinAt.has(x.id) ? pinAt.get(x.id) : x.at])),   // the handle stands where he drew it; its change's mark, where the change starts
+      ...(pinAt.size ? { pinned: [...pinAt.keys()], yields: kinds.filter((k) => ['bank', 'climb', 'climbDeg'].includes(k)) } : {}),
       base: (k) => (exOf.has(k) ? exOf.get(k).value : fieldNum(HANDLE_FIELD[k]) ?? (corner(k) ? 0 : null)),
       ctx: (k) => (exOf.has(k) ? { half: halfAt(exOf.get(k).from), snapTo: exOf.get(k).snapTo } : { half: half(HD.KINDS[k].at) }),
       slideBase: (k) => (exOf.has(k) ? exOf.get(k).from : 0) };
