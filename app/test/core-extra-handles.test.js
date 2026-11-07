@@ -266,3 +266,51 @@ test('L151 W7: a typed extra bank row with no from, behind an extra turn at 100 
   const o = extendOptions({ length: '1000', turn: '-90', bank: '17.39', turnAs: 'corner', head: { kh: 0, kv: 0, phi: 0, w: 31, c: 15.5 }, changes: { turn: [{ then: '180', from: '100' }], bank: [{ then: '-34.78', from: '' }] } });
   assert.equal(o.changes.phi[0].from, floor);
 });
+
+// ── L152 THE ORDER FOLD-IN (C's order finding, exo_memory/handback/p-l151-order-C_2026-11-07.md §4: with way 1 alone, an extra bank made BEFORE the extra turn kept its 500 m
+// mark). When an extra turn is added and the extra bank's mark is still its DEFAULT (made where its handle stood, never slid, typed or dragged), the mark moves to the lead;
+// a slid or typed mark stays, in either order. Removing the extra turn gives the default mark back.
+const sMade = async (order, { slide = null, type = null } = {}) => {
+  const p = await mountPanel();
+  p.type('length m', 1000); p.type('turn °', -90); p.type('bank °', 17.39);
+  const bank = () => { const b = p.extras().find((e) => e.field === 'bank'); if (slide !== null) p.panel.secondSlide(b.id, slide); p.panel.secondExtra(b.id, -34.78); if (type !== null) { const f = p.byAria('extra bank from'); f.value = String(type); f.oninput(); } };
+  const turn = () => { const t = p.extras().find((e) => e.field === 'turn'); p.panel.secondExtra(t.id, 180); };
+  if (order === 'bank-then-turn') { bank(); turn(); } else { turn(); bank(); }
+  assert.equal(p.opts().changes.turnDeg[0].from, 500, 'the extra turn at its own default, 500 m');
+  return p;
+};
+for (const order of ['bank-then-turn', 'turn-then-bank']) {
+  test(`L152 F1 (${order}): the extra bank lands at the lead, 380 m (the extra turn's 500 − 0.12 × 1,000), and its handle stands there`, async () => {
+    const p = await sMade(order);
+    assert.equal(p.opts().changes.phi[0].from, 380, 'the change starts at the lead');
+    assert.equal(p.extras().find((e) => e.field === 'bank').from, 380, 'its handle stands there');
+    p.panel.unmount();
+  });
+  test(`L152 F2 (${order}): an extra bank slid to 450 m before it was made stays at 450 m`, async () => {
+    const p = await sMade(order, { slide: 450 });
+    assert.equal(p.opts().changes.phi[0].from, 450);
+    p.panel.unmount();
+  });
+  test(`L152 F3 (${order}): an extra bank whose from was typed (600 m) stays at 600 m`, async () => {
+    const p = await sMade(order, { type: 600 });
+    assert.equal(p.opts().changes.phi[0].from, 600);
+    p.panel.unmount();
+  });
+}
+test('L152 F4: an extra bank made before the extra turn and left at its default goes back to 500 m when the extra turn is removed', async () => {
+  const p = await sMade('bank-then-turn');
+  assert.equal(p.opts().changes.phi[0].from, 380);
+  p.byAria('remove extra turn').onclick();
+  assert.equal(p.opts().changes.turnDeg, undefined, 'no extra turn');
+  assert.equal(p.opts().changes.phi[0].from, 500, 'the default mark again, halfway');
+  p.panel.unmount();
+});
+test('L152 F5: a default extra bank\'s mark dragged along the road (to 700 m) is his: adding the extra turn after it does not move it', async () => {
+  const p = await mountPanel();
+  p.type('length m', 1000); p.type('turn °', -90); p.type('bank °', 17.39);
+  const b = p.extras().find((e) => e.field === 'bank'); p.panel.secondExtra(b.id, -34.78);
+  p.panel.secondSlide('extra:bank:0', 700);
+  const t = p.extras().find((e) => e.field === 'turn'); p.panel.secondExtra(t.id, 180);
+  assert.equal(p.opts().changes.phi[0].from, 700);
+  p.panel.unmount();
+});
