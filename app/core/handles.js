@@ -346,6 +346,14 @@ function brushWords(kind) {
   const adds = K.screen === 'x' ? '←' : '↑', takes = K.screen === 'x' ? '→' : '↓';
   return `${K.words[0]} ${adds}${K.words[1] ? ` / ${takes} ${K.words[1]}` : ''}${K.tag ? ` · ${K.tag}` : ''}`;
 }
+/** L154 (the user, 2026-11-07 11:37Z, on the extra bank's handle: "when you move the mouse right and left when clicking the point i marked, it drags the other point up and down the
+ * track, defintelly needs labels"): an EXTRA handle's hover names its drag along the road and where its change starts now, the arrows the way the road runs on screen there
+ * (`axis`, the handle's slideAxis): "drag ← → along the road: move where the extra bank starts · now 500.00 m". '' for a handle with no slide. */
+function slideWords(kind, from, axis) {
+  const K = KINDS[kind]; if (!K || !K.extra || !Number.isFinite(Number(from))) return '';
+  const arrows = !axis || Math.abs(axis.dx) >= Math.abs(axis.dy) ? '← →' : '↑ ↓';
+  return `drag ${arrows} along the road: move where the ${K.label} starts · now ${Number(from).toFixed(2)} m`;
+}
 /** The pointer cursor for a handle: the way a drag runs on screen. */
 function cursorFor(axis) { return !axis || axis.len < EDGE_ON_PX_PER_M ? 'move' : Math.abs(axis.dx) >= Math.abs(axis.dy) ? 'ew-resize' : 'ns-resize'; }
 
@@ -397,10 +405,14 @@ function mount(stage, win, host) {
       }
       ctx.fillStyle = K.colour; ctx.strokeStyle = T.css('--ink', '#0b0d11'); ctx.lineWidth = 2; ctx.beginPath(); ctx.rect(s.x - size, s.y - size / 2, size * 2, size); ctx.fill(); ctx.stroke();
       if (on) {
-        const text = drag ? format(h.kind, drag.value) : format(h.kind, model.base(h.kind)) + (K.zero ? ' · double-click: 0' : pre && pre.kind === h.kind && pre.to === model.base(h.kind) ? ` · double-click: ${Number(pre.from).toFixed(2)}` : ''); ctx.font = 'bold 12px system-ui, "Segoe UI", sans-serif';
-        const w = ctx.measureText(text).width + 12, bx = clamp(s.x + 14, 4, W - w - 4), by = clamp(s.y - 34, 4, H - 24);
-        ctx.fillStyle = T.alpha('--veil', 0.92, '#0b0d11'); ctx.fillRect(bx, by, w, 22); ctx.strokeStyle = K.colour; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, w, 22);
-        ctx.fillStyle = T.css('--on-ink', '#eef1f6'); ctx.textBaseline = 'middle'; ctx.fillText(text, bx + 6, by + 11);
+        // L154: an extra handle's hover adds the line naming its drag along the road (slideWords); while it slides, the box reads where its change starts
+        const from = K.extra && typeof model.slideBase === 'function' ? model.slideBase(h.kind) : null, sliding = !!drag && drag.mode === 'slide' && Number.isFinite(Number(from));
+        const text = sliding ? `${K.label} starts at ${Number(from).toFixed(2)} m` : drag ? format(h.kind, drag.value) : format(h.kind, model.base(h.kind)) + (K.zero ? ' · double-click: 0' : pre && pre.kind === h.kind && pre.to === model.base(h.kind) ? ` · double-click: ${Number(pre.from).toFixed(2)}` : ''); ctx.font = 'bold 12px system-ui, "Segoe UI", sans-serif';
+        const lines = [text].concat(K.extra && !drag ? [slideWords(h.kind, from, h.slideAxis)].filter(Boolean) : []), hgt = 4 + 18 * lines.length;
+        const w = Math.max(...lines.map((t) => ctx.measureText(t).width)) + 12, bx = clamp(s.x + 14, 4, W - w - 4), by = clamp(s.y - 12 - hgt, 4, H - hgt - 2);
+        if (lines.length > 1) tipBoxes.push({ x: bx, y: by, w, h: hgt });
+        ctx.fillStyle = T.alpha('--veil', 0.92, '#0b0d11'); ctx.fillRect(bx, by, w, hgt); ctx.strokeStyle = K.colour; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, w, hgt);
+        ctx.fillStyle = T.css('--on-ink', '#eef1f6'); ctx.textBaseline = 'middle'; lines.forEach((t, i) => ctx.fillText(t, bx + 6, by + 11 + 18 * i));
       }
     }
   };
@@ -439,7 +451,7 @@ function mount(stage, win, host) {
   // them are what they were, the canvas already shows it.
   let lastKey = null;
   const frameKey = (m, pose) => {
-    const W = stage.clientWidth, H = stage.clientHeight, k = [W, H, win.devicePixelRatio || 1, pose ? JSON.stringify(pose) : null, hover ? hover.id : null, drag ? `${drag.h.id}:${drag.value}` : null, pre ? `${pre.kind}:${pre.from}:${pre.to}` : null, T.css('--ink', '#0b0d11')];
+    const W = stage.clientWidth, H = stage.clientHeight, k = [W, H, win.devicePixelRatio || 1, pose ? JSON.stringify(pose) : null, hover ? hover.id : null, drag ? `${drag.h.id}:${drag.value}:${drag.mode}` : null, pre ? `${pre.kind}:${pre.from}:${pre.to}` : null, T.css('--ink', '#0b0d11')];
     if (m) { k.push(m.mode, m.samples, m.s0, m.s1, m.halfTarget, m.free, m.info, m.kinds.join(','), m.at ? JSON.stringify(m.at) : null); if (m.brush) { const B = m.brush; k.push(B.samples, B.s, B.half, B.lat, B.sides ? B.sides.join(',') : null, B.colour, B.open, B.text, B.note, B.words); } if (m.dots) { const Dt = m.dots; k.push(Dt.stations, Dt.run.s0, Dt.run.s1, Dt.radius, Dt.rows.map((r) => `${r.u}:${r.colour}:${r.inner}`).join(',')); } for (const kind of m.kinds) { const c = m.ctx(kind); k.push(m.base(kind), c && c.half, c && c.free); } }
     return k;
   };
@@ -600,11 +612,11 @@ function mount(stage, win, host) {
   stage.addEventListener('pointerdown', onDown, true); stage.addEventListener('wheel', onWheel, { capture: true, passive: false }); stage.addEventListener('dblclick', onDouble, true); stage.addEventListener('pointermove', onMove); stage.addEventListener('pointerup', onUp); stage.addEventListener('pointercancel', onUp);
   raf = win.requestAnimationFrame(frame);
   return {
-    handles: () => drawn.filter((h) => !h.dot), dots: () => drawn.filter((h) => h.dot), tips: () => tipBoxes.slice(), hovered: () => hover, dragging: () => !!drag,   // the dots are listed apart from the handles
+    handles: () => drawn.filter((h) => !h.dot), dots: () => drawn.filter((h) => h.dot), tips: () => tipBoxes.slice(), hovered: () => hover, dragging: () => !!drag, active: () => (drag ? drag.h : hover) || null,   // active (L154): the handle dragged now, else the one hovered (the panel lights its tick)   // the dots are listed apart from the handles
     /** the dot under (x, y), css px of the stage, or null: { s, u, side, axes } for the zone grab to open at. */
     dotAt: (x, y) => { const h = dotHit(drawn, x, y); return h ? { s: h.s, u: h.u, side: h.side, axes: h.axes, at: h.pos ? h.pos.slice() : null } : null; },   // `at`, the dot's world point, where the grab plane passes
     unmount() { win.cancelAnimationFrame(raf); if (frameReq) win.cancelAnimationFrame(frameReq); stage.removeEventListener('pointerdown', onDown, true); stage.removeEventListener('wheel', onWheel, true); stage.removeEventListener('dblclick', onDouble, true); if (doc.removeEventListener) doc.removeEventListener('keydown', onKeyDown); stage.removeEventListener('pointermove', onMove); stage.removeEventListener('pointerup', onUp); stage.removeEventListener('pointercancel', onUp); canvas.remove(); stage.style.cursor = ''; },
   };
 }
 
-module.exports = { extraId, SNAP_PX, LOCK_PX, HIT_PX, CLEAR_PX, clearExtras, placeDots, dotHit, DOT_MIN_M, DOT_MIN_PX, DOT_CAP, wrapTurn, KINDS, BRUSH_KINDS, BRUSH_CHANNELS, brushFormat, brushWords, ORDER, LANDING_ORDER, DEG, PRECISE_MOD, WARP_WAIT_MS, WARP_MISSES, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, scrubGain, SPEED_SLOW, SPEED_FAST, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };
+module.exports = { extraId, SNAP_PX, LOCK_PX, HIT_PX, CLEAR_PX, clearExtras, placeDots, dotHit, DOT_MIN_M, DOT_MIN_PX, DOT_CAP, wrapTurn, KINDS, BRUSH_KINDS, BRUSH_CHANNELS, brushFormat, brushWords, slideWords, ORDER, LANDING_ORDER, DEG, PRECISE_MOD, WARP_WAIT_MS, WARP_MISSES, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, scrubGain, SPEED_SLOW, SPEED_FAST, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };

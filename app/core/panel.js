@@ -1282,9 +1282,22 @@ function mount(root, shell, mountOpts = {}) {
   // end exactly when the segment before it does not hold, so the spans alone say it
   const secFits = (S) => (!S.arr.length || S.arr[0].from >= S.lo0 - 1e-6) && S.arr.every((c, k) => S.holds(k));
   const halfAt = (from) => { const L = Number(len.value), f = L > 0 ? Math.min(1, Math.max(0, from / L)) : 1, w1 = fieldNum(width), w0 = fieldNum({ value: shown.width }) ?? w1; return ((w0 ?? 0) + ((w1 ?? w0 ?? 0) - (w0 ?? 0)) * f) / 2; };
+  // L154 (the user, 2026-11-07 11:37Z: "when you move the mouse right and left when clicking the point i marked, it drags the other point up and down the track, defintelly needs
+  // labels"; option C of exo_memory/loop/plan_l154_extra_bank_mark_explains_itself_2026-11-07.md): a change of a field with an extra handle (EX_KIND: turn, climb, bank, width,
+  // cup; they share one slide path, handles.js slide -> secondSlide -> secondDrag) also carries where its stretch ENDS (`to`: the next change's mark, or the piece's end), the half
+  // width there, its LABEL (secondtick.js markText) and `lit`: its extra handle (only the first change has one) is hovered or dragged now (handles.js active)
   const marksAt = () => {
-    const o = opts(), out = [];
-    for (const f of SECOND_FIELDS) { const arr = o.changes && o.changes[secKey(f)]; if (arr) arr.forEach((ch, k) => out.push({ field: f, index: k, from: ch.from, half: halfAt(ch.from), ...ST.styleOf(f) })); }
+    const o = opts(), out = [], L = Number(len.value), act = handles && typeof handles.active === 'function' ? handles.active() : null, actK = act ? HD.KINDS[act.kind] : null;
+    const litF = actK && actK.extra ? exFieldOf(act.kind) : null;
+    for (const f of SECOND_FIELDS) {
+      const arr = o.changes && o.changes[secKey(f)]; if (!arr) continue;
+      arr.forEach((ch, k) => {
+        const base = { field: f, index: k, from: ch.from, half: halfAt(ch.from), ...ST.styleOf(f) };
+        if (!EX_KIND[f] || !(L > 0)) { out.push(base); return; }
+        const to = k + 1 < arr.length ? arr[k + 1].from : L;
+        out.push({ ...base, to, halfTo: halfAt(to), label: ST.markText(f, k, ch.from, to, L), lit: litF === f && actK.index === k });
+      });
+    }
     return out;
   };
   // WHERE AN EXTRA HANDLE STANDS before it is used (L140; the keeper's drawing, 11:43Z, exo_memory/briefs/t180_extra_handles_where_2026-11-05.png): on the road, on its own field's line,
