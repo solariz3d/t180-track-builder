@@ -1,4 +1,5 @@
 // preview-lod-frame.test.js: node --test app/test/preview-lod-frame.test.js   (under the heavy-run lock; about two minutes)
+// L156: row 3 (the preview draws at most 40% of the full mesh's triangles) moved VERBATIM to app/test/preview-lod-share.test.js, so test-fast runs it: it times nothing. This file keeps only timing rows.
 // The user, 2026-10-31, on long tracks: "in the previewer, the track doesnt have to be full fidelity topography until it is exported to ease strain on preview", and the
 // preview is to hold the display's refresh rate (one frame at 144 Hz is 6.9 ms). A 100 km track (200 pieces: 800 m straights and quarter turns of 400 m radius, bowl
 // font) is opened through File ▸ Open in the real page (app/index.html) in HEADLESS Chrome (never a window), served from this checkout, the native side stood in for by
@@ -111,15 +112,9 @@ test('row 2: above the road, 37% of the way along, it holds one frame at 144 Hz 
   assert.deepEqual(errors, []);
 });
 
-test('row 3: in the opening view the preview draws at most 40% of the triangles of the full mesh', { skip }, async (t) => {
-  await ev("document.dispatchEvent(new CustomEvent('t180-camera', { detail: { mode: 'overhead' } })); await new Promise((r) => setTimeout(r, 1500)); return true;");
-  const st = await ev("let s = null; document.dispatchEvent(new CustomEvent('t180-probe', { detail: { reply: (p) => { s = p.stats; } } })); return s;");
-  t.diagnostic(`${st.triangles} of ${fullTris} triangles drawn, ${st.coarse} of ${st.chunks} chunks thinned`);
-  assert.ok(fullTris > 1e6, `the full mesh has ${fullTris} triangles`);
-  assert.ok(Number.isFinite(st.triangles) && st.triangles <= 0.4 * fullTris, `${st.triangles} of ${fullTris} triangles drawn`);
-});
-
+// AMENDED (L156): row 3 moved to preview-lod-share.test.js, and it was what put the camera overhead before this row; so this row now sets it with row 3's own line.
 test('row 4: in the overhead view, with the pointer moving over the track, it holds one frame at 144 Hz (the hover pick included)', { skip }, async (t) => {
+  await ev("document.dispatchEvent(new CustomEvent('t180-camera', { detail: { mode: 'overhead' } })); await new Promise((r) => setTimeout(r, 1500)); return true;");
   const r = await ev("const c = document.querySelector('#stage canvas').getBoundingClientRect(); return { x: c.left + c.width / 2, y: c.top + c.height / 2 };");
   const mouse = (type, x, y, button, buttons) => send('Input.dispatchMouseEvent', { type, x, y, button, buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });
   const runs = [];

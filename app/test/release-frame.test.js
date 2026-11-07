@@ -1,4 +1,5 @@
 // release-frame.test.js: node --test app/test/release-frame.test.js   (under the heavy-run lock; about two minutes)
+// L156: row 3 (the exact ghost arrives and nothing blinks) moved VERBATIM to app/test/release-ghost-arrives.test.js, so test-fast runs it: it times nothing. This file keeps only timing rows.
 // The user: "even turning a 1000m straight isnt smooth and laggy as hell". Measured 2026-10-19: LETTING GO of a handle
 // built the exact ghost of the piece at once, inside the pointer-up: 60 ms at 1,000 m, 280 at 5,000, a second at 20 km, the page frozen meanwhile; and a number typed into a field of the
 // panel cost 13 ms. On the real page (app/index.html) in HEADLESS Chrome (never a window, muted), served from this checkout, frames uncapped as in drag-frame.test.js. The bar is the user's
@@ -135,16 +136,6 @@ test('row 2: past the ordinary range it does not stall: letting go of a 20,000 m
   t.diagnostic(`20,000 m: ${told(v.runs)} ms; ${r.stations} stations after 10 s`);
   assert.ok(v.ok, `letting go of a 20,000 m turn: ${told(v.runs)} ms, over 120 (before D407: 1,058 ms in the handler)`);
   assert.ok(r.stations >= 10000, `the exact ghost is whole: ${r.stations} stations (a station every 2 m is 10,001)`);
-});
-
-test('row 3: the exact ghost arrives and nothing blinks: after letting go of a 2,000 m turn the ghost is on show at every frame, and the exact one is in place within 1 s', { skip }, async (t) => {
-  const r = await release('aqua', 2000, 'turn', 1000), first = r.seen[0] ? r.seen[0][0] : 0;
-  assert.ok(liveOf(r), `the release asked for the exact ghost (the drag was live when let go): asked ${JSON.stringify(r.asked)}`);
-  assert.ok(r.seen.length && r.seen[0][1] > 0 && r.seen[0][1] < 600, `the drag's own ghost is on show when it is let go (${r.seen.length ? r.seen[0][1] : '-'} stations; the cheap one has about 100)`);
-  const blank = r.seen.filter(([, n]) => !(n > 0)).length, exactAt = r.seen.find(([, n]) => n >= 1000);
-  t.diagnostic(`${r.seen.length} frames watched; the exact ghost (${exactAt ? exactAt[1] : '-'} stations) after ${exactAt ? (exactAt[0] - first).toFixed(0) : '-'} ms; ${blank} without a ghost`);
-  assert.equal(blank, 0, 'a frame with no ghost on show');
-  assert.ok(exactAt, `the exact ghost (a station every 2 m, 1,001) was not in place within 1 s: ${r.stations} stations at the end`);
 });
 
 test('row 4: a number typed into the Turn field on a 12-piece track: each change costs at most 6.0 ms at the 95th percentile, its longest frame with the handler counted in the first', { skip }, async (t) => {

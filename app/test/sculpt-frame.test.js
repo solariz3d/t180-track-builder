@@ -1,4 +1,5 @@
 // sculpt-frame.test.js: node --test app/test/sculpt-frame.test.js   (rows 1-4 are TIMED: they run only while BOTH heavy-run slots are held, this run's and one more live holder; row 5 always runs)
+// L156: row 5 (the release is the exact road, bit for bit the shell's sculptOnce) moved VERBATIM to app/test/sculpt-release-exact.test.js, so test-fast runs it: it times nothing. This file keeps only timing rows.
 // The user: "You can sculpt the pieces you already put down, so its a mode you switch ... tweaking and bending the track like say stretching it or manipulating it in many ways"; the design's
 // rows 1-5: THE FRAME COST OF A SCULPT DRAG on a placed track, on the real page (app/index.html) in HEADLESS Chrome (never a window, muted:
 // soundrender.js passes --mute-audio), served from this checkout, frames uncapped as in drag-frame.test.js. The bar is the user's 165 Hz display, 6.0 ms (as ruled for that display).
@@ -226,24 +227,3 @@ for (const [row, track, tool, why] of [['4a', 'tube360', 'grab', 'Grab on the 36
     assert.ok(v.ok, `${why}: ${told(v)} (bars: p95 ${BUDGET}, longest ${STALL}, closed and a station every 2 m within ${WHOLE_MS} ms)`); assert.deepEqual(errors, []);
   });
 }
-
-// AMENDED (0.4.29): since the follow grab a Grab pressed ON the road is the follow (a set of channels solved from the pointer's ray: app/core/zonegrab.js follow), not
-// Grab's one height channel times PER_PX, so the shell's sculptOnce of the height channel is no longer what the page does, and this row went red at e2922e7. Its rule (the release
-// is the exact road, and bit for bit the shell's own stroke) is unchanged, so it drags Twist, which keeps its one channel wherever it is pressed (core-pieces-ui row 25b). The
-// follow's own release is pinned through the shell in zonegrab rows 14b-14n.
-test('row 5: the release is the exact road: a station every 2 m again, and the document is bit for bit the one the shell\'s sculptOnce gives for the same brush and delta', { skip }, async (t) => {
-  const r = await sculptDrag('aqua', 'open10', 'twist', 200, 5100, 60, 3000);
-  enough(r, 'twist');
-  assert.ok(r.road && r.road.whole, `after the release the road is whole: ${JSON.stringify(r.road)}`);
-  assert.ok(r.saved, 'the page autosaved the brushed track');
-  const pageText = JSON.parse(r.saved).doc;
-  const s = await createCoreShell({ autosaveMs: 0, storage: { openAutosave: async () => JSON.stringify({ schema: 1, kind: 'core', name: null, doc: await trackText('open10') }), saveAutosave: async () => {} } });
-  s.restore(); const T = TOOLS.twist;
-  s.sculptOnce({ mode: T.mode, channel: T.channel, s0: r.s0, r: r.r, delta: r.delta * PER_PX[T.ch] });
-  assert.equal(s.getState().message === null || s.getState().messageKind !== 'error', true, `the shell's own stroke ran: ${s.getState().message}`);
-  const want = D.serialize(s.getState().history.present);
-  t.diagnostic(`s0 ${r.s0.toFixed(2)} m, delta ${r.delta} px, the brushed text ${pageText.length} characters`);
-  assert.notEqual(pageText, await trackText('open10'), 'the drag changed the track');
-  assert.equal(pageText, want, 'the page\'s document after the release is not the shell\'s sculptOnce of the same brush');
-  assert.deepEqual(errors, []);
-});

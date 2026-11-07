@@ -112,7 +112,7 @@ file in both places.
 `bench.js` (a large track timed along the app's edit path), `soak.js` (thousands of seeded random edits, `runSoak`), `export_words.js`
 (a document file → a track folder in `out/`), `platform_test.js` and `build_platform_test.js` (a 500 m flat platform built as plain world data), `prove_render.js`
 (drives the real window and captures each camera), `lookmatch.js` (the look-match renders), `texture_tiles.js` (draws each look's
-texture tile), `test-fast.cjs` (the suite minus the mutation harnesses and the timing files: what CI runs on every push and what a change is handed back on; `--mutation` runs only the harnesses; `--timing` only the timing files, where the machine's profile allows; workers from the profile, `heavy` in `~/.consonance.json`, or `T180_TEST_CONCURRENCY`), `test-touched.cjs` (the test files that load what you changed, through require() and the page's loadCjs, each with its reason, for runs while you work; falls back to test-fast for a file the graph cannot read; blind to coupling through data and behaviour). Each script's header says how to run it.
+texture tile), `test-fast.cjs` (the suite minus the mutation harnesses and the timing files: what CI runs on every push and what a change is handed back on; `--mutation` runs only the harnesses; `--timing` only the timing files, where the machine's profile allows; workers from the profile, `heavy` in `~/.consonance.json`, or `T180_TEST_CONCURRENCY`), `test-touched.cjs` (the test files that load what you changed, through require(), relative or built with path.join/resolve, and the page's loadCjs, each with its reason, for runs while you work; falls back to test-fast for a file the graph cannot read; blind to coupling through data and behaviour). Each script's header says how to run it.
 
 ## `src-tauri/`
 
@@ -125,4 +125,6 @@ texture tile), `test-fast.cjs` (the suite minus the mutation harnesses and the t
 
 `test/` tests the core and the export, `app/test/` the app's modules, mostly headless against the real shell. Some app tests drive
 the real page in headless Chrome (`app/test/soundrender.js` `chromePath`, `launchChrome`); some are mutation harnesses
-(`*_mutation.test.js`) that change the code in a temporary copy and check that a named test notices. See `CLAUDE.md` for how to run them.
+(`*_mutation.test.js`) that change the code in a temporary copy and check that a named test notices. The five timing files (`scripts/test-fast.cjs` names them)
+hold only timing rows; the rows that time nothing were moved out of them into `sculpt-release-exact`, `drag-release-exact`, `release-ghost-arrives`,
+`preview-lod-share` and `core-extra-bank-laid` (L156), so the fast subset runs them. See `CLAUDE.md` for how to run them.

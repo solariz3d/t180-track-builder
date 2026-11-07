@@ -1,4 +1,5 @@
 // core-extra-bank-drag-cost.test.js: node --test app/test/core-extra-bank-drag-cost.test.js
+// L156: the two "laid by the core" rows (his p2's extra bank reaches −88.45° from 500; 3j, every from the panel keeps is laid) moved VERBATIM to app/test/core-extra-bank-laid.test.js, so test-fast runs it: it times nothing. This file keeps only timing rows.
 // D642 (pane C), the panel half of the drag-cost fix. E's review of d87ba99 (lighthouse exo_memory/handback/p-d642-b3-review-E_2026-11-05.md §2): dragging his EXTRA BANK back
 // toward level on a whole-piece bank cost the panel p95 106 ms a move, 17 × the same drag with no moving first ramp ("early"), because the panel asked the core's full shortest
 // (a search of 12-18 probe roads) on every move. His interim bar: that drag within 2 × the flat drag's p95. The drag is E's bench (dragbench-full.js): his p2's piece (1,000 m,
@@ -116,26 +117,4 @@ test('D642: dragging the extra bank on past what fits, into the hold, the first 
   t.diagnostic(`rolling (first drag, into the hold) p95 ${rolling.p95.toFixed(1)} ms a move, early p95 ${e.toFixed(1)} ms: ${(rolling.p95 / e).toFixed(2)} ×; rolling held at ${rolling.ended}°, early ended at ${early[0].ended}°`);
   assert.ok(rolling.ended > -360 && rolling.ended < -88.45, `the rolling drag went past −88.45 and is held short of where the pointer went (${rolling.ended}°)`);
   assert.ok(rolling.p95 <= 2 * e, `the rolling drag's p95 is ${rolling.p95.toFixed(1)} ms a move, the early drag's ${e.toFixed(1)} ms: ${(rolling.p95 / e).toFixed(2)} ×, over 2 ×`);
-});
-
-test('D642: his p2\'s extra bank still reaches −88.45° from 500 (the bank-back he asked for), laid by the core', { todo: HAS }, async () => {
-  const p = await his(false), x = p.panel.extraHandles().find((e) => e.field === 'bank' && e.unused); assert.ok(x, 'the unused extra bank');
-  p.panel.secondExtra(x.id, -88.45); p.tick();
-  assert.deepEqual(p.changes().phi.map((c) => ({ from: c.from, deg: +(c.target / DEG).toFixed(2) })), [{ from: 500, deg: -88.45 }], 'from 500, all the way to −88.45');
-  assert.equal(p.refusal(), null, 'the core lays it');
-  p.panel.unmount();
-});
-
-// D642 3j THROUGH THE PANEL (pane E's review a99775ef §1; the librarian's ruling on B's §9: a monotone shortest cannot work, the built roll spikes at single spans). His p2's
-// extra bank made at −88.45 from 500, then its MARK dragged (panel.secondDrag, the mark-drag path) to every from 420…540: wherever the panel keeps it, the core lays it. On
-// 31bbc64 15 of 121 kept positions are refused (441, 442, 445, 462, 482-485, 501, 503, 504, 521-523, 525): the clamp kept any span at or past the shortest, and some of those
-// fail on the built road; the piece vanished on screen a metre off 500
-test('D642 3j: his p2\'s extra bank mark, dragged across 420-540 through the panel, lays at every from the panel keeps', { todo: HAS }, async (t) => {
-  const p = await his(false), x = p.panel.extraHandles().find((e) => e.field === 'bank' && e.unused); assert.ok(x, 'the unused extra bank');
-  p.panel.secondExtra(x.id, -88.45); p.tick(); assert.equal(p.refusal(), null, 'made at −88.45 from 500 and laid');
-  const refused = [], kept = new Set();
-  for (let F = 420; F <= 540; F++) { p.panel.secondDrag({ field: 'bank', index: 0 }, F); p.tick(); const c = p.changes().phi; kept.add(c[0].from); if (p.refusal() !== null) refused.push(`${F}→${c[0].from}`); }
-  t.diagnostic(`kept ${kept.size} distinct froms; refused ${refused.length}`);
-  assert.deepEqual(refused, [], `asked → kept, refused by the core: ${refused.join(', ')}`);
-  p.panel.unmount();
 });

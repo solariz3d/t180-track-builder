@@ -15,7 +15,8 @@ Node's own test runner; nothing to install (`package.json` has no dependencies).
 Three tiers, by when you run them:
 
 - **While you work: `node scripts/test-touched.cjs`.** The test files that load what you changed since the merge base with
-  main, through require() and through the page (index.html's loadCjs), each printed with its reason (`--list` prints and runs
+  main, through require() (relative, or a path built with `path.join`/`path.resolve` from `__dirname`) and through the page
+  (index.html's loadCjs), each printed with its reason (`--list` prints and runs
   nothing; `--base <ref>`, or name files). A file it cannot read (a stylesheet, the Rust side) or that no test loads falls back
   to test-fast. It leaves out the mutation harnesses (`--mutation` adds the changed module's) and the frame-timing files.
   It **cannot see coupling through data and behaviour** (the panel asking for something other than what the core lays, a
@@ -27,7 +28,8 @@ Three tiers, by when you run them:
 - **Weekly, on CI: the mutation harnesses** (`*mutation.test.js`), tens of minutes. `npm test` is everything at once,
   `node --test --test-concurrency=4 "test/*.test.js" "app/test/*.test.js"`, harnesses and timing files included.
 - **The timing files: `node scripts/test-fast.cjs --timing`,** one at a time, alone, and only on a machine whose profile says
-  `timing: true` (the one the bars are set for). Anywhere else it prints the skip and runs nothing.
+  `timing: true` (the one the bars are set for). Anywhere else it prints the skip and runs nothing. Either way it names the
+  machine. The timing files hold only timing rows: a row that times nothing belongs in a normal file, so test-fast runs it.
 - **Each machine's profile** is the `heavy` object in its own `~/.consonance.json` (never synced), e.g.
   `"heavy": { "concurrency": 2, "timing": false }`. `concurrency` sets both scripts' `--test-concurrency`;
   `T180_TEST_CONCURRENCY` overrides it for one run, and with neither it is 4. No file or no `heavy` is the old behaviour;

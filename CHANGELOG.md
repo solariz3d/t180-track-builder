@@ -22,6 +22,11 @@ All notable changes to this project are recorded here. The format follows
 - **The fast subset no longer runs two timing files.** `core-extra-bank-drag-cost` and `preview-lod-frame` time drags
   and frames against the user's machine's bar, like the three frame pages already left out, so a busy or different machine
   turned them red for no fault in the code. They now run alone, with the others.
+- **The rows in the timing files that time nothing run with the rest again.** Five correctness rows lived in timing files (a
+  sculpt or a drag released is the exact road, the exact ghost arrives without a blink, the preview draws at most 40% of the
+  mesh, his p2's extra bank is laid by the core), so they ran only where timing runs, and a real red in one went unseen. They
+  moved, unchanged, into five normal test files. The touched-tests runner also follows a require of a path built with
+  `path.join` or `path.resolve` from the test's folder, which 36 test files use and which it could not read before.
 
 ## [0.4.39] - 2026-11-06
 

@@ -1,4 +1,5 @@
 // drag-frame.test.js: node --test app/test/drag-frame.test.js   (under the heavy-run lock; about two minutes)
+// L156: row 5 (the release is the exact road: a station every 2 m the moment it is let go) moved VERBATIM to app/test/drag-release-exact.test.js, so test-fast runs it: it times nothing. This file keeps only timing rows.
 // The user: "even turning a 1000m straight isnt smooth and laggy as hell", then: "I want it as optimized as we can get it. If anything I always want it as smooth as
 // the users refresh rate"): THE FRAME COST OF A HANDLE DRAG, on the real page (app/index.html) in HEADLESS Chrome (never a window), served from this checkout, in each of the
 // five looks. A real pointer press on the turn handle of the Extend ghost, then the pointer is moved back and forth for 3 s, every animation frame timed (Chrome run without
@@ -147,13 +148,6 @@ test('row 4: past the ordinary range the drag adapts and does not stall: a 20,00
   const v = await within('aqua', 20000, 'turn', 40, 20);
   t.diagnostic(`20,000 m: p95 ${v.runs.map((r) => r.p95.toFixed(0)).join(' / ')} ms, ${v.runs.map((r) => r.rate.toFixed(1)).join(' / ')} rebuilds a second`);
   assert.ok(v.ok, `a 20,000 m turn drag: p95 ${v.runs.map((r) => r.p95.toFixed(0)).join(' / ')} ms, ${v.runs.map((r) => r.rate.toFixed(1)).join(' / ')} rebuilds a second`);
-});
-
-test('row 5: the release is the exact road: a few hundred stations while the handle is held, a station every 2 m the moment it is let go', { skip }, async (t) => {
-  const r = await drag('aqua', 2000, 'turn');
-  t.diagnostic(`ghost stations during the drag ${r.duringStations}, after the release ${r.afterStations}`);
-  assert.ok(r.duringStations > 0 && r.duringStations < 600, `during the drag: ${r.duringStations} stations (a full ghost of 2,000 m has about 1,000)`);
-  assert.ok(r.afterStations > 900, `after the release: ${r.afterStations} stations (a station every 2 m is about 1,000 on a 2,000 m piece: the full ghost is back)`);
 });
 
 // The user: "as soon as I drag the straight more than 400m it lags very bad". With bank, cup and edge typed, the stretch costs what it cost in 0.4.19. Measured on 0.4.19,

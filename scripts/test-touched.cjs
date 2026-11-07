@@ -12,6 +12,10 @@
 // How a test is picked, for each changed file:
 //   - a changed test file runs itself;
 //   - a test runs when it requires the file, directly or through any chain of relative require()s (the reason names the chain);
+//   - a require of a BUILT path is followed too (L156: E's #59; 36 of 349 test files load something this way):
+//     require(path.join(B, 'a', 'b.js')) or path.resolve(…), where B is __dirname or a name the same file set to such a path,
+//     e.g. ADIR = process.env.APP_DIR || path.join(__dirname, '..') and SRC = path.join(ADIR, '..', 'src'), read at the
+//     default that an env override would replace;
 //   - a page test (one that opens app/index.html) runs when the page loads the file: index.html's loadCjs('…') entries and
 //     <script src>, then their require()s, the way app/lib/cjs.js fetches them;
 //   - a mutation harness is matched by the module paths it names in its source (they copy a module, they do not require it),
@@ -27,7 +31,10 @@
 // WHAT IT CANNOT SEE, so a green here is not a green for the base. The require graph sees only who loads whom. It does not
 // see coupling through data or behaviour: the panel asking for something other than what the core lays (D642 R2), geometry
 // the renderer reads, a saved track a test loads as a fixture, a file read with fs and evaluated, a string a test greps for in
-// another module's source, or a page that reaches a module some other way than loadCjs and require. A test that checks the
+// another module's source, or a page that reaches a module some other way than loadCjs and require. Nor a require of a path
+// built from anything but __dirname, a name set from it and string literals: a variable segment (require(path.join(R, p))), a
+// template with ${…}, a copy of the repository in a temp folder, or a path built inside code a test writes out for a child
+// process (export_seam_fins) is not guessed at. A test that checks the
 // code around yours through any of those is not picked. That is why the hand-back runs test-fast, the whole base, once.
 'use strict';
 const fs = require('fs'), path = require('path'), { spawnSync } = require('child_process');
@@ -56,11 +63,38 @@ function walk(root) {
   return out;
 }
 
-// a relative require from `from`, as the repo path it names (an existing file, X.js, X/index.js, or the bare name when absent)
-function resolve(root, from, spec) {
-  const p = path.posix.normalize(`${path.posix.dirname(from)}/${spec}`);
+// a repo path as a module: an existing file, X.js, X/index.js, or the bare name when absent
+function existing(root, p) {
   for (const c of [p, `${p}.js`, `${p}/index.js`]) { try { if (fs.statSync(path.join(root, c)).isFile()) return c; } catch { /* next */ } }
   return path.extname(p) ? p : `${p}.js`;
+}
+// a relative require from `from`, as the repo path it names
+const resolve = (root, from, spec) => existing(root, path.posix.normalize(`${path.posix.dirname(from)}/${spec}`));
+
+// BUILT PATHS (L156): NAME = [process.env.X || | process.env.X ? … :] path.join|resolve(args), and require(path.join|resolve(args))
+const BASE_DEF = /(?:^|[\s,;(])([A-Za-z_$][\w$]*)\s*=\s*(?:process\.env\.\w+\s*(?:\|\||\?\?)\s*|process\.env\.\w+\s*\?[^:;]*:\s*)?path\.(?:join|resolve)\(([^()]*)\)/g;
+const PATH_REQ = /require\(\s*path\.(?:join|resolve)\(([^()]*)\)\s*\)/g;
+// the repo path an argument list builds, from a known base and string literals only; null when any part is not one, or it leaves the repo
+function built(args, bases) {
+  const parts = args.split(',').map((a) => a.trim()).filter(Boolean);
+  if (!parts.length || !bases.has(parts[0])) return null;
+  const segs = [bases.get(parts[0])];
+  for (const a of parts.slice(1)) {
+    const m = /^'([^']*)'$/.exec(a) || /^"([^"]*)"$/.exec(a) || /^`([^`$]*)`$/.exec(a);
+    if (!m) return null;
+    segs.push(m[1]);
+  }
+  const p = path.posix.normalize(segs.filter((x) => x !== '').join('/'));
+  return p === '..' || p.startsWith('../') || path.posix.isAbsolute(p) ? null : p;
+}
+// the names a file sets to a built path, __dirname first; a name set from another is found on a later pass
+function bases(f, text) {
+  const out = new Map([['__dirname', path.posix.dirname(f)]]), defs = [...text.matchAll(BASE_DEF)];
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const m of defs) if (!out.has(m[1])) { const p = built(m[2], out); if (p !== null) { out.set(m[1], p); grew = true; } }
+  }
+  return out;
 }
 
 // who-loads-whom, reversed: loadedBy.get(x) = the files that load x, each with how
@@ -76,6 +110,10 @@ function graph(root) {
       continue;
     }
     for (const m of text.matchAll(REQ)) if (m[1].startsWith('.')) edge(resolve(root, f, m[1]), f, 'require');
+    if (text.includes('require(path.')) {
+      const b = bases(f, text);
+      for (const m of text.matchAll(PATH_REQ)) { const p = built(m[1], b); if (p !== null) edge(existing(root, p), f, 'require(path…)'); }
+    }
     if (IS_TEST(f) && text.includes('index.html')) edge(PAGE, f, 'opens');
   }
   return { loadedBy, sources };
@@ -188,4 +226,4 @@ function main(argv) {
 }
 
 if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { select, graph, changedFiles, main };
+module.exports = { select, graph, built, bases, changedFiles, main };

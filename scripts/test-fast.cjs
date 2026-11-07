@@ -65,10 +65,11 @@ function concurrency(env = process.env, prof = profile()) {
 const concurrencyFrom = (env, prof) => (env.T180_TEST_CONCURRENCY ? 'T180_TEST_CONCURRENCY' : prof.concurrency !== undefined ? `heavy.concurrency in ${prof.source}` : 'default');
 
 // whether the timing files run on this machine, and the line that says so
-function timingPlan(prof) {
-  if (prof.timing === true) return { run: true, line: `timing files: run here, one at a time (heavy.timing: true in ${prof.source})` };
+// L156 lift 3: the line names the machine (its host name), so a timing result in a log says which machine it was read on
+function timingPlan(prof, host = os.hostname()) {
+  if (prof.timing === true) return { run: true, line: `timing files: run here on ${host}, one at a time (heavy.timing: true in ${prof.source})` };
   const why = prof.timing === false ? `heavy.timing: false in ${prof.source}` : `heavy.timing is not set (${prof.source})`;
-  return { run: false, line: `timing files: skipped on this machine, ${why}; they run only where the timing bars are set` };
+  return { run: false, line: `timing files: skipped on this machine (${host}), ${why}; they run only where the timing bars are set` };
 }
 
 function files() {
@@ -89,6 +90,7 @@ function main(argv) {
     if (!t.run) return 0;
     const r = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...timing], { cwd: ROOT, stdio: 'inherit' });
     if (r.error) throw r.error;
+    console.log(`test-fast --timing: the timing group ran on ${os.hostname()}, exit ${r.status === null ? 'killed' : r.status}`);
     return r.status === null ? 1 : r.status;
   }
   const run = argv.includes('--mutation') ? mutation : fast;

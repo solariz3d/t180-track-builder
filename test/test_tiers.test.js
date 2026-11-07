@@ -118,3 +118,50 @@ test('T9 a changed test file picks itself; a file no test reaches falls back', (
   assert.equal(lone.run.length, 0);
   assert.deepEqual(lone.fallback.map((x) => x.file), ['scripts/bench.js']);
 });
+
+// L156: E's proof (lighthouse exo_memory/handback/p-l155-proof-E_2026-11-07.md) found two of thirteen past reds the tiers would miss. #40 was a correctness row
+// inside a timing file, so the rows that time nothing moved out of the five timing files into normal files (T13). #59 was a test that loads its module through
+// require(path.join(ADIR, …)), which the graph could not read; 36 of 349 test files load something that way (T14-T17).
+const MOVED = ['app/test/sculpt-release-exact.test.js', 'app/test/drag-release-exact.test.js', 'app/test/release-ghost-arrives.test.js', 'app/test/preview-lod-share.test.js', 'app/test/core-extra-bank-laid.test.js'];
+
+test('T13 test-fast runs the correctness rows moved out of the timing files; none of them is a timing file', () => {
+  const { files: all, FRAME_TIMING, MUTATION } = fast();
+  const list = all().filter((f) => !MUTATION.test(f) && !FRAME_TIMING.has(f));
+  for (const f of MOVED) assert.ok(list.includes(f), f);
+});
+
+test('T14 E\'s #59: a changed app/testhook/probe.js picks render_proof, which loads it through require(path.join(ADIR, …))', () => {
+  const r = touched().select(['app/testhook/probe.js'], { root: ROOT, prof: { source: 'none' } });
+  const hit = r.run.find((x) => x.file === 'app/test/render_proof.test.js');
+  assert.ok(hit, 'render_proof is picked');
+  assert.match(hit.reasons.join(' '), /app\/testhook\/probe\.js/);
+});
+
+test('T15 a base built on another base (SRC = path.join(ADIR, \'..\', \'src\')) is followed: a changed src/export/fromwords.js picks aclook', () => {
+  const r = touched().select(['src/export/fromwords.js'], { root: ROOT, prof: { source: 'none' } });
+  assert.ok(r.run.some((x) => x.file === 'app/test/aclook.test.js'));
+});
+
+test('T16 a base with an env override (T = process.env.T180_TREE ? path.resolve(…) : path.join(__dirname, \'..\')) is followed at its default', () => {
+  const r = touched().select(['src/core/turnby.js'], { root: ROOT, prof: { source: 'none' } });
+  assert.ok(r.run.some((x) => x.file === 'test/core_joint_c2.test.js'));
+});
+
+test('T17 require(path.resolve(__dirname, …)) is followed; a path built from a variable is not guessed at', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-graph-'));
+  try {
+    for (const [f, text] of [
+      ['src/m.js', 'module.exports = 1;\n'],
+      ['test/x.test.js', "const path = require('path');\nconst M = require(path.resolve(__dirname, '../src/m.js'));\n"],
+      ['test/y.test.js', "const path = require('path');\nconst name = '../src/m.js';\nconst M = require(path.join(__dirname, name));\n"],
+    ]) { fs.mkdirSync(path.dirname(path.join(dir, f)), { recursive: true }); fs.writeFileSync(path.join(dir, f), text); }
+    const r = touched().select(['src/m.js'], { root: dir, prof: { source: 'none' } });
+    assert.deepEqual(r.run.map((x) => x.file), ['test/x.test.js']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('T18 L156 lift 3: the timing line names the machine that ran (or skipped) the timing group', () => {
+  const { timingPlan } = fast();
+  assert.match(timingPlan({ timing: true, source: 'x' }, 'PLAYBOX').line, /PLAYBOX/);
+  assert.match(timingPlan({ timing: false, source: 'x' }, 'LAPBOX').line, /LAPBOX/);
+});
