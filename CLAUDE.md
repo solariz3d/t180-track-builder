@@ -12,15 +12,27 @@ under node; there is no bundler and no npm dependency.
 
 Node's own test runner; nothing to install (`package.json` has no dependencies).
 
-- Everything: `npm test`, which runs `node --test --test-concurrency=4 "test/*.test.js" "app/test/*.test.js"`.
-  The full run includes the mutation harnesses (`*_mutation.test.js`) and takes tens of minutes.
-- The fast subset, what CI runs on every push: `node scripts/test-fast.cjs` (everything but the mutation harnesses and the
-  three frame-timing pages; `--list` prints it, `--mutation` runs only the harnesses). The workflow is `.github/workflows/ci.yml`.
+Three tiers, by when you run them:
+
+- **While you work: `node scripts/test-touched.cjs`.** The test files that load what you changed since the merge base with
+  main, through require() and through the page (index.html's loadCjs), each printed with its reason (`--list` prints and runs
+  nothing; `--base <ref>`, or name files). A file it cannot read (a stylesheet, the Rust side) or that no test loads falls back
+  to test-fast. It leaves out the mutation harnesses (`--mutation` adds the changed module's) and the frame-timing files.
+  It **cannot see coupling through data and behaviour** (the panel asking for something other than what the core lays, a
+  fixture, a source grep): a green here is not a green for the base.
+- **Before you hand back, push or land: `node scripts/test-fast.cjs`, the whole base, once.** What CI runs on every push:
+  everything but the mutation harnesses and the five timing files (drag-frame, release-frame, sculpt-frame,
+  core-extra-bank-drag-cost, preview-lod-frame); `--list` prints it, `--mutation` runs only the harnesses. The workflow is
+  `.github/workflows/ci.yml`.
+- **Weekly, on CI: the mutation harnesses** (`*mutation.test.js`), tens of minutes. `npm test` is everything at once,
+  `node --test --test-concurrency=4 "test/*.test.js" "app/test/*.test.js"`, harnesses and timing files included.
+- Workers: `T180_TEST_CONCURRENCY` (a whole number, default 4) sets both scripts' `--test-concurrency`. A machine that runs
+  hot sets it lower for itself (the laptop uses 2); `npm test` keeps its fixed 4.
 - One file: `node --test test/<name>.test.js` or `node --test app/test/<name>.test.js`.
 - Some app tests drive the real page in headless Chrome. They use `CHROME_PATH`, else Chrome's usual Windows install, and
   skip with the reason when there is no Chrome.
-- The frame-timing tests measure milliseconds per frame and are sensitive to other work on the machine; run them alone
-  when one is red before reading anything into it.
+- The timing tests measure milliseconds per frame or per drag against a bar set for the user's machine, and are sensitive
+  to other work on it; run them alone, never beside another suite, and before reading anything into a red.
 
 ## Build
 

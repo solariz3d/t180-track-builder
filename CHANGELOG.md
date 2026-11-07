@@ -3,6 +3,24 @@
 All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **The tests come in tiers, so a laptop is not running everything every time.** The whole suite on every run, often two at once, with
+  headless Chrome and the mutation harnesses, pushed the laptop past 100 °C. Now
+  `node scripts/test-touched.cjs` runs only the test files that load what you changed (through require() and through the
+  page's loadCjs), each with its reason, while you work; it falls back to the fast subset for a file it cannot read, and it
+  says what it cannot see (coupling through data and behaviour). The fast subset, `node scripts/test-fast.cjs`, is still the
+  whole base once before a change is handed back. `T180_TEST_CONCURRENCY` sets both scripts' workers (default 4, as
+  before), so a machine that runs hot can use fewer.
+
+### Fixed
+
+- **The fast subset no longer runs two timing files.** `core-extra-bank-drag-cost` and `preview-lod-frame` time drags
+  and frames against the user's machine's bar, like the three frame pages already left out, so a busy or different machine
+  turned them red for no fault in the code. They now run alone, with the others.
+
 ## [0.4.39] - 2026-11-06
 
 ### Added
