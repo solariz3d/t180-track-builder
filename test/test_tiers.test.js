@@ -5,6 +5,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
 const ROOT = path.join(__dirname, '..');
 const fast = () => require('../scripts/test-fast.cjs');
@@ -18,11 +20,52 @@ test('T1 test-fast leaves out the two timing files L152 found it running (core-e
   assert.ok(!list.includes('app/test/preview-lod-frame.test.js'));
 });
 
+// T2 amended (L155 amendment, 12:17Z): the worker count now also reads the machine's profile, so the row passes an empty
+// profile explicitly; without it the row would read this machine's ~/.consonance.json.
 test('T2 T180_TEST_CONCURRENCY: unset is 4, a whole number is read, anything else is refused by name', () => {
   const { concurrency } = fast();
-  assert.equal(concurrency({}), 4);
-  assert.equal(concurrency({ T180_TEST_CONCURRENCY: '2' }), 2);
-  for (const bad of ['0', '-1', '2.5', 'two', ' ']) assert.throws(() => concurrency({ T180_TEST_CONCURRENCY: bad }), /T180_TEST_CONCURRENCY/);
+  const none = { source: 'none' };
+  assert.equal(concurrency({}, none), 4);
+  assert.equal(concurrency({ T180_TEST_CONCURRENCY: '2' }, none), 2);
+  for (const bad of ['0', '-1', '2.5', 'two', ' ']) assert.throws(() => concurrency({ T180_TEST_CONCURRENCY: bad }, none), /T180_TEST_CONCURRENCY/);
+});
+
+// a throwaway ~/.consonance.json for the profile rows, removed after
+function withConfig(text, fn) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-tiers-'));
+  const file = path.join(dir, '.consonance.json');
+  try { if (text !== null) fs.writeFileSync(file, text); return fn(file); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+test('T10 the machine profile (heavy.concurrency in ~/.consonance.json) sets the workers; the env var overrides it; absent is 4', () => {
+  const { profile, concurrency } = fast();
+  withConfig(JSON.stringify({ data_dir: 'x', heavy: { concurrency: 2, timing: false } }), (file) => {
+    const p = profile(file);
+    assert.equal(concurrency({}, p), 2);
+    assert.equal(concurrency({ T180_TEST_CONCURRENCY: '3' }, p), 3);
+  });
+  withConfig(null, (file) => assert.equal(concurrency({}, profile(file)), 4));
+  withConfig(JSON.stringify({ data_dir: 'x' }), (file) => assert.equal(concurrency({}, profile(file)), 4));
+});
+
+test('T11 a profile the runners cannot read is refused by name, never defaulted', () => {
+  const { profile } = fast();
+  withConfig('{ not json', (file) => assert.throws(() => profile(file), /consonance.json/));
+  withConfig(JSON.stringify({ heavy: { concurrency: 'two' } }), (file) => assert.throws(() => profile(file), /heavy.concurrency/));
+  withConfig(JSON.stringify({ heavy: { timing: 'yes' } }), (file) => assert.throws(() => profile(file), /heavy.timing/));
+});
+
+test('T12 the timing files run only where the profile says timing: true; otherwise the skip is printed with the reason', () => {
+  const { profile, timingPlan } = fast();
+  withConfig(JSON.stringify({ heavy: { timing: true } }), (file) => assert.equal(timingPlan(profile(file)).run, true));
+  for (const text of [JSON.stringify({ heavy: { timing: false } }), JSON.stringify({}), null]) {
+    withConfig(text, (file) => {
+      const t = timingPlan(profile(file));
+      assert.equal(t.run, false, String(text));
+      assert.match(t.line, /skipped/);
+      assert.match(t.line, /timing/);
+    });
+  }
 });
 
 test('T3 a changed panel.js picks the panel tests, with the require chain as the reason, and not an unrelated core test', () => {

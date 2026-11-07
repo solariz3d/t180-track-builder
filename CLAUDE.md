@@ -26,13 +26,17 @@ Three tiers, by when you run them:
   `.github/workflows/ci.yml`.
 - **Weekly, on CI: the mutation harnesses** (`*mutation.test.js`), tens of minutes. `npm test` is everything at once,
   `node --test --test-concurrency=4 "test/*.test.js" "app/test/*.test.js"`, harnesses and timing files included.
-- Workers: `T180_TEST_CONCURRENCY` (a whole number, default 4) sets both scripts' `--test-concurrency`. A machine that runs
-  hot sets it lower for itself (the laptop uses 2); `npm test` keeps its fixed 4.
+- **The timing files: `node scripts/test-fast.cjs --timing`,** one at a time, alone, and only on a machine whose profile says
+  `timing: true` (the one the bars are set for). Anywhere else it prints the skip and runs nothing.
+- **Each machine's profile** is the `heavy` object in its own `~/.consonance.json` (never synced), e.g.
+  `"heavy": { "concurrency": 2, "timing": false }`. `concurrency` sets both scripts' `--test-concurrency`;
+  `T180_TEST_CONCURRENCY` overrides it for one run, and with neither it is 4. No file or no `heavy` is the old behaviour;
+  a value the scripts cannot read is refused by name. Each number is measured on its machine. `npm test` keeps its fixed 4.
 - One file: `node --test test/<name>.test.js` or `node --test app/test/<name>.test.js`.
 - Some app tests drive the real page in headless Chrome. They use `CHROME_PATH`, else Chrome's usual Windows install, and
   skip with the reason when there is no Chrome.
 - The timing tests measure milliseconds per frame or per drag against a bar set for the user's machine, and are sensitive
-  to other work on it; run them alone, never beside another suite, and before reading anything into a red.
+  to other work on it; a red on another machine, or beside another suite, says nothing about the code.
 
 ## Build
 

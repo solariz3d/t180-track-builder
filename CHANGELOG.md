@@ -12,8 +12,10 @@ All notable changes to this project are recorded here. The format follows
   `node scripts/test-touched.cjs` runs only the test files that load what you changed (through require() and through the
   page's loadCjs), each with its reason, while you work; it falls back to the fast subset for a file it cannot read, and it
   says what it cannot see (coupling through data and behaviour). The fast subset, `node scripts/test-fast.cjs`, is still the
-  whole base once before a change is handed back. `T180_TEST_CONCURRENCY` sets both scripts' workers (default 4, as
-  before), so a machine that runs hot can use fewer.
+  whole base once before a change is handed back. Each machine says how hard to run in its own `~/.consonance.json`
+  (`"heavy": { "concurrency": 2, "timing": false }`), since a laptop and a desktop are not the same: `concurrency` sets both
+  scripts' workers (`T180_TEST_CONCURRENCY` overrides it; 4 with neither, as before), and the timing files run, with
+  `node scripts/test-fast.cjs --timing`, only where `timing` is true. Anywhere else the skip is printed.
 
 ### Fixed
 

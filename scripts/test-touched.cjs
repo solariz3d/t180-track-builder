@@ -16,10 +16,13 @@
 //     <script src>, then their require()s, the way app/lib/cjs.js fetches them;
 //   - a mutation harness is matched by the module paths it names in its source (they copy a module, they do not require it),
 //     and runs only with --mutation: the harnesses run weekly on CI (L153);
-//   - the frame-timing files (test-fast's list) are named and never run here: they run alone, under the heavy-run lock;
+//   - the timing files (test-fast's list) are named and never run here: they run alone (test-fast --timing), and only on a
+//     machine whose profile says heavy.timing: true;
 //   - documentation (.md, .txt) picks nothing.
 // A changed file that is not code the graph can read (a stylesheet, an image, the Rust side, package.json…), or code that no
 // test reaches, FALLS BACK: the whole of test-fast runs instead, and the reason is printed.
+// Workers: the machine's profile, as test-fast reads it (heavy.concurrency in ~/.consonance.json; T180_TEST_CONCURRENCY
+// overrides it; 4 with neither).
 //
 // WHAT IT CANNOT SEE, so a green here is not a green for the base. The require graph sees only who loads whom. It does not
 // see coupling through data or behaviour: the panel asking for something other than what the core lays (D642 R2), geometry
@@ -116,7 +119,8 @@ function harnessesNaming(g, file) {
  *   fallback: [{ file, why }]      changed files the graph cannot answer for; any one means run test-fast instead
  *   skipped:  [{ file, why }]      changed files that pick nothing (documentation)
  */
-function select(changed, { root = ROOT, mutation = false } = {}) {
+function select(changed, { root = ROOT, mutation = false, prof = fast.profile() } = {}) {
+  const timing = fast.timingPlan(prof);
   const g = graph(root);
   const picks = new Map(), fallback = [], skipped = [];
   const pick = (t, why) => { if (!picks.has(t)) picks.set(t, []); if (!picks.get(t).includes(why)) picks.get(t).push(why); };
@@ -132,7 +136,7 @@ function select(changed, { root = ROOT, mutation = false } = {}) {
   const run = [], left = [];
   for (const file of [...picks.keys()].sort()) {
     const reasons = picks.get(file);
-    if (fast.FRAME_TIMING.has(file)) left.push({ file, why: 'frame-timing: run alone under the heavy-run lock, never here' });
+    if (fast.FRAME_TIMING.has(file)) left.push({ file, why: timing.run ? 'timing file: never here; run alone with test-fast --timing' : `timing file: never here, and ${timing.line.replace(/^timing files: /, '')}` });
     else if (fast.MUTATION.test(file) && !mutation) left.push({ file, why: 'mutation harness: weekly on CI, or --mutation' });
     else run.push({ file, reasons });
   }
@@ -162,7 +166,8 @@ function main(argv) {
     else opt.files.push(a);
   }
   const changed = opt.files.length ? opt.files : changedFiles(ROOT, opt.base);
-  const r = select(changed, { root: ROOT, mutation: opt.mutation });
+  const prof = fast.profile();
+  const r = select(changed, { root: ROOT, mutation: opt.mutation, prof });
   console.log(`test-touched: ${changed.length} changed file(s)${opt.files.length ? ' (named)' : ` (since ${opt.base || 'the merge base with main'})`}`);
   for (const x of r.skipped) console.log(`  skip ${x.file}: ${x.why}`);
   for (const x of r.run) console.log(`  run  ${x.file}: ${x.reasons.join('; ')}`);
@@ -175,8 +180,8 @@ function main(argv) {
   }
   if (opt.list) return 0;
   if (!r.run.length) { console.log('test-touched: nothing to run'); return 0; }
-  const n = fast.concurrency();
-  console.log(`test-touched: ${r.run.length} test file(s), --test-concurrency=${n}`);
+  const n = fast.concurrency(process.env, prof);
+  console.log(`test-touched: ${r.run.length} test file(s), --test-concurrency=${n} (${fast.concurrencyFrom(process.env, prof)})`);
   const p = spawnSync(process.execPath, ['--test', `--test-concurrency=${n}`, ...r.run.map((x) => x.file)], { cwd: ROOT, stdio: 'inherit' });
   if (p.error) throw p.error;
   return p.status === null ? 1 : p.status;

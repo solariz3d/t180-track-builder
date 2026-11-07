@@ -112,7 +112,7 @@ file in both places.
 `bench.js` (a large track timed along the app's edit path), `soak.js` (thousands of seeded random edits, `runSoak`), `export_words.js`
 (a document file → a track folder in `out/`), `platform_test.js` and `build_platform_test.js` (a 500 m flat platform built as plain world data), `prove_render.js`
 (drives the real window and captures each camera), `lookmatch.js` (the look-match renders), `texture_tiles.js` (draws each look's
-texture tile), `test-fast.cjs` (the suite minus the mutation harnesses and the timing files: what CI runs on every push and what a change is handed back on; `--mutation` runs only the harnesses; `T180_TEST_CONCURRENCY` sets the workers), `test-touched.cjs` (the test files that load what you changed, through require() and the page's loadCjs, each with its reason, for runs while you work; falls back to test-fast for a file the graph cannot read; blind to coupling through data and behaviour). Each script's header says how to run it.
+texture tile), `test-fast.cjs` (the suite minus the mutation harnesses and the timing files: what CI runs on every push and what a change is handed back on; `--mutation` runs only the harnesses; `--timing` only the timing files, where the machine's profile allows; workers from the profile, `heavy` in `~/.consonance.json`, or `T180_TEST_CONCURRENCY`), `test-touched.cjs` (the test files that load what you changed, through require() and the page's loadCjs, each with its reason, for runs while you work; falls back to test-fast for a file the graph cannot read; blind to coupling through data and behaviour). Each script's header says how to run it.
 
 ## `src-tauri/`
 
