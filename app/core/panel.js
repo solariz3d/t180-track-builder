@@ -59,6 +59,14 @@ const AT_START_M = 20;
 // "the panel still loads through the webview's loader"). A shell without them: a first change lays at 85% and no offer is drawn.
 // SECOND_FROM_SHARE: the L135 default for a first change with no from (the user's drawing marks about the last 15% of a 750 m turn)
 const SECOND_FROM_SHARE = 0.85;
+// L151 WAY 1 (the keeper, 2026-11-07 08:34Z, on the L150 page: "from the artifact we could try 1 first"): when the piece ALREADY has an extra turn, the extra bank's default
+// from is that turn's mark less EXTRA_BANK_LEAD_SHARE of the piece (380 m on his 1,000 m S, marks at 500). L150 measured the bank's half-way point 125 m behind the extra
+// turn's curvature with both marks at 500 (exo_memory/handback/p-l150-B_2026-11-07.md); 0.12 is C's way 1 as the librarian narrowed it (plan_l151_way1_extra_bank_earlier_2026-11-07.md).
+// Clamped as every default mark is (no earlier than the first ramp's end, no later than the room it needs), and never before the change floor: a lead behind an extra turn slid
+// near the start would otherwise fall at or before 0, a mark the core refuses. A mark he slid or typed wins. No extra turn: nothing moves. Only an extra CORNER (the turn read
+// as degrees, the panel's default and his S) leads the bank; a turn read as a rate keeps the marks it had (L139 S5)
+// DEFAULT_FLOOR_M: extend.js SECOND_FLOOR_M, used only when no shell passes the floor in (extendOptions called on its own)
+const EXTRA_BANK_LEAD_SHARE = 0.12, DEFAULT_FLOOR_M = 20;
 const SECOND_FIELDS = Object.freeze(['turn', 'climb', 'bank', 'width', 'cup', 'edge', 'edgeR']);
 const SECOND_NAME = Object.freeze({ turn: 'turn', climb: 'climb', bank: 'bank', width: 'width', cup: 'cup', edge: 'left edge', edgeR: 'right edge' });
 /** the core's shortest segment for a change of channel ch from a to b, in metres, by the function given (the shell's secondMinM); 0 where none is given or it says nothing */
@@ -80,7 +88,7 @@ const up2 = (x) => Math.ceil(x * 100 - 1e-9) / 100, down2 = (x) => Math.floor(x 
  * the piece (his S: +90 then −90 turns at the middle), but within the same bounds as above: after the previous mark plus that corner's minimum, and before the room the
  * later corners need. Without cornerMin (a shell before R1) the split is plain. The FIRST corner's own shortest (the head's shortestTurnBy) is not passed to the panel.
  */
-function changeFroms(length, list, first, ch, { lo = 0, corner = false, minM = null, cornerMin = null } = {}) {
+function changeFroms(length, list, first, ch, { lo = 0, corner = false, minM = null, cornerMin = null, firstAt = null, floor = 0 } = {}) {
   const L = Number(length), n = list.length, out = [];
   if (!(L > 0)) return list.map((x) => x.from);
   const cm = (deg) => { if (typeof cornerMin !== 'function' || !Number.isFinite(deg)) return 0; const v = cornerMin(deg); return Number.isFinite(v) && v > 0 ? v : 0; };
@@ -90,7 +98,8 @@ function changeFroms(length, list, first, ch, { lo = 0, corner = false, minM = n
   for (let k = 0; k < n; k++) {
     if (list[k].from !== null) { out.push(list[k].from); continue; }
     let rest = 0; for (let j = k; j < n; j++) rest += m(j);
-    const lower = up2(k === 0 ? lo : out[k - 1] + m(k - 1)), pref = corner ? near2((L * (k + 1)) / (n + 1)) : k === 0 ? near2(L * SECOND_FROM_SHARE) : lower;
+    // L151: firstAt, the first change's preferred mark when one is given (the extra bank behind an extra turn), with the floor under it
+    const lower = up2(k === 0 ? (Number.isFinite(firstAt) ? Math.max(lo, floor) : lo) : out[k - 1] + m(k - 1)), pref = corner ? near2((L * (k + 1)) / (n + 1)) : k === 0 ? near2(Number.isFinite(firstAt) ? firstAt : L * SECOND_FROM_SHARE) : lower;
     out.push(Math.max(lower, Math.min(pref, down2(L - rest))));
   }
   return out;
@@ -173,7 +182,7 @@ const EARLY_TITLE = Object.freeze({
 // change, ending at a climb rate of 0 (a steady pitch, level only when it ends at pitch 0).
 // `head`: the head's end values as coreshell headState gives them (phi in rad; c, e, er in degrees), which a cross-section ramp at the start is measured from;
 // without one (an empty track, or a caller that has none) the change is measured from 0
-function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null, changes = null, secondMinM = null, cornerChangeMinM = null }) {
+function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null, changes = null, secondMinM = null, cornerChangeMinM = null, secondFloorM = null }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
   const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup), corner = turnAs === 'corner' && t !== null && t !== 0, climbCorner = turnAs === 'corner' && c !== null && c !== 0;
   if (turnAs !== 'rate' && turnAs !== 'corner') throw new Error(`BAD_TURN_AS: the turn is read as 'rate' or 'corner', got ${turnAs}`);
@@ -231,7 +240,9 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
     const per = f === 'turn' || f === 'climb' ? DEG / 100 : f === 'bank' ? DEG : 1, list = items.map((x) => ({ from: x.from, target: x.then * per }));
     // D642 (pane B's additive model): a first ramp over the whole piece (no early transition) is still moving under the change, so the change's shortest is asked with it
     const base = baseOfRamp(transition[ch], targets[ch], rampStart(empty ? targets : null, head, ch), out.length), minM = base && typeof secondMinM === 'function' ? (c, a, b) => secondMinM(c, a, b, base) : secondMinM;
-    const froms = changeFroms(out.length, list, targets[ch], ch, { lo: transition[ch] || 0, minM });
+    // L151 way 1: the extra bank behind the piece's first extra turn (its list was laid above: turn comes before bank in SECOND_FIELDS)
+    const turnList = f === 'bank' ? later.turnDeg : null, lead = turnList && turnList.length ? { firstAt: turnList[0].from - EXTRA_BANK_LEAD_SHARE * out.length, floor: Number.isFinite(secondFloorM) && secondFloorM > 0 ? secondFloorM : DEFAULT_FLOOR_M } : {};
+    const froms = changeFroms(out.length, list, targets[ch], ch, { lo: transition[ch] || 0, minM, ...lead });
     later[ch] = list.map((x, k) => ({ from: froms[k], target: x.target }));
   }
   if (Object.keys(later).length) out.changes = later;
@@ -460,7 +471,7 @@ function mount(root, shell, mountOpts = {}) {
   const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), edgeR: rightTarget(), start: asTyped('start'), tube: asTyped('tube'),
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
     empty: !shell.getState().history.present.pieces.length, turnAs: turnAs.value, head: shell.headState(),
-    changes: secChanges(), secondMinM: shellMinM, cornerChangeMinM: shellCornerMin });
+    changes: secChanges(), secondMinM: shellMinM, cornerChangeMinM: shellCornerMin, secondFloorM: secondFloor() });
   // (the user, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
   // document it made; when Undo steps from that document back to the one it was made from, the fields are put back (the length, every field as typed or left as
   // shown, the at-start ticks), so Extend again rebuilds the same piece. Redo, a brush and open show the head, as before
@@ -1302,7 +1313,9 @@ function mount(root, shell, mountOpts = {}) {
       if (Number.isFinite(EXTRA_AT[f]) ? !(R >= need - 1e-9) : !(R >= 2 * floor - 1e-9)) continue;
       // L140 round 2 (the user, brief :29: the second turn "should ease half way through"; at 0.89 it ran only over his red marks): a change made from an extra handle starts HALFWAY
       // along the piece (EXTRA_FROM_SHARE), kept inside the room it has; slid, where it was slid. A field with no extra handle (the edges): the room's middle, as L139
-      const drawn = Number.isFinite(EXTRA_AT[f]) ? Math.min(L - need, Math.max(end, EXTRA_FROM_SHARE * L)) : end + R / 2;
+      // L151 way 1: the first extra bank on a piece that already has an extra turn stands EXTRA_BANK_LEAD_SHARE of the piece before that turn's mark, no earlier than the floor
+      const turnArr = f === 'bank' && !arr.length && o.changes && o.changes.turnDeg ? o.changes.turnDeg : [];
+      const drawn = turnArr.length ? Math.min(L - need, Math.max(end, floor, turnArr[0].from - EXTRA_BANK_LEAD_SHARE * L)) : Number.isFinite(EXTRA_AT[f]) ? Math.min(L - need, Math.max(end, EXTRA_FROM_SHARE * L)) : end + R / 2;
       const from = Number.isFinite(secPending[f]) && secPending[f] > end ? secPending[f] : near2(drawn), st = ST.styleOf(f), last = arr.length ? arr[arr.length - 1] : null;
       const base = corner ? 0 : f === 'bank' ? Number(last ? last.target / DEG : bankTarget()) : last ? (f === 'turn' || f === 'climb' ? last.target * 100 / DEG : last.target) : Number(f === 'edgeR' ? rightTarget() : asTyped(f));
       out.push({ field: f, index: arr.length, from, half: halfAt(from), offer: true, base, ...st, kind: corner ? key : st.kind });
