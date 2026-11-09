@@ -19,8 +19,11 @@
 // A TURN READ AS A CORNER (the user, 2026-10-28, on CRAZY TEST's end: "currently it does nothing if there is a turn value added"): with opts.turnDeg the
 // piece is Turn by's (src/core/turnby.js extendCorner: its symmetric ease, the exact heading change, ending straight) instead of Extend's, and then its climb
 // is corrected as above. The two are independent: the heading is ∫kh and the pitch ∫kv on the same 2 m segments (adapter.js toSegments), the correction
-// changes only kv, so the piece turns exactly turnDeg AND ends level (and, for To floor, at height 0). A climb read as a corner (climbDeg) is refused by name:
-// the climb is what is solved here, so it would be lost (the shell refuses it first, with its own message: app/core/coreshell.js noCorner).
+// changes only kv, so the piece turns exactly turnDeg AND ends level (and, for To floor, at height 0). A climb read as a corner (climbDeg) is DROPPED (the user,
+// 2026-11-09: "when you press level with turns added it breaks"): the fields carry the last piece's climb on, so refusing it made Level fail on any track that had
+// climbed, and the climb is what is solved here, so nothing typed is lost.
+//   levelEnd(doc, i)           LEVEL THE END of piece i, already placed (the user, 2026-11-09: "the level feature should work at the end of any piece to flatten it
+//                              to level"): only its climb is re-solved, the rest of it kept exactly, and the pieces after it follow (see the function).
 'use strict';
 const D = require('./document.js');
 const { extend } = require('./extend.js');
@@ -94,8 +97,8 @@ const crestMargin = (rows) => Math.min(...rows.kv.map((k, j) => G * Math.cos(row
  *  corner's piece (Turn by's ease, turning exactly turnDeg and ending straight). */
 function basePiece(doc, opts) {
   if (doc.closed) throw new D.CoreError('CLOSED', 'the loop is closed: there is no open end to level');
-  if (opts && 'climbDeg' in opts) throw new D.CoreError('CLIMB_AS_CORNER', `Level and To floor solve the climb themselves: a climb of ${opts.climbDeg}° read as a corner cannot be placed with them`);
-  const targets = { ...(opts.targets || {}), kv: 0 }, o = { ...opts, targets };
+  const { climbDeg, ...given } = opts;   // a climb read as a corner is dropped: the climb is what Level and To floor solve (the fields carry the last piece's climb on)
+  const targets = { ...(given.targets || {}), kv: 0 }, o = { ...given, targets };
   if (o.transition && typeof o.transition === 'object') { const { kv, ...rest } = o.transition; o.transition = Object.keys(rest).length ? rest : undefined; if (o.transition === undefined) delete o.transition; }
   return 'turnDeg' in o ? extendCorner(doc, o) : extend(doc, o);
 }
@@ -150,4 +153,40 @@ function extendToFloor(doc, opts) {
   throw Object.assign(new D.CoreError('FLOOR_TOO_SHORT', need === null ? `a ${opts.length} m piece ${why}, and no piece up to ${MAX_SEARCH_M} m reaches the floor from here` : `a ${opts.length} m piece ${why}: it needs at least ${need} m to reach the floor (height 0, level) from here`), { needM: need });
 }
 
-module.exports = { extendLevel, extendToFloor, shortestToFloor, headOf, V_OPEN };
+/**
+ * LEVEL THE END of piece i, already placed: only its climb control points are re-solved (the least-norm step above) so it ends at pitch 0 with climb rate 0 and
+ * slope 0. Its turn, bank, width, cup, knots and length are kept exactly, the joint's first two control points stay (it still continues C1 from the piece
+ * before it), and the pitch is read from that piece's end in its own frame (flipOf: past the top of a loop more climb pitches the road down). The pieces after
+ * it follow: when the next is road its first two climb control points carry the new end on (value 0, slope 0, the way Extend makes a joint) and nothing else
+ * of it changes, so it keeps its shape and moves along with the rest. Refused by name: a piece not in the track (BAD_RANGE), a flight (LEVEL_NOT_ROAD), a
+ * closed loop (CLOSED), a piece with no free climb control point (LEVEL_TOO_SHORT); and the document's own check has the last word.
+ */
+function levelEnd(doc, i) {
+  if (doc.closed) throw new D.CoreError('CLOSED', 'the loop is closed: levelling a piece would open its seam');
+  const n = doc.pieces.length;
+  if (!Number.isInteger(i) || i < 0 || i >= n) throw new D.CoreError('BAD_RANGE', `piece ${i}: the track has pieces 0 to ${n - 1}`);
+  const P = doc.pieces[i];
+  if (P.type !== 'road') throw new D.CoreError('LEVEL_NOT_ROAD', `piece ${i + 1} is a flight: only a road piece has a climb to level`);
+  const before = { ...doc, pieces: doc.pieces.slice(0, i) }, head = headOf(before), sgn = flipOf(before) ? -1 : 1;
+  const st = stationsOf(P), m = P.channels.kv.length;
+  let c = Float64Array.from(P.channels.kv); c[m - 1] = 0; c[m - 2] = 0;   // it ends straight: rate 0 and slope 0
+  let rows = pitchRows(P, st, c, head.p, sgn);
+  for (let it = 0; it < MAX_ITER; it++) {
+    const pEnd = rows.p[rows.p.length - 1];
+    if (Math.abs(pEnd) <= PITCH_TOL && it > 0) break;
+    const dl = step([rows.w], [pEnd], m);
+    c = Float64Array.from(c, (x, k) => q(x + dl[k], D.DEC.kv));   // quantised as stored: what is placed is what is measured
+    rows = pitchRows(P, st, c, head.p, sgn);
+  }
+  const pieces = doc.pieces.slice();
+  pieces[i] = { ...P, channels: { ...P.channels, kv: Array.from(c) } };
+  const N = pieces[i + 1];
+  if (N && N.type === 'road') {
+    const e = D.endState({ ...doc, pieces: pieces.slice(0, i + 1) }).kv, h1 = N.knots.length ? N.knots[0] : N.length, kv = N.channels.kv.slice();
+    kv[0] = q(e.v, D.DEC.kv); kv[1] = q(e.v + (e.m * h1) / 3, D.DEC.kv);
+    pieces[i + 1] = { ...N, channels: { ...N.channels, kv } };
+  }
+  return freeze(D.checkDoc({ ...doc, pieces }));
+}
+
+module.exports = { extendLevel, extendToFloor, shortestToFloor, levelEnd, headOf, V_OPEN };

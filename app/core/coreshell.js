@@ -363,8 +363,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   // the Jump button's document: the current piece placed as Extend would place it (extendOpts, or null: take off from the track's end as it is), a free flight to the default landing, a 60 m straight
   // the turn field read as a corner (extendOpts.turnDeg) is placed by Extend alone (TB.extendCorner). Jump, Level and To floor solve or place the piece
   // their own way and would drop it, so they refuse it by name, and the turn typed is never silently lost
-  // Level and To floor place a corner turn exactly (src/core/level.js builds on Turn by's piece and solves only the climb), so they pass `turnOk` and
-  // refuse only a climb corner, the climb being what they solve; Jump still refuses both
+  // Level and To floor place a corner turn exactly (src/core/level.js builds on Turn by's piece and solves only the climb) and drop a
+  // climb corner (the fields carry the last piece's climb on, and the climb is what they solve), so they do not call this; Jump still refuses both
   const noCorner = (o, what, turnOk = false) => {
     if (o && ((!turnOk && 'turnDeg' in o) || 'climbDeg' in o)) {
       const which = [!turnOk && 'turnDeg' in o ? `turn ${o.turnDeg}°` : null, 'climbDeg' in o ? `climb ${o.climbDeg}°` : null].filter(Boolean).join(' and ');
@@ -714,9 +714,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
      *  read as a corner) makes the piece turn exactly that many degrees and end straight (src/core/turnby.js extendCorner). */
     extend: (opts) => commit('extend', () => TB.extendCorner(doc(), opts), { lastEdited: [doc().pieces.length] }),
     /** LEVEL: extend with the fields' piece, its climb solved so it ends straight and level (pitch 0); src/core/level.js. One undo step, like extend. */
-    extendLevel: (opts) => commit('level', () => { noCorner(opts, 'Level', true); return LV.extendLevel(doc(), opts); }, { lastEdited: [doc().pieces.length] }),
+    extendLevel: (opts) => commit('level', () => LV.extendLevel(doc(), opts), { lastEdited: [doc().pieces.length] }),
     /** TO FLOOR: …and on the floor (height 0). Too short a piece is refused by name with the length that works (FLOOR_TOO_SHORT), as the message. */
-    extendToFloor: (opts) => commit('toFloor', () => { noCorner(opts, 'To floor', true); return LV.extendToFloor(doc(), opts); }, { lastEdited: [doc().pieces.length] }),
+    extendToFloor: (opts) => commit('toFloor', () => LV.extendToFloor(doc(), opts), { lastEdited: [doc().pieces.length] }),
     /** TURN BY: extend with the fields' piece, its turn solved so it turns EXACTLY `deg` degrees (+ = left) and ends straight (turn rate 0); src/core/turnby.js.
      *  One undo step, like extend; too short a piece is refused by name with the length that works (TURN_TOO_SHORT), as the message. */
     extendTurnBy: (opts, deg) => commit('turnBy', () => TB.extendTurnBy(doc(), opts, (Number(deg) * Math.PI) / 180), { lastEdited: [doc().pieces.length] }),

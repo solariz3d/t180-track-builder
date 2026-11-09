@@ -13,7 +13,9 @@
 //   6  Level with turnDeg 90 turns exactly 90.00° (the readout's turn, to its 0.01°, and equal to Extend's corner alone, whose turn control points it keeps),
 //      ends level (pitch within level.js's PITCH_TOL on the adapter's path) and at the bank and cup typed
 //   7  To floor the same, and at height 0 (≤ 1 cm)
-//   8  the shell: Level and To floor place a turn corner; a climb corner is still refused by name, and the message names the climb
+//   8  the shell: Level and To floor place a turn corner; a climb corner is DROPPED (the same piece as with none), in the shell and in the core
+//      (amended 2026-11-09: it was refused by name, and the fields carry the last piece's climb on, so Level refused on any track that had climbed;
+//      the user: "when you press level with turns added it breaks". The climb is what Level and To floor solve, so nothing typed is lost)
 //   9  a turn read as a RATE is placed as before: the piece's turn control points are Extend's own
 //  10  To floor's search with a corner, from a head already on the floor and level, tries lengths too short for the corner: they are too short, not an error,
 //      and the length it names is the corner's own shortest (3 m), which then works
@@ -107,19 +109,22 @@ test('row 7: To floor with a corner turn of 90° from a head pitched −14.63° 
   assert.ok(Math.abs(end.phi.v - -85 * DEG) <= 1e-6 && Math.abs(end.c.v - 20) <= 1e-6, `bank ${end.phi.v / DEG}°, cup ${end.c.v}°`);
 });
 
-test('row 8: the shell places a corner turn with Level and To floor; a climb corner is still refused by name and placed nothing', async () => {
+test('row 8: the shell places a corner turn with Level and To floor; a climb corner is dropped, the same piece as with none', async () => {
   const { createCoreShell } = require('../app/core/coreshell.js');
   for (const fn of ['extendLevel', 'extendToFloor']) {
+    const len = fn === 'extendLevel' ? 200 : L.shortestToFloor(DOWN, HIS);
     const s = await createCoreShell({ brushFn: null }); s.adopt(DOWN);
-    s[fn]({ ...HIS, length: fn === 'extendLevel' ? 200 : L.shortestToFloor(DOWN, HIS), climbDeg: 5 });
-    assert.equal(s.getState().history.present.pieces.length, 1, `${fn}: a climb corner placed nothing`);
-    assert.match(s.getState().message || '', /place the climb 5° with Extend first/, `${fn} names the climb: ${s.getState().message}`);
-    s[fn]({ ...HIS, length: fn === 'extendLevel' ? 200 : L.shortestToFloor(DOWN, HIS) });
+    s[fn]({ ...HIS, length: len, climbDeg: 5 });
     assert.equal(s.getState().message, null, `${fn}: no refusal`); assert.equal(s.getState().history.present.pieces.length, 2, `${fn} placed the corner`);
     assert.ok(Math.abs(turnOf(s.getState().history.present) - 90) <= 0.01);
+    const t = await createCoreShell({ brushFn: null }); t.adopt(DOWN);
+    t[fn]({ ...HIS, length: len });
+    assert.deepEqual(s.getState().history.present, t.getState().history.present, `${fn}: the same piece as with no climb corner`);
   }
-  // and the core refuses it too, by name, should a climb corner reach it some other way: the climb is what Level and To floor solve, so it would be lost
-  for (const f of [L.extendLevel, L.extendToFloor]) assert.throws(() => f(DOWN, { ...HIS, climbDeg: 5 }), { code: 'CLIMB_AS_CORNER', message: /climb of 5°/ });
+  // and the core drops it too: the climb is what Level and To floor solve
+  for (const [f, len] of [[L.extendLevel, 200], [L.extendToFloor, L.shortestToFloor(DOWN, HIS)]]) {
+    assert.deepEqual(f(DOWN, { ...HIS, length: len, climbDeg: 5 }), f(DOWN, { ...HIS, length: len }), `${f.name}: the climb corner is dropped`);
+  }
 });
 
 test('row 9: a turn read as a rate is placed as before: Level keeps Extend\'s own turn control points and ends level', () => {

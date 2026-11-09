@@ -3,6 +3,16 @@
 All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **The end of a piece already placed can be levelled.** The core can now flatten the end of any road piece to level (pitch 0, climbing no more), changing only that piece's climb: its turn, bank, width and length stay exactly as they were, it still joins the piece before it smoothly, and the pieces after it follow. It works past the top of a loop too. A piece too short to reshape is refused by name. The button for it comes next, once where it sits is chosen.
+
+### Fixed
+
+- **Level and To floor no longer refuse when the climb field holds a climb.** With "turn & climb as" set to corner, the fields carry the last piece's climb on to the next, so after any climbing piece Level refused ("place the climb with Extend first"). The climb is what Level and To floor work out themselves, so a climb in the field is now simply not used, and the turn is still placed exactly.
+
 ## [0.4.39] - 2026-11-06
 
 ### Added

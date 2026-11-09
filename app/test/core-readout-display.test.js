@@ -943,7 +943,7 @@ test('D331 B: by default the turn field is a corner: it shows nothing at the hea
   P.panel.unmount();
 });
 // AMENDED: the rule changed by name: Level and To floor place a turn read as a corner exactly (src/core/level.js, test/core_level.test.js rows 6-8), so
-// only Jump still refuses it; Level's refusal of a climb corner is the climb row's below
+// only Jump still refuses it; Level drops a climb corner (the climb row's below, amended 2026-11-09)
 test('D331 B: "turn as" rate is the old field (°/100 m, the head\'s rate shown); switching back puts the field back; Jump refuses a corner by name and places nothing', async () => {
   const P = await mountPanel(undefined, {}, { turnAsRate: false });
   const turnAs = P.root.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as'), button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t);
@@ -979,7 +979,11 @@ test('D331 climb: by default the climb field is a corner: blank at the head, a t
   const turnAs = P.root.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as'); turnAs.value = 'rate'; turnAs.onchange();
   assert.ok(P.label('climb °/100m'), 'on rate the field says a rate'); assert.equal(P.field('climb °/100m').value, '0', 'and shows the head\'s climb rate');
   turnAs.value = 'corner'; turnAs.onchange(); P.type('climb °', 5); const n = P.shell.getState().history.present.pieces.length;
-  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Level').onclick();   // Level solves the climb itself: a climb corner is refused by name, not dropped
-  assert.equal(P.shell.getState().history.present.pieces.length, n, 'Level placed nothing'); assert.match(P.shell.getState().message || '', /place the climb 5° with Extend first/);
+  // AMENDED 2026-11-09: Level solves the climb itself, so a climb corner is now DROPPED, not refused (the fields carry the last piece's climb on, and the
+  // refusal made Level fail on any track that had climbed: "when you press level with turns added it breaks"); it places its piece and ends level
+  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Level').onclick();
+  assert.equal(P.shell.getState().message, null, 'no refusal'); assert.equal(P.shell.getState().history.present.pieces.length, n + 1, 'Level placed its piece');
+  const lv = P.shell.getState().history.present, S = require('../../src/core/adapter.js').toPath(lv).path.samples, T = S[S.length - 1].T;
+  assert.ok(Math.abs(Math.atan2(T[1], Math.hypot(T[0], T[2]))) <= 1e-6, 'and it ends level');
   P.panel.unmount();
 });
