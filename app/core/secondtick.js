@@ -14,6 +14,12 @@
 //   stationAt(ghost, from)                  -> sample | null                           the ghost's station nearest s0 + from (null off the piece or on a jump's ghost)
 //   markStroke(ghost, mark, pose, W, H)     -> { field, index, s, strokes: [{ a, b }] } | null   pure: the mark's strokes in css px
 //   tickAt(ghost, at)                       -> { s, a, b } | null                      (L135) the station and the points ±at.half across it
+//   markText(field, index, from, to, L)     -> 'Extra bank · 500.00 m → end · rolls over 500.00 m · drag to start earlier or later' | ''
+//   stretchStrip(ghost, mark)               -> [{ s, a, b }] | null                     the road across, from the mark's from to its to (half → halfTo)
+// (the user, 2026-11-07 11:37Z: "when you move the mouse right and left when clicking the point i marked, it drags the other point up and down the track,
+// defintelly needs labels"): a mark whose item carries a label (the panel's
+// marksAt gives one to every extra change, the fields with an extra handle) is drawn with the stretch it changes tinted in its colour, small arrows along the road on the tick,
+// and its label beside it. item.lit (its extra handle hovered or dragged) draws all three brighter, so the handle and the tick it moves are seen as one.
 //   mount(stage, win, itemsNow, hooks)      -> { drawNow(), marks(), offers(), unmount() }
 //       itemsNow() -> { marks: [...], offers: [...] }; hooks: onMarkDrag(mark, from), onOfferDrag(offer, value), onDragStart(item), onDragEnd(item, moved)
 'use strict';
@@ -70,6 +76,26 @@ function tickAt(ghost, at) {
   const h = at.half > 0 ? at.half : 4;
   return { s: m.s, a: across(m, -h), b: across(m, h) };
 }
+// The words of a field's extra change: its name, and the verb for what it does over its stretch
+const MARK_WORDS = Object.freeze({ bank: ['bank', 'rolls'], turn: ['turn', 'turns'], climb: ['climb', 'climbs'], width: ['width', 'changes'], cup: ['cup', 'changes'] });
+const f2 = (x) => Number(x).toFixed(2);   // two decimals (2026-10-15: every number reads to 0.00)
+function markText(field, index, from, to, L) {
+  const w = MARK_WORDS[field]; if (!w || !Number.isFinite(from) || !Number.isFinite(to) || !(to >= from)) return '';
+  const end = Number.isFinite(L) && Math.abs(to - L) < 0.005 ? 'end' : `${f2(to)} m`;
+  return `Extra ${w[0]}${index ? ` ${index + 1}` : ''} · ${f2(from)} m → ${end} · ${w[1]} over ${f2(to - from)} m · drag to start earlier or later`;
+}
+/** the road across at each ghost station from s0 + mark.from to s0 + mark.to, its half width eased linearly from mark.half to mark.halfTo (the panel's halfAt is linear too) */
+function stretchStrip(ghost, mark) {
+  if (!mark || !Number.isFinite(mark.from) || !Number.isFinite(mark.to) || !(mark.to > mark.from)) return null;
+  const a0 = stationAt(ghost, mark.from), a1 = stationAt(ghost, mark.to); if (!a0 || !a1) return null;
+  const h0 = mark.half > 0 ? mark.half : 4, h1 = mark.halfTo > 0 ? mark.halfTo : h0, out = [];
+  for (const m of ghost.samples) {
+    if (m.s < a0.s - 1e-9 || m.s > a1.s + 1e-9) continue;
+    const t = a1.s > a0.s ? (m.s - a0.s) / (a1.s - a0.s) : 0, h = h0 + (h1 - h0) * t;
+    out.push({ s: m.s, a: across(m, -h), b: across(m, h) });
+  }
+  return out.length >= 2 ? out : null;
+}
 const segDist = (p, a, b) => { const vx = b.x - a.x, vy = b.y - a.y, l2 = vx * vx + vy * vy, t = l2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / l2)) : 0; return Math.hypot(p.x - a.x - vx * t, p.y - a.y - vy * t); };
 
 function mount(stage, win, itemsNow, hooks = {}) {
@@ -93,13 +119,50 @@ function mount(stage, win, itemsNow, hooks = {}) {
       const dpr = win.devicePixelRatio || 1, key = `${W}x${H}@${dpr}`;
       if (key !== sized) { canvas.width = Math.max(1, Math.round(W * dpr)); canvas.height = Math.max(1, Math.round(H * dpr)); sized = key; }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H); ctx.lineCap = 'round';
+      for (const d of drawnMarks) if (d.item.label) drawStretch(ctx, d, last);
       for (const d of drawnMarks) for (const [w, colour] of [[6, T.css('--ink', '#0b0d11')], [3, d.item.colour]]) { ctx.lineWidth = w; ctx.strokeStyle = colour; for (const st of d.strokes) { ctx.beginPath(); ctx.moveTo(st.a.x, st.a.y); ctx.lineTo(st.b.x, st.b.y); ctx.stroke(); } }
+      for (const d of drawnMarks) if (d.item.label) drawExplained(ctx, d, last, W, H);
       // an offer: a faint ring in the field's colour, the same size as a handle's mark (it is a handle not yet used)
       ctx.globalAlpha = 0.45;
       for (const d of drawnOffers) { ctx.lineWidth = 2.5; ctx.strokeStyle = d.item.colour; ctx.beginPath(); ctx.arc(d.at.x, d.at.y, 7, 0, Math.PI * 2); ctx.stroke(); }
       ctx.globalAlpha = 1;
     }
     return { marks: drawnMarks, offers: drawnOffers };
+  };
+  // The stretch a labelled mark changes, tinted in its colour (brighter while lit): one quad a station step, skipped where a corner is behind the camera
+  const drawStretch = (ctx, d, at) => {
+    const strip = stretchStrip(at.ghost, d.item); if (!strip) return;
+    const scr = toScreenOf(at.pose, at.W, at.H), P = strip.map((q) => [scr(q.a), scr(q.b)]);
+    ctx.save(); ctx.globalAlpha = d.item.lit ? 0.38 : 0.16; ctx.fillStyle = d.item.colour; ctx.beginPath();
+    for (let i = 1; i < P.length; i++) { const [a0, b0] = P[i - 1], [a1, b1] = P[i]; if (!a0 || !b0 || !a1 || !b1) continue; ctx.moveTo(a0.x, a0.y); ctx.lineTo(a1.x, a1.y); ctx.lineTo(b1.x, b1.y); ctx.lineTo(b0.x, b0.y); ctx.closePath(); }
+    ctx.fill();
+    if (d.item.lit) { ctx.globalAlpha = 0.9; ctx.lineWidth = 2; ctx.strokeStyle = d.item.colour; for (const k of [0, 1]) { ctx.beginPath(); let on = false; for (const pr of P) { const q = pr[k]; if (!q) { on = false; continue; } if (on) ctx.lineTo(q.x, q.y); else { ctx.moveTo(q.x, q.y); on = true; } } ctx.stroke(); } }
+    ctx.restore();
+  };
+  // On the tick, small arrows along the road both ways (it is dragged along the road), and its label beside it, in the handles' tip style
+  const drawExplained = (ctx, d, at, W, H) => {
+    const m = stationAt(at.ghost, d.item.from); if (!m || !m.T) return;
+    const scr = toScreenOf(at.pose, W, H), c = scr(m.pos), ahead = scr([m.pos[0] + m.T[0], m.pos[1] + m.T[1], m.pos[2] + m.T[2]]); if (!c) return;
+    let ux = 1, uy = 0; if (ahead) { const l = Math.hypot(ahead.x - c.x, ahead.y - c.y); if (l > 1e-6) { ux = (ahead.x - c.x) / l; uy = (ahead.y - c.y) / l; } }
+    const ink = T.css('--ink', '#0b0d11'), reach = d.item.lit ? 26 : 20, gap = 9;
+    // the arrows stand at 0.6 of the half width either side: off the centre (the climb's handle at mid-piece) and off the edges (the bank's strokes, the turn's handle)
+    const h = d.item.half > 0 ? d.item.half : 4, spots = [-0.6 * h, 0.6 * h].map((u) => scr(across(m, u))).filter(Boolean);
+    ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const [w, colour] of [[5, ink], [2.2, d.item.colour]]) {
+      ctx.lineWidth = w; ctx.strokeStyle = colour; ctx.beginPath();
+      for (const o of spots) for (const sg of [-1, 1]) { const sx = o.x + ux * gap * sg, sy = o.y + uy * gap * sg, ex = o.x + ux * reach * sg, ey = o.y + uy * reach * sg; ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.moveTo(ex, ey); ctx.lineTo(ex - (ux * 5 + -uy * 4) * sg, ey - (uy * 5 + ux * 4) * sg); ctx.moveTo(ex, ey); ctx.lineTo(ex - (ux * 5 - -uy * 4) * sg, ey - (uy * 5 - ux * 4) * sg); }
+      ctx.stroke();
+    }
+    const cut = d.item.label.indexOf(' · drag'), lines = cut > 0 ? [d.item.label.slice(0, cut), d.item.label.slice(cut + 3)] : [d.item.label];
+    ctx.font = 'bold 12px system-ui, "Segoe UI", sans-serif';
+    const w = Math.max(...lines.map((t) => ctx.measureText(t).width)) + 12, hgt = 6 + 18 * lines.length;
+    // beside the tick, off the road: along the screen normal to the road, on the upper side (above it when the road runs across the screen)
+    const nx = -uy, ny = ux, sgn = ny > 0 ? -1 : 1, ox = c.x + nx * 44 * sgn, oy = c.y + ny * 44 * sgn;   // 44 px: past the tick's arrows (reach 26)
+    const bx = Math.max(4, Math.min(W - w - 4, ox - w / 2)), by = Math.max(4, Math.min(H - hgt - 4, oy - hgt));
+    ctx.globalAlpha = 1; ctx.fillStyle = T.alpha('--veil', 0.92, '#0b0d11'); ctx.fillRect(bx, by, w, hgt);
+    ctx.strokeStyle = d.item.colour; ctx.lineWidth = d.item.lit ? 2.5 : 1.5; ctx.strokeRect(bx, by, w, hgt);
+    ctx.fillStyle = T.css('--on-ink', '#eef1f6'); ctx.textBaseline = 'middle'; lines.forEach((t, i) => ctx.fillText(t, bx + 6, by + 12 + 18 * i));
+    ctx.restore();
   };
   const frame = () => { raf = win.requestAnimationFrame(frame); if (!drag) drawNow(); };
   raf = win.requestAnimationFrame(frame);
@@ -148,4 +211,4 @@ function mount(stage, win, itemsNow, hooks = {}) {
     unmount() { win.cancelAnimationFrame(raf); canvas.remove(); stage.removeEventListener('pointerdown', down, { capture: true }); stage.removeEventListener('pointermove', move, { capture: true }); stage.removeEventListener('pointerup', up, { capture: true }); stage.removeEventListener('pointercancel', up, { capture: true }); } };
 }
 
-module.exports = { styleOf, stationAt, markStroke, tickAt, mount, EDGE_COLOUR };
+module.exports = { styleOf, stationAt, markStroke, tickAt, markText, stretchStrip, mount, EDGE_COLOUR };
