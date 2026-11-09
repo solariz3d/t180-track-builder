@@ -538,7 +538,17 @@ function changeLists(changes, second, targets, typed, length, Lof0, startV = () 
       // the span is checked, not the shortest searched (E's 9a1a566f §5: one probe at most, so a drag stays quick); the shortest is searched only to name it when refused,
       // and where the built road is not monotone in the span (the search found a shorter one that holds), the refusal names the ceiling, which always does
       let minM = 0;
-      if (!spanHolds(ch, prev, T, base, end - F)) { minM = secondMinM(ch, prev, T, base); if (minM <= end - F + 1e-9) { const c = ceilOf(ch, prev, T, base); minM = ch === 'phi' ? c.m : Math.max(SECOND_FLOOR_M, c.m); } }
+      if (!spanHolds(ch, prev, T, base, end - F)) {
+        minM = secondMinM(ch, prev, T, base);
+        if (minM <= end - F + 1e-9) {
+          // The span asked is OVER the bar though a shorter one holds, so the built road is not monotone in the span (measured on +34.78 to -34.78 on a
+          // rounded 1,000 m bank: holds 264 to about 440 m, over the bar from about 450 m). The ceiling named here as "from at most" allowed the very mark it refused (628.5, got 500).
+          // The refusal stands, and names the limit that is true: the longest span below the asked one that holds, read by the metre, so the mark must start at or after end minus it.
+          let S = Math.floor(end - F); while (S > minM && !spanHolds(ch, prev, T, base, S)) S--;
+          if (spanHolds(ch, prev, T, base, S)) throw new D.CoreError('BAD_SECOND', `${name} ${changeName(ch, k)}, from ${+prev.toPrecision(6)} to ${+T.toPrecision(6)}, is laid over the bar by ${+(end - F).toFixed(1)} m before ${what} (the built road rounds a longer one back over the hold; ${S} m still holds): from at least ${(end - S).toFixed(1)}, got ${F}`);
+          const c = ceilOf(ch, prev, T, base); minM = ch === 'phi' ? c.m : Math.max(SECOND_FLOOR_M, c.m);
+        }
+      }
       if (minM > 0) throw new D.CoreError('BAD_SECOND', `${name} ${changeName(ch, k)}, from ${+prev.toPrecision(6)} to ${+T.toPrecision(6)}, needs at least ${minM.toFixed(1)} m before ${what} (the built road rounds a shorter one back over the hold): from at most ${(end - minM).toFixed(1)}, got ${F}`);
       prev = T;
     });
