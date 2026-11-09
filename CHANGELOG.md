@@ -14,6 +14,10 @@ All notable changes to this project are recorded here. The format follows
 - **Level and To floor no longer refuse when the climb field holds a climb.** With "turn & climb as" set to corner, the fields carry the last piece's climb on to the next, so after any climbing piece Level refused ("place the climb with Extend first"). The climb is what Level and To floor work out themselves, so a climb in the field is now simply not used, and the turn is still placed exactly.
 - **A refused command now always shows why.** With a piece selected the side panel is long, and a refusal's words were written at its foot, below the edge of a smaller window, so pressing Level (or any command) looked like nothing happened. A new refusal is now scrolled into view.
 
+### Known issues
+
+- **After undoing a drag of the levelled stretch, its span is not redrawn until Level end is pressed again.**
+
 ## [0.4.39] - 2026-11-06
 
 ### Added
