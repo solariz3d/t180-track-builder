@@ -190,3 +190,79 @@ test('L140 X8: his TEST BANKING bank, by the extra handle: 80° then dragged tow
   const P = p.shell.getState().history.present.pieces.at(-1); near(require('../../src/core/document.js').channelAt(P, 'phi', P.length).v / DEG, 0, 1e-6, 'the bank ends at 0, not 4.58');
   p.panel.unmount();
 });
+
+// ── WAY 1 (the user, 2026-11-07 08:34Z: "from the artifact we could try 1 first").
+// Measured on his S (an extra turn and an extra bank, both marked at 500 m): the extra bank's ramp made half its change 125 m after the extra turn's curvature did
+// (on the S he drew). Way 1: when the piece ALREADY has an extra turn, the extra bank's default from is that turn's mark less 0.12 of the piece
+// (380 m on his 1,000 m piece), clamped as before (no earlier than the first ramp's end, no later than the room it needs); a mark he slid wins; no extra turn, nothing moves.
+const hisS = async (bank = 17.39) => {
+  const p = await mountPanel();
+  p.type('length m', 1000); p.type('turn °', -90); p.type('bank °', bank);
+  const t = p.extras().find((e) => e.field === 'turn'); p.panel.secondExtra(t.id, 180);
+  assert.equal(p.opts().changes.turnDeg[0].from, 500, 'his extra turn stands at its own default, 500 m');
+  return p;
+};
+test('W1: his S: with an extra turn at 500 m, the extra bank\'s handle stands at 380 m (500 − 0.12 × 1,000), and its change starts there', async () => {
+  const p = await hisS();
+  const b = p.extras().find((e) => e.field === 'bank');
+  assert.equal(b.unused, true); assert.equal(b.from, 380, 'the unused extra bank stands 120 m before the extra turn\'s mark');
+  p.panel.secondExtra(b.id, -34.78);
+  assert.equal(p.opts().changes.phi[0].from, 380, 'and its change starts there');
+  p.panel.unmount();
+});
+test('W2: no extra turn: the extra bank stands at 500 m as before (his good piece: corner −90, bank 50, extra bank to 0)', async () => {
+  const p = await mountPanel();
+  p.type('length m', 1000); p.type('turn °', -90); p.type('bank °', 50);
+  const b = p.extras().find((e) => e.field === 'bank');
+  assert.equal(b.from, 500, 'halfway, as EXTRA_FROM_SHARE');
+  p.panel.secondExtra(b.id, 0);
+  assert.equal(p.opts().changes.phi[0].from, 500);
+  p.panel.unmount();
+});
+test('W3: a mark he slid wins over the lead: the unused extra bank slid to 450 m stays at 450 m with an extra turn on the piece', async () => {
+  const p = await hisS();
+  const b = p.extras().find((e) => e.field === 'bank');
+  p.panel.secondSlide(b.id, 450);
+  assert.equal(p.extras().find((e) => e.field === 'bank').from, 450, 'where he slid it');
+  p.panel.secondExtra(b.id, -34.78);
+  assert.equal(p.opts().changes.phi[0].from, 450, 'and its change starts there');
+  p.panel.unmount();
+});
+test('W4: the clamp: on a short piece whose first bank is laid early, the lead never puts the extra bank before the first ramp\'s end', async () => {
+  const p = await mountPanel();
+  p.type('length m', 300); p.type('turn °', -10); p.type('bank °', 17.39);
+  const box = p.root.all().find((e) => e.tagName === 'INPUT' && e.attrs.type === 'checkbox' && e.attrs['aria-label'] === 'bank at the start'); box.checked = true; (box.onchange || box.onclick)();
+  const end = p.opts().transition.phi;
+  const t = p.extras().find((e) => e.field === 'turn'); p.panel.secondExtra(t.id, 20);
+  const mark = p.opts().changes.turnDeg[0].from, lead = mark - 0.12 * 300;
+  assert.ok(lead < end, `the case clamps: the lead ${lead} m is before the first ramp's end ${end} m`);
+  const b = p.extras().find((e) => e.field === 'bank');
+  assert.ok(b.from >= end - 1e-9 && b.from <= mark, `the extra bank at ${b.from} m: no earlier than the first ramp's end (${end} m), no later than the turn's mark (${mark} m)`);
+  near(b.from, Math.ceil(end * 100) / 100, 0.01, 'at the first ramp\'s end');
+  p.panel.unmount();
+});
+test('W5: a typed extra bank row with no from, with an extra turn: extendOptions lays it 0.12 of the piece before the extra turn\'s mark (380 m), not at 85%', () => {
+  const { extendOptions } = require('../core/panel.js');
+  const base = { length: '1000', turn: '-90', bank: '17.39', turnAs: 'corner', head: { kh: 0, kv: 0, phi: 0, w: 31, c: 15.5 } };
+  const o = extendOptions({ ...base, changes: { turn: [{ then: '180', from: '500' }], bank: [{ then: '-34.78', from: '' }] } });
+  assert.equal(o.changes.phi[0].from, 380, 'the lead from the extra turn');
+  const o2 = extendOptions({ ...base, changes: { bank: [{ then: '-34.78', from: '' }] } });
+  assert.equal(o2.changes.phi[0].from, 850, 'no extra turn: SECOND_FROM_SHARE, as before');
+});
+test('W6: the clamp\'s low end is the change floor, never the piece\'s start: an extra turn slid to 100 m (the lead would be −20 m) puts the extra bank at the floor, and Extend lays it', async () => {
+  const p = await mountPanel();
+  p.type('length m', 1000); p.type('turn °', -90); p.type('bank °', 17.39);
+  const t = p.extras().find((e) => e.field === 'turn'); p.panel.secondSlide(t.id, 100); p.panel.secondExtra(t.id, 180);
+  assert.equal(p.opts().changes.turnDeg[0].from, 100, 'the extra turn where he slid it');
+  const b = p.extras().find((e) => e.field === 'bank'), floor = require('../../src/core/extend.js').SECOND_FLOOR_M;
+  assert.equal(b.from, floor, `the extra bank at the floor (${floor} m), not at ${100 - 120} m and not at 0`);
+  p.panel.secondExtra(b.id, -34.78);
+  const n = p.shell.getState().history.present.pieces.length; p.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend').onclick();
+  assert.equal(p.shell.getState().history.present.pieces.length, n + 1, 'laid, not refused');
+  p.panel.unmount();
+});
+test('W7: a typed extra bank row with no from, behind an extra turn at 100 m: extendOptions lays it at the floor, not at 0 or before', () => {
+  const { extendOptions } = require('../core/panel.js'), floor = require('../../src/core/extend.js').SECOND_FLOOR_M;
+  const o = extendOptions({ length: '1000', turn: '-90', bank: '17.39', turnAs: 'corner', head: { kh: 0, kv: 0, phi: 0, w: 31, c: 15.5 }, changes: { turn: [{ then: '180', from: '100' }], bank: [{ then: '-34.78', from: '' }] } });
+  assert.equal(o.changes.phi[0].from, floor);
+});
