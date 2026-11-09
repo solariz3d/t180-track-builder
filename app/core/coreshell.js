@@ -235,7 +235,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   }
   let st = {
     mode: 'core', history: D.createHistory(D.createDoc('untitled')), resolved: { segments: [], closed: false }, resolveError: null,
-    message: startMessage, messageKind: startMessage ? 'error' : null, name: null, dirty: false, lastEdited: null, lastStep: null, keptBend: null, brush: null, landingDrag: null, spawnsDrag: null, exportReds: null,
+    message: startMessage, messageKind: startMessage ? 'error' : null, name: null, dirty: false, lastEdited: null, lastStep: null, keptBend: null, brush: null, landingDrag: null, spawnsDrag: null, levelTail: null, levelTailDrag: null, exportReds: null,
     localBrush: !!brushFn, recovery: recovery && !recovery.blocked ? recovery : null,
     selection: null, deleteProposal: null, libraryStamp: 0, proposalCheck: null,   // the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
     cutProposal: null,   // a pending cut (cutSelection's preview), dropped with the document it was made on
@@ -376,6 +376,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   // the user, 2026-10-12: "a solid lag when putting the pieces down". Every commit converted EVERY piece again (about 90 ms on a 9-piece
   // track); the cache returns an unchanged piece's last segments, so a placement converts only what changed (adapter.js toSegments `cache`)
   const segCache = new WeakMap();
+  const tailPaths = new WeakMap();   // Level end's span: the path a resolved track builds, once (levelTailInfo)
   const segmentsOf = (d, more) => (d.pieces.length ? toSegments(d, { cache: segCache, ...more }) : []);
   // (the user: "even turning a 1000m straight isnt smooth and laggy as hell"): while a handle is DRAGGED the ghost of the next piece is rebuilt on every move, and a
   // piece is cut into chords of 2 m, so its cost grew with its length (1,000 m: 20 ms a move; 5,000 m: 100 ms). The ghost's piece is now cut into at most GHOST_CHORDS chords
@@ -1010,6 +1011,58 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return set({ selection: Object.freeze({ base: d, anchor, from, to, longWay, ids: Object.freeze(ids.map((P) => P.id)) }), deleteProposal: null, cutProposal: null, bankProposal: null, message: null });
     },
     clearSelection: () => set({ selection: null, deleteProposal: null, cutProposal: null, bankProposal: null, message: null }),
+    /**
+     * LEVEL END OF THE SELECTED PIECE (Build ▸ Level end of <piece>; the user, 2026-11-09: "the level shouldnt level the whole turn, just the ending of the piece"):
+     * src/core/level.js levelEnd over its default tail (the shortest that keeps the car on the road), ONE undo step, the piece kept selected. The tail then shows on the
+     * track as a span (levelTailInfo) whose start is dragged earlier or later (app/core/leveltail.js): beginLevelTailDrag / levelTailDragTo(tailM) / endLevelTailDrag, each
+     * step solved from the track as it was BEFORE the level, the whole drag one undo step. Every refusal (none or several pieces selected, a flight, a tail too short, no
+     * tail that keeps the car on the road) is the message, and a step refused mid-drag leaves the track at the last tail that worked.
+     */
+    levelEndSelected() {
+      const d = doc(), sel = st.selection && st.selection.base === d ? st.selection : null;
+      if (!sel || sel.ids.length !== 1) return set({ message: 'Level end: select one road piece first (click it on the track), then Build ▸ Level end of it' });
+      const i = d.pieces.findIndex((P) => P.id === sel.ids[0]);
+      let tailM = null;
+      commit('levelEnd', () => { const out = LV.levelEnd(d, i); tailM = LV.levelEndTail(d, i); return out; }, { lastEdited: [i] });
+      if (doc() === d) return st;   // refused: the message says why
+      return set({ selection: Object.freeze({ ...sel, base: doc() }), levelTail: { base: d, i, id: d.pieces[i].id, tailM, doc: doc() } });
+    },
+    /** The levelled piece's tail on the track, while the track is the one the level made: { id, i, tailM, s0, s1 (the piece on the path), from (the tail's start), halfW, path }; else null. */
+    levelTailInfo() {
+      const t = st.levelTail, segs = st.resolved && st.resolved.segments;
+      if (!t || doc() !== t.doc || !segs || !segs.length) return null;
+      let c = tailPaths.get(st.resolved);
+      if (!c) {
+        const { buildPath } = require('../../src/geom/index.js'), { segStarts } = require('../../src/markers/place.js');
+        const p0 = buildPath(segs, { step: 2, closed: !!doc().closed, ...(st.resolved.start ? { start: st.resolved.start } : {}) }), path = st.resolved.lift ? st.resolved.lift(p0) : p0;
+        tailPaths.set(st.resolved, c = { path, starts: segStarts(path, segs) });
+      }
+      const k = segs.findIndex((g) => g.id === t.id); if (k < 0) return null;
+      const s0 = c.starts[k], s1 = s0 + segs.filter((g) => g.id === t.id).reduce((a, g) => a + g.length, 0), P = doc().pieces[t.i];
+      return { id: t.id, i: t.i, tailM: t.tailM, s0, s1, from: Math.max(s0, s1 - t.tailM), halfW: D.channelAt(P, 'w', Math.max(0, P.length - t.tailM)).v / 2, path: c.path };
+    },
+    beginLevelTailDrag() {
+      if (st.levelTailDrag) return set({ message: 'a level end drag is already open' });
+      if (!api.levelTailInfo()) return set({ message: 'Level end: there is no levelled end to drag (Build ▸ Level end of a selected piece first)' });
+      return attempt(() => set({ history: D.beginDrag(st.history), levelTailDrag: { from: st.levelTail.tailM }, message: null }));
+    },
+    levelTailDragTo(tailM) {
+      const t = st.levelTail; if (!st.levelTailDrag || !t) return set({ message: 'no level end drag is open' });
+      let d; try { d = LV.levelEnd(t.base, t.i, { tailM }); } catch (e) { if (e && e.name === 'CoreError') return set({ message: e.message }); throw e; }   // refused: the drag stays at its last good step
+      return attempt(() => {
+        const t0 = now(), r = resolvedOf(d);
+        passClearanceGuard(t.base, d, r.resolved);
+        const sel = st.selection && st.selection.ids.length === 1 && st.selection.ids[0] === t.id ? Object.freeze({ ...st.selection, base: d }) : st.selection;
+        return set({ history: D.dragTo(st.history, d), ...r, selection: sel, levelTail: { ...t, tailM, doc: d }, dirty: true, lastStep: { op: 'levelEnd', ms: now() - t0 }, message: null });
+      });
+    },
+    endLevelTailDrag() {
+      if (!st.levelTailDrag) return st;
+      return attempt(() => {
+        const h = D.endDrag(st.history), sel = st.selection && st.levelTail && st.selection.ids[0] === st.levelTail.id ? Object.freeze({ ...st.selection, base: h.present }) : st.selection;
+        return set({ history: h, levelTailDrag: null, selection: sel, levelTail: st.levelTail ? { ...st.levelTail, doc: h.present } : null, lastEdited: null });
+      });
+    },
     /**
      * GRIP of the selected pieces (the user: "change which piece has different grip"; the core is src/core/document.js setGrip): `g` a whole percent 50 to 150 (a number or the field's
      * text; anything else is refused in plain words, nothing changes). Only ROAD has grip, so a flight in the selection is left as it is. ONE undo step; the selection stays on the pieces.

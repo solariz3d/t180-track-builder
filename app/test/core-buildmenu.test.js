@@ -17,6 +17,7 @@
 //  10   a blocked store (every storage access throws) throws nothing: the panel mounts and a setting holds for the session; with no settings module at all the panel still mounts
 //  11   the grid step picked in Build ▸ Turn to grid… is saved through S (the real createSettings), and survives a reload
 //  12   an Undo that gives back the undone piece's turn-and-climb mode saves it through S, so Settings and the panel agree
+//  13   Level end of <piece> (under To floor): its label names the selected piece; it levels that piece's end in one undo step; with none selected it says why
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -114,7 +115,8 @@ const pieces = (P) => P.shell.getState().history.present.pieces.length;
 test('row 1: Build lists its items in the brief\'s order, in contract M\'s shapes', async () => {
   const P = await mountPanel(), list = P.build();
   // AMENDED: no "Brush" between Jump and Close the loop (the brush was removed), and Sculpt mode first (the switch that replaced it: the bar had no room)
-  assert.deepEqual(list.filter((i) => i.label).map((i) => i.label), ['Sculpt mode', 'Straight', 'Level', 'To floor', 'Turn by…', 'Turn to grid…', 'Sharp corner…', 'Jump', 'Close the loop']);
+  // AMENDED 2026-11-09: "Level end of a selected piece" under To floor (the user's pick for where the command goes: "i like keeping the level where it is in B")
+  assert.deepEqual(list.filter((i) => i.label).map((i) => i.label), ['Sculpt mode', 'Straight', 'Level', 'To floor', 'Level end of a selected piece', 'Turn by…', 'Turn to grid…', 'Sharp corner…', 'Jump', 'Close the loop']);
   for (const i of list) {
     const shape = i.section !== undefined ? 'section' : i.separator ? 'separator' : typeof i.run === 'function' ? 'run' : typeof i.toggle === 'function' ? 'toggle' : typeof i.panel === 'function' ? 'panel' : 'none';
     assert.notEqual(shape, 'none', `an item of no known shape: ${JSON.stringify(i)}`);
@@ -319,5 +321,25 @@ test('row 12: Undo that gives the undone piece its turn-and-climb mode back save
   // an Undo whose piece was made in the mode S already holds writes nothing new
   const heard = []; S.on('turnClimbAs', (v) => heard.push(v));
   P.button('Extend').onclick(); P.shell.undo(); assert.deepEqual(heard, [], 'same mode: no change to tell');
+  P.panel.unmount();
+});
+
+test('row 13: Level end of <piece> names the selected piece, levels its end in one undo step, and with none selected says why', async () => {
+  const D = require('../../src/core/document.js'), LV = require('../../src/core/level.js'), path = require('path');
+  const his = D.parse(require('fs').readFileSync(path.join(__dirname, '..', '..', 'test', 'fixtures', 'level-end-2026-11-09.t180track'), 'utf8'));
+  const sh = await createCoreShell({ brushFn: null, autosaveMs: 0 }); sh.adopt(his);
+  const P = await mountPanel({ shell: sh });
+  P.item(P.build(), 'Level end of a selected piece').run();
+  assert.match(sh.getState().message || '', /select one road piece/, `nothing selected: it says why (${sh.getState().message})`);
+  assert.deepEqual(sh.getState().history.present.pieces, his.pieces, 'and nothing changes');
+  P.click(2500);
+  const focused = []; P.doc.addEventListener('t180-camera-focus', (e) => focused.push(e.detail.s));
+  const it = P.item(P.build(), 'Level end of p3');
+  assert.ok(it, `the item names the selected piece: ${P.build().map((i) => i.label).filter(Boolean).join(' | ')}`);
+  it.run();
+  assert.equal(sh.getState().message, null, 'no refusal');
+  assert.deepEqual(sh.getState().history.present.pieces, LV.levelEnd(his, 2).pieces, 'its end is levelled over the default tail');
+  assert.deepEqual(focused, [sh.levelTailInfo().from], 'the camera goes to the span\x27s start, where its mark is dragged');
+  sh.undo(); assert.deepEqual(sh.getState().history.present.pieces, his.pieces, 'one undo step');
   P.panel.unmount();
 });

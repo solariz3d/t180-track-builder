@@ -26,6 +26,7 @@ const GR = require('./griplayer.js');   // the track coloured by grip
 // (the start line, the grid pack and the hotlap, placed by hand, and the pit lane: app/core/spawnsui.js and pitui.js, mounted by the Track menu)
 const SPL = require('./spawnslayer.js');  // the hand-placed start, drawn on the preview
 const SPD = require('./spawndrag.js');
+const LT = require('./leveltail.js');   // Level end's span: drawn on the preview, its start dragged earlier or later
 const GT = require('../../src/core/gridturn.js');   // 2026-10-12: Turn to grid, and the end heading line    // and dragged there
 const VO = require('./valuesoverlay.js');   // the values of the piece being edited, large over the 3D view   // the free jump's landing: where its handles are, and its number boxes
 const FL = require('./flightlayer.js');   // the flights drawn as a dashed line across the air
@@ -1161,12 +1162,15 @@ function mount(root, shell, mountOpts = {}) {
   );
   if (values && values.attach) values.attach(roBox);   // the next-piece line, under the values (after the column is built, which would take it back)
   // 't180:build-request' { detail: { reply(build) } }: the Build menu's commands (app/core/buildmenu.js), read when the menu opens
+  const levelEndLabel = (d) => { const sel = shell.getState().selection; return sel && sel.base === d && sel.ids.length === 1 ? `Level end of ${sel.ids[0]}` : 'Level end of a selected piece'; };
   const onBuildRequest = (e) => {
     if (!e.detail || typeof e.detail.reply !== 'function') return;
     const d = shell.getState().history.present;
     e.detail.reply({ straight: () => straightBtn.onclick(), level: () => levelBtn.onclick(), toFloor: () => floorBtn.onclick(), jump: () => { if (!jumpBtn.disabled) jumpHere(); },
       close: () => { if (!closeBtn.disabled) closeBtn.onclick(); }, canClose: !closeBtn.disabled, closed: !!d.closed,
-      sculpt: !!shell.getState().sculpt, setSculpt: (on) => shell.setSculpt(!!on), lend });
+      sculpt: !!shell.getState().sculpt, setSculpt: (on) => shell.setSculpt(!!on), lend,
+      // Level end of <piece> (the user's pick: the Build menu, under Level and To floor): the selected piece's id in the label; with none or several, the shell says why
+      levelEnd: () => { shell.levelEndSelected(); const t = shell.levelTailInfo(); if (t) send('t180-camera-focus', { s: t.from }); }, levelEndLabel: levelEndLabel(d) });   // the camera to the span's start, where its mark is dragged
   };
   doc.addEventListener('t180:build-request', onBuildRequest);
   let wasSculpt = false;
@@ -1227,6 +1231,7 @@ function mount(root, shell, mountOpts = {}) {
   const spawnsLayer = stage ? SPL.mount(stage, shell, win) : null;   // the hand-placed start, drawn when the track has one   // the track coloured by grip, off until "colour by grip" is ticked
   colourOn.onchange = () => { if (gripLayer) gripLayer.setVisible(colourOn.checked); if (labels) labels.setGripView(colourOn.checked); };
   const spawnDrag = stage ? SPD.mount(stage, win, shell, { pose: () => { const v = askOf('t180:view'); return v ? v.pose : null; }, yieldTo: (x, y) => !!(handles && HD.hitTest(handles.handles(), x, y)) }) : null;   // the start line, the pack and the hotlap grabbed with the mouse. Mounted BEFORE the handles (the handles' press listener stays the last registered, as the tests' capture emulation assumes) and it steps aside for a handle under the pointer, whatever the order
+  const levelTail = stage ? LT.mount(stage, win, shell, { pose: () => { const v = askOf('t180:view'); return v ? v.pose : null; }, yieldTo: (x, y) => !!(handles && HD.hitTest(handles.handles(), x, y)) }) : null;   // Level end's span and its start mark, before the handles (a press on the mark is the mark's)
   // THE MARKS AND OFFERS' LAYER (L139) is mounted BEFORE the handles: both take the press in the capture phase, and the first registered runs first, so a press on a
   // mark or an offer is theirs and any other goes on to the handles (core-pieces-ui.test.js also reads the handles' listener as the stage's last pointerdown).
   // The hooks are wrappers: marksAt, offersAt, secondDrag and secondOffer are declared further down and read only when a frame or a drag runs
@@ -1240,6 +1245,7 @@ function mount(root, shell, mountOpts = {}) {
   }) : null;
   const handles = stage ? HD.mount(stage, win, handlesHost) : null;   // the drag handles' overlay
   if (spawnDrag) spawnDrag.late();   // (the start drag's hover and move listener goes after the handles': they set the cursor on every move)
+  if (levelTail) levelTail.late();   // (Level end's span: the same)
   if (labels && handles) labels.setAvoid(() => handles.handles().concat(handles.dots()).filter((h) => h.screen).map((h) => h.screen).concat(handles.tips ? handles.tips() : []));   // the road labels keep clear of the handles drawn over them
   const flights = stage ? FL.mount(stage, win) : null;   // the flights as dashed arcs
   // THE MARKS AND THE OFFERS ON THE GHOST (L139; app/core/secondtick.js draws and drags them). halfAt: the road's half width at a mark (the head's width to the field's, as
@@ -1403,7 +1409,7 @@ function mount(root, shell, mountOpts = {}) {
   const offSettings = Object.entries(SETTINGS).map(([k, apply]) => { apply(S.get(k, undefined)); return S.on(k, apply); });
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, flights, secondTick, marksAt, offersAt, secondDrag, secondOffer, secondExtra, secondSlide, extraHandles, secondAdd: (f, y) => { const x = secAdd(f, y); ghost(); return x; }, pieces, gripLayer, spawnsLayer, spawnDrag, values, sculptStrip, lend, options: opts, unmount() { unsub(); if (secondTick) secondTick.unmount(); doc.removeEventListener('t180:build-request', onBuildRequest); doc.removeEventListener('t180-sculpt-key', onSculptKey); doc.removeEventListener('t180:sculpt-hover', onSculptHover); doc.removeEventListener('keydown', onAltKey); doc.removeEventListener('keyup', onAltKey); if (winEvents) win.removeEventListener('blur', onBlur); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); stage.removeEventListener('pointerleave', leave); stage.removeEventListener('wheel', wheel, { capture: true }); } root.replaceChildren(); } };
+  return { labels, handles, flights, secondTick, marksAt, offersAt, secondDrag, secondOffer, secondExtra, secondSlide, extraHandles, secondAdd: (f, y) => { const x = secAdd(f, y); ghost(); return x; }, pieces, gripLayer, spawnsLayer, spawnDrag, levelTail, values, sculptStrip, lend, options: opts, unmount() { unsub(); if (secondTick) secondTick.unmount(); doc.removeEventListener('t180:build-request', onBuildRequest); doc.removeEventListener('t180-sculpt-key', onSculptKey); doc.removeEventListener('t180:sculpt-hover', onSculptHover); doc.removeEventListener('keydown', onAltKey); doc.removeEventListener('keyup', onAltKey); if (winEvents) win.removeEventListener('blur', onBlur); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (levelTail) levelTail.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); stage.removeEventListener('pointerleave', leave); stage.removeEventListener('wheel', wheel, { capture: true }); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };

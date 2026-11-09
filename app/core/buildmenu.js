@@ -35,6 +35,9 @@ function items(ctx) {
     { label: 'Straight', run: b.straight, ...off },
     { label: 'Level', run: b.level, ...off },
     { label: 'To floor', run: b.toFloor, ...off },
+    // Level end of <piece> (the user, 2026-11-09, his pick: "i like keeping the level where it is in B"): the SELECTED piece ends level over its last stretch, whose start
+    // is then dragged on the track (app/core/leveltail.js); with none selected it is not disabled: pressing it says why
+    { label: b.levelEndLabel || 'Level end of a selected piece', run: b.levelEnd || (() => {}), title: 'the selected piece ends straight and level over its last stretch, its turn kept; then drag the start of its span on the track to begin earlier or later', ...off },
     { separator: true },
     { label: 'Turn by…', panel: (box) => b.lend('turnBy', box), ...off },
     { label: 'Turn to grid…', panel: (box) => b.lend('grid', box), ...off },
