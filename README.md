@@ -19,9 +19,9 @@ Windows SmartScreen warns about an unknown publisher the first time.
 **Requires Custom Shaders Patch (CSP)** in Assetto Corsa to drive the exported tracks: their surfaces use CSP's extended
 physics, and plain AC can crash loading them.
 
-**The current installer is 0.4.39** (2026-11-06), `T-180.Track.Builder_0.4.39_x64-setup.exe`, from the
-[v0.4.39 release](https://github.com/solariz3d/t180-track-builder/releases/tag/v0.4.39). What changed since 0.2.2 is listed under
-`[0.4.39]`, `[0.4.38]`, `[0.4.37]`, `[0.4.36]`, `[0.4.30]`, `[0.4.29]`, `[0.4.28]`, `[0.4.27]`, `[0.4.26]`, `[0.4.25]`, `[0.4.24]`, `[0.4.23]`, `[0.4.22]`, `[0.4.21]`, `[0.4.20]`, `[0.4.19]`, `[0.4.9]`, `[0.4.8]`, `[0.4.7]`, `[0.4.6]`, `[0.4.5]`, `[0.4.4]`, `[0.4.3]`, `[0.4.2]`, `[0.4.1]`, `[0.4.0]`, `[0.3.6]`, `[0.3.5]`, `[0.3.4]`, `[0.3.3]`, `[0.3.2]`, `[0.3.1]` and `[0.3.0]` in [`CHANGELOG.md`](CHANGELOG.md). To run newer work than the release, build it from source (below).
+**The current installer is 0.4.40** (2026-11-09), `T-180.Track.Builder_0.4.40_x64-setup.exe`, from the
+[v0.4.40 release](https://github.com/solariz3d/t180-track-builder/releases/tag/v0.4.40). What changed since 0.2.2 is listed under
+`[0.4.40]`, `[0.4.39]`, `[0.4.38]`, `[0.4.37]`, `[0.4.36]`, `[0.4.30]`, `[0.4.29]`, `[0.4.28]`, `[0.4.27]`, `[0.4.26]`, `[0.4.25]`, `[0.4.24]`, `[0.4.23]`, `[0.4.22]`, `[0.4.21]`, `[0.4.20]`, `[0.4.19]`, `[0.4.9]`, `[0.4.8]`, `[0.4.7]`, `[0.4.6]`, `[0.4.5]`, `[0.4.4]`, `[0.4.3]`, `[0.4.2]`, `[0.4.1]`, `[0.4.0]`, `[0.3.6]`, `[0.3.5]`, `[0.3.4]`, `[0.3.3]`, `[0.3.2]`, `[0.3.1]` and `[0.3.0]` in [`CHANGELOG.md`](CHANGELOG.md). To run newer work than the release, build it from source (below).
 
 Only recent installers are published here. Earlier versions are listed in the changelog but no longer offered for
 download; the current one carries everything they did.

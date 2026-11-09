@@ -5,9 +5,12 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.40] - 2026-11-09
+
 ### Added
 
 - **The end of a piece already placed can be levelled, over its last stretch only.** The core can now flatten the end of any road piece to level (pitch 0, climbing no more) by reshaping only a tail at its end: the climb before the tail, the turn, bank, width and length stay exactly as they were, it still joins the piece before it smoothly, and the pieces after it follow. The tail is as short as it can be while the car stays on the road and off its chassis at full speed (on a 1 km turning piece pitched 2.8° up, its last 100 m), or as long as asked; too short a tail is refused with the length that works. It works past the top of a loop too. Select the piece, then Build ▸ Level end of <piece> (under Level and To floor): the camera goes to the levelled stretch, drawn as an orange span with a mark at its start, and dragging the mark along the road begins the levelling earlier or later, the whole drag one undo. With no piece selected, or a stretch too short, it says why.
+- **The mark where an extra change starts now explains itself.** On the Extend ghost, the mark of an extra turn, climb, bank, width or cup change carries a label saying where its change starts, where it ends and how long it takes ("Extra bank · 500.00 m → end · rolls over 500.00 m · drag to start earlier or later"; turns and climbs say so), the stretch it changes is tinted in the field's colour, and small arrows on the mark show it is dragged along the road. Hovering the extra handle adds a line naming its drag along the road and where the change starts now, and the mark, its stretch and its label light up while their handle is hovered or dragged. While the mark itself is dragged, the label, tint and arrows follow it, and a label keeps clear of the handles and stays below the readout at the top. Nothing about the road built changes.
 
 ### Changed
 
@@ -17,6 +20,7 @@ All notable changes to this project are recorded here. The format follows
 
 - **Level and To floor no longer refuse when the climb field holds a climb.** With "turn & climb as" set to corner, the fields carry the last piece's climb on to the next, so after any climbing piece Level refused ("place the climb with Extend first"). The climb is what Level and To floor work out themselves, so a climb in the field is now simply not used, and the turn is still placed exactly.
 - **A refused command now always shows why.** With a piece selected the side panel is long, and a refusal's words were written at its foot, below the edge of a smaller window, so pressing Level (or any command) looked like nothing happened. A new refusal is now scrolled into view.
+- **A bank change refused for rolling too fast now names a limit that is true.** A bank of +34.78° mirrored to −34.78° from 500 m on a 1,000 m piece was refused with "from at most 628.5, got 500", a mark the message itself allowed: a longer change is not always smoother there, so the limit it named was wrong. The refusal stands, and now names the start that holds ("447 m still holds: from at least 553"). Which changes are accepted, and the road they build, are unchanged.
 
 ### Known issues
 
