@@ -13,6 +13,7 @@ const assert = require('node:assert/strict');
 const { createCoreShell } = require('../core/coreshell.js');
 const HD = require('../core/handles.js');
 const ST = require('../core/secondtick.js');
+const M = require('../camera/math.js');
 
 class El {
   constructor(tag, doc) { this.tagName = tag.toUpperCase(); this.ownerDocument = doc; this.children = []; this.attrs = {}; this.style = {}; this._text = ''; this.listeners = {}; this.value = ''; this.checked = false; this.parent = null; }
@@ -148,5 +149,82 @@ test('C8: in the panel, the extra bank\'s tick is lit while its handle is hovere
   assert.equal(p.mark('bank').lit, true, 'lit while its handle is active');
   p.panel.handles.active = () => ({ kind: 'bank' });
   assert.equal(p.mark('bank').lit, false, 'the bank\'s own handle does not light it');
+  p.panel.unmount();
+});
+
+// ── R1/R2 (found in review). The marks' layer's own mount, a fake stage and a
+// stub 2D context that records what one draw puts on the canvas: the label's box (its veil, a fillRect 42 px high: two lines) and its text.
+//   R1: while the tick itself is dragged, the label, tint and arrows follow the drag (they stayed at the old mark until release, and the label read the old number).
+//   R2: a label is nudged off any handle's screen box, and kept below the HUD's bottom edge (the top readout, [aria-label="piece values"]).
+function stubCtx() {
+  const rec = { rects: [], texts: [] };
+  const ctx = new Proxy({ rec }, { get: (t, k) => {
+    if (k in t) return t[k];
+    if (k === 'measureText') return (s) => ({ width: String(s).length * 7 });
+    if (k === 'clearRect') return () => { rec.rects = []; rec.texts = []; };
+    if (k === 'fillRect') return (x, y, w, h) => rec.rects.push({ x, y, w, h });
+    if (k === 'fillText') return (s, x, y) => rec.texts.push({ s: String(s), x, y });
+    return () => {};
+  }, set: (t, k, v) => { t[k] = v; return true; } });
+  return ctx;
+}
+// a straight 1,000 m ghost along +z (L = +x), seen from straight above, the road running up the screen; the stage 900 × 600
+function marksLayer({ from = 380, avoid = null, hudBottom = null } = {}) {
+  const { doc, win } = fakeWindow(); const stage = doc.createElement('div'); stage.clientWidth = 900; stage.clientHeight = 600; stage.style = {};
+  const ctx = stubCtx(); const create = doc.createElement; doc.createElement = (t) => { const e = create(t); if (t === 'canvas') e.getContext = () => ctx; return e; };
+  if (hudBottom !== null) doc.querySelectorAll = (sel) => (sel === '[aria-label="piece values"]' ? [{ getBoundingClientRect: () => ({ left: 300, top: 0, width: 300, height: hudBottom, bottom: hudBottom }) }] : []);
+  const samples = []; for (let s = 0; s <= 1000; s += 2) samples.push({ s, pos: [0, 0, s], T: [0, 0, 1], L: [1, 0, 0], U: [0, 1, 0] });
+  const ghost = { samples, s0: 0, jump: false }, pose = { eye: [0, 700, 500], target: [0, 0, 500], up: [0, 0, 1], fov: Math.PI / 3 };
+  doc.addEventListener('t180:ghost-request', (e) => e.detail.reply(ghost)); doc.addEventListener('t180:view', (e) => e.detail.reply({ pose }));
+  const state = { from };
+  const item = () => ({ field: 'bank', index: 0, from: state.from, to: 1000, half: 15, halfTo: 15, label: ST.markText('bank', 0, state.from, 1000, 1000), lit: false, ...ST.styleOf('bank') });
+  const layer = ST.mount(stage, win, () => ({ marks: [item()], offers: [] }), { onMarkDrag: (m, f) => { state.from = f; }, ...(avoid ? { avoid } : {}) });
+  layer.drawNow();
+  const VP = M.viewProj(pose, 900 / 600), scr = (p) => { const c = M.apply(VP, p); return { x: (c[0] / c[3] * 0.5 + 0.5) * 900, y: (1 - (c[1] / c[3] * 0.5 + 0.5)) * 600 }; };
+  const box = () => ctx.rec.rects.filter((r) => r.h === 42).at(-1) || null;
+  const text = () => (ctx.rec.texts.find((t) => t.s.startsWith('Extra bank')) || { s: '' }).s;
+  return { stage, layer, state, ctx, scr, box, text };
+}
+const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+test('R1: dragging the tick itself, the label\'s number and the stretch\'s start follow the drag before release', () => {
+  const A = marksLayer({ from: 380 });
+  assert.match(A.text(), /^Extra bank · 380\.00 m/, 'drawn at 380 first');
+  const st = A.layer.marks()[0].strokes[0], p0 = { x: (st.a.x + st.b.x) / 2, y: (st.a.y + st.b.y) / 2 }, to = A.scr([15 * HD.KINDS.bank.lat, 0, 478]);
+  A.stage.fire('pointerdown', { clientX: p0.x, clientY: p0.y, pointerId: 1 });
+  A.stage.fire('pointermove', { clientX: to.x, clientY: to.y, pointerId: 1 });
+  assert.equal(A.state.from, 478, 'the drag moved the change to 478 m');
+  assert.match(A.text(), /^Extra bank · 478\.00 m → end · rolls over 522\.00 m/, 'mid-drag, the label reads the drag\'s from');
+  assert.equal(A.layer.marks()[0].s, 478, 'and the tick (where the stretch starts) is at it');
+  A.stage.fire('pointerup', { clientX: to.x, clientY: to.y, pointerId: 1 });
+  A.layer.unmount();
+});
+
+test('R2a: a label whose place falls on a handle\'s screen box is nudged off it', () => {
+  const free = marksLayer({ from: 380 }), at = free.box(); free.layer.unmount();
+  assert.ok(at, 'the label is drawn');
+  const handle = { x: at.x + at.w / 2 - 12, y: at.y + at.h / 2 - 12, w: 24, h: 24 };   // a handle's box right on the label's middle
+  const A = marksLayer({ from: 380, avoid: () => [handle] }), b = A.box();
+  assert.ok(b && !overlaps(b, handle), `the label (${JSON.stringify(b)}) clears the handle (${JSON.stringify(handle)})`);
+  assert.ok(b.x >= 0 && b.y >= 0 && b.x + b.w <= 900 && b.y + b.h <= 600, 'and stays on the stage');
+  A.layer.unmount();
+});
+
+test('R2b: a label is kept below the HUD\'s bottom edge', () => {
+  const free = marksLayer({ from: 380 }), at = free.box(); free.layer.unmount();
+  const hud = Math.round(at.y + at.h / 2);   // the readout reaching half way down where the label would be
+  const A = marksLayer({ from: 380, hudBottom: hud }), b = A.box();
+  assert.ok(b && b.y >= hud, `the label's top (${b && b.y}) is at or below the HUD's bottom (${hud})`);
+  A.layer.unmount();
+});
+
+test('R2c: the panel hands the marks\' layer each handle\'s screen box (and its tip) to keep a label off', async () => {
+  let hooks = null; const mount0 = ST.mount;
+  ST.mount = (st, w, itemsNow, h) => { hooks = h; return mount0(st, w, itemsNow, h); };
+  let p; try { p = await good({ withStage: true }); } finally { ST.mount = mount0; }
+  assert.equal(typeof (hooks && hooks.avoid), 'function', 'an avoid hook');
+  p.panel.handles.handles = () => [{ kind: 'extra:bank:0', screen: { x: 300, y: 200 } }, { kind: 'bank', screen: null }];
+  p.panel.handles.tips = () => [{ x: 10, y: 20, w: 100, h: 22 }];
+  assert.deepEqual(hooks.avoid(), [{ x: 276, y: 176, w: 48, h: 48 }, { x: 10, y: 20, w: 100, h: 22 }], 'the drawn handle\'s box, 24 px every way, and the tip; a handle off screen gives none');
   p.panel.unmount();
 });

@@ -96,7 +96,19 @@ function stretchStrip(ghost, mark) {
   }
   return out.length >= 2 ? out : null;
 }
-const segDist = (p, a, b) => { const vx = b.x - a.x, vy = b.y - a.y, l2 = vx * vx + vy * vy, t = l2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / l2)) : 0; return Math.hypot(p.x - a.x - vx * t, p.y - a.y - vy * t); };
+// (A handle sat on a label's end, a label half under the HUD.) Where a label of `want`'s size goes. Clamped to the stage and below
+// `top` (the HUD's bottom edge); then, if it lies on any `avoid` box (a handle's screen box, a handle's tip), nudged up or down 12 px at a time, then left or right 16 px,
+// nearest first, to the first place that clears them all. No place clears: it stays where it was clamped. No layout engine: one label, a few tries.
+const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+function placeLabel(want, { W, H, top = 0, avoid = [] }) {
+  const lo = Math.max(4, top + 4);
+  const fit = (x, y) => ({ x: Math.max(4, Math.min(W - want.w - 4, x)), y: Math.max(lo, Math.min(H - want.h - 4, y)), w: want.w, h: want.h });
+  const clear = (r) => !avoid.some((a) => a && overlaps(r, a));
+  const first = fit(want.x, want.y); if (clear(first)) return first;
+  for (let k = 1; k <= 12; k++) for (const [dx, dy] of [[0, -12 * k], [0, 12 * k], [-16 * k, 0], [16 * k, 0]]) { const r = fit(want.x + dx, want.y + dy); if (clear(r)) return r; }
+  return first;
+}
+const segDist =(p, a, b) => { const vx = b.x - a.x, vy = b.y - a.y, l2 = vx * vx + vy * vy, t = l2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / l2)) : 0; return Math.hypot(p.x - a.x - vx * t, p.y - a.y - vy * t); };
 
 function mount(stage, win, itemsNow, hooks = {}) {
   const T = tokensOf(win);
@@ -105,7 +117,17 @@ function mount(stage, win, itemsNow, hooks = {}) {
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4';
   stage.append(canvas);
   const ask = (name) => { let got = null; doc.dispatchEvent(new win.CustomEvent(name, { detail: { reply: (x) => { got = x; } } })); return got; };
-  let raf = 0, sized = '', drawnMarks = [], drawnOffers = [], last = { ghost: null, pose: null, W: 0, H: 0 }, drag = null;
+  let raf = 0, sized = '', drawnMarks = [], drawnOffers = [], last = { ghost: null, pose: null, W: 0, H: 0 }, drag = null, placed = [];
+  // The HUD's bottom edge in css px of the stage (the top readout, app/core/valuesoverlay.js, the same element labels.js keeps clear of), read at most every
+  // 200 ms as labels.js reads its panels (reading a box forces a layout); 0 on a page without it
+  let hudAt = -Infinity, hudNow = 0;
+  const hudBottom = () => {
+    const t = win.performance && typeof win.performance.now === 'function' ? win.performance.now() : Date.now(); if (t - hudAt < 200) return hudNow; hudAt = t; hudNow = 0;
+    if (typeof doc.querySelectorAll !== 'function') return hudNow;
+    const s = typeof stage.getBoundingClientRect === 'function' ? stage.getBoundingClientRect() : { top: 0 };
+    for (const e of doc.querySelectorAll('[aria-label="piece values"]')) { const b = e.getBoundingClientRect(); if (b && b.height > 0) hudNow = Math.max(hudNow, b.bottom - s.top); }
+    return hudNow;
+  };
   const drawNow = () => {
     if (!canvas.isConnected && stage.isConnected !== false) stage.append(canvas);   // the preview's mount clears #preview after the panel mounted
     const W = stage.clientWidth, H = stage.clientHeight, items = itemsNow() || { marks: [], offers: [] };
@@ -121,7 +143,7 @@ function mount(stage, win, itemsNow, hooks = {}) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H); ctx.lineCap = 'round';
       for (const d of drawnMarks) if (d.item.label) drawStretch(ctx, d, last);
       for (const d of drawnMarks) for (const [w, colour] of [[6, T.css('--ink', '#0b0d11')], [3, d.item.colour]]) { ctx.lineWidth = w; ctx.strokeStyle = colour; for (const st of d.strokes) { ctx.beginPath(); ctx.moveTo(st.a.x, st.a.y); ctx.lineTo(st.b.x, st.b.y); ctx.stroke(); } }
-      for (const d of drawnMarks) if (d.item.label) drawExplained(ctx, d, last, W, H);
+      placed = []; for (const d of drawnMarks) if (d.item.label) drawExplained(ctx, d, last, W, H);
       // an offer: a faint ring in the field's colour, the same size as a handle's mark (it is a handle not yet used)
       ctx.globalAlpha = 0.45;
       for (const d of drawnOffers) { ctx.lineWidth = 2.5; ctx.strokeStyle = d.item.colour; ctx.beginPath(); ctx.arc(d.at.x, d.at.y, 7, 0, Math.PI * 2); ctx.stroke(); }
@@ -158,7 +180,8 @@ function mount(stage, win, itemsNow, hooks = {}) {
     const w = Math.max(...lines.map((t) => ctx.measureText(t).width)) + 12, hgt = 6 + 18 * lines.length;
     // beside the tick, off the road: along the screen normal to the road, on the upper side (above it when the road runs across the screen)
     const nx = -uy, ny = ux, sgn = ny > 0 ? -1 : 1, ox = c.x + nx * 44 * sgn, oy = c.y + ny * 44 * sgn;   // 44 px: past the tick's arrows (reach 26)
-    const bx = Math.max(4, Math.min(W - w - 4, ox - w / 2)), by = Math.max(4, Math.min(H - hgt - 4, oy - hgt));
+    const avoid = (typeof hooks.avoid === 'function' ? hooks.avoid() || [] : []).concat(placed);   // the handles' boxes, and the labels already placed this draw
+    const r = placeLabel({ x: ox - w / 2, y: oy - hgt, w, h: hgt }, { W, H, top: hudBottom(), avoid }), bx = r.x, by = r.y; placed.push(r);
     ctx.globalAlpha = 1; ctx.fillStyle = T.alpha('--veil', 0.92, '#0b0d11'); ctx.fillRect(bx, by, w, hgt);
     ctx.strokeStyle = d.item.colour; ctx.lineWidth = d.item.lit ? 2.5 : 1.5; ctx.strokeRect(bx, by, w, hgt);
     ctx.fillStyle = T.css('--on-ink', '#eef1f6'); ctx.textBaseline = 'middle'; lines.forEach((t, i) => ctx.fillText(t, bx + 6, by + 12 + 18 * i));
@@ -193,6 +216,9 @@ function mount(stage, win, itemsNow, hooks = {}) {
       if (!best) return;
       drag.moved = true;
       if (hooks.onMarkDrag) hooks.onMarkDrag(it, Math.round((best.s - ghost.s0) * 100) / 100);
+      // (Mid-drag the row read 478 while the label, tint and arrows still showed 380.) The frame does not draw while this layer's own drag is open, so the
+      // drag draws once a move, after its from moved, and the label, tint and arrows follow it. The press still reads the marks it began on (drag.d), not the redrawn ones
+      drawNow();
     } else {
       // an offer: the field's handle maths (handles.js), along the field's own axis at the offer's station
       const it = drag.d.item, m = stationAt(ghost, it.from); if (!m) return;

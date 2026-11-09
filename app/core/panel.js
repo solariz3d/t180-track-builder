@@ -1256,6 +1256,8 @@ function mount(root, shell, mountOpts = {}) {
     onDragStart: () => { secDragFrom = null; secOffer = null; scrubbing = true; },
     // B's G4 and G10: a press within a handle's reach goes to the handle (an extra handle stands on its own change's mark; a mark sat on the bank handle's station)
     yields: (p) => !!handles && handles.handles().some((h) => h.screen && Math.hypot(h.screen.x - p.x, h.screen.y - p.y) <= HD.HIT_PX),
+    // The boxes a tick's label keeps off: each handle drawn (its mark and double arrow, 24 px every way, the arrows' reach 22) and its hover tip
+    avoid: () => (handles ? handles.handles().filter((h) => h.screen).map((h) => ({ x: h.screen.x - 24, y: h.screen.y - 24, w: 48, h: 48 })).concat(handles.tips ? handles.tips() : []) : []),
     onDragEnd: (it, moved) => { scrubbing = false; secDragFrom = null; secOffer = null; if (moved) ghost(); },
   }) : null;
   const handles = stage ? HD.mount(stage, win, handlesHost) : null;   // the drag handles' overlay
