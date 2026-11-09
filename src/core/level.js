@@ -79,9 +79,9 @@ function withClimb(doc, c) {
   pieces[pieces.length - 1] = { ...P, channels: { ...P.channels, kv: Array.from(c, (x) => q(x, D.DEC.kv)) } };
   return freeze(D.checkDoc({ ...doc, pieces }));
 }
-/** The least-norm step on the free columns (2 … m − 3): δ = Jᵀ(JJᵀ)⁻¹(−r). */
-function step(J, r, m) {
-  const free = []; for (let i = 2; i <= m - 3; i++) free.push(i);
+/** The least-norm step on the free columns (2 … m − 3 unless given): δ = Jᵀ(JJᵀ)⁻¹(−r). */
+function step(J, r, m, given = null) {
+  const free = given ? given.slice() : []; if (!given) for (let i = 2; i <= m - 3; i++) free.push(i);
   if (!free.length) throw new D.CoreError('LEVEL_TOO_SHORT', 'this piece is too short to shape: it has no free climb control point (make it longer)');
   const A = J.map((row) => free.map((i) => row[i])), JJt = A.map((ra) => A.map((rb) => ra.reduce((s, x, k) => s + x * rb[k], 0)));
   const lam = denseSolve(JJt, r.map((x) => -x)), d = new Float64Array(m);
@@ -154,32 +154,76 @@ function extendToFloor(doc, opts) {
 }
 
 /**
- * LEVEL THE END of piece i, already placed: only its climb control points are re-solved (the least-norm step above) so it ends at pitch 0 with climb rate 0 and
- * slope 0. Its turn, bank, width, cup, knots and length are kept exactly, the joint's first two control points stay (it still continues C1 from the piece
- * before it), and the pitch is read from that piece's end in its own frame (flipOf: past the top of a loop more climb pitches the road down). The pieces after
- * it follow: when the next is road its first two climb control points carry the new end on (value 0, slope 0, the way Extend makes a joint) and nothing else
- * of it changes, so it keeps its shape and moves along with the rest. Refused by name: a piece not in the track (BAD_RANGE), a flight (LEVEL_NOT_ROAD), a
- * closed loop (CLOSED), a piece with no free climb control point (LEVEL_TOO_SHORT); and the document's own check has the last word.
+ * LEVEL THE END of piece i, already placed, over a TAIL at its end (the user, 2026-11-09: "the level shouldnt level the whole turn, just the ending of the
+ * piece, even if it has the turns like shown"). Only the climb control points whose support lies inside the tail are re-solved (the least-norm step above),
+ * so the piece ends at pitch 0 with climb rate 0 and slope 0, and BEFORE the tail its climb is bit for bit what it was. Its turn, bank, width, cup, knots and
+ * length are kept exactly; the joint's first two control points are never free (it still continues C1 from the piece before); the pitch is read from that
+ * piece's end in its own frame (flipOf: past the top of a loop more climb pitches the road down). The pieces after it follow: when the next is road its
+ * first two climb control points carry the new end on (value 0, slope 0, the way Extend makes a joint) and nothing else of it changes.
+ * THE TAIL. A control point a moves the climb over [U[a], U[a+4]], so a tail that starts at s0 frees the points from the first a with U[a] ≥ s0 up to m − 3
+ * (the last two are the end's). opts.tailM (m, from the end) is used as asked; left out, it is the SHORTEST tail that keeps the car on the road over it at
+ * the open track's speed (the crest check To floor uses: g·cos p + v²·κ + the downforce ≥ 0) and off its chassis (that load ≤ 40 g, limits.js chassisG),
+ * each or no worse than it was where the piece already failed it,
+ * which levelEndTail reports for the panel to draw.
+ * Refused by name: BAD_RANGE, LEVEL_NOT_ROAD, CLOSED, BAD_TAIL (not a positive number); LEVEL_TOO_SHORT (the piece has no free climb point at all);
+ * LEVEL_TAIL_SHORT (the tail asked for holds no free point, or would lift the car off: `needM` is the shortest that works, or null); LEVEL_LIFTS_OFF (no
+ * tail in this piece levels it without lifting the car off: make the piece longer). The document's own check has the last word.
  */
-function levelEnd(doc, i) {
+const knotsOf = (P) => [0, 0, 0, 0, ...P.knots, P.length, P.length, P.length, P.length];
+function endFrame(doc, i) {
   if (doc.closed) throw new D.CoreError('CLOSED', 'the loop is closed: levelling a piece would open its seam');
   const n = doc.pieces.length;
   if (!Number.isInteger(i) || i < 0 || i >= n) throw new D.CoreError('BAD_RANGE', `piece ${i}: the track has pieces 0 to ${n - 1}`);
   const P = doc.pieces[i];
   if (P.type !== 'road') throw new D.CoreError('LEVEL_NOT_ROAD', `piece ${i + 1} is a flight: only a road piece has a climb to level`);
-  const before = { ...doc, pieces: doc.pieces.slice(0, i) }, head = headOf(before), sgn = flipOf(before) ? -1 : 1;
-  const st = stationsOf(P), m = P.channels.kv.length;
+  const before = { ...doc, pieces: doc.pieces.slice(0, i) }, m = P.channels.kv.length;
+  if (m - 3 < 2) throw new D.CoreError('LEVEL_TOO_SHORT', 'this piece is too short to shape: it has no free climb control point (make it longer)');
+  const st = stationsOf(P), head = headOf(before), sgn = flipOf(before) ? -1 : 1, r0 = pitchRows(P, st, Float64Array.from(P.channels.kv), head.p, sgn);
+  return { P, m, U: knotsOf(P), st, head, sgn, was: r0.kv.map((k, j) => G * Math.cos(r0.p[j]) + V_OPEN * V_OPEN * k + DF) };   // was: each station's margin as placed
+}
+/** The tail from control point a0 solved: its climb points, and whether it ends level with the car on the road over the tail. */
+function tailSolve(F, a0) {
+  const { P, m, U, st, head, sgn } = F, free = []; for (let a = a0; a <= m - 3; a++) free.push(a);
   let c = Float64Array.from(P.channels.kv); c[m - 1] = 0; c[m - 2] = 0;   // it ends straight: rate 0 and slope 0
   let rows = pitchRows(P, st, c, head.p, sgn);
   for (let it = 0; it < MAX_ITER; it++) {
     const pEnd = rows.p[rows.p.length - 1];
     if (Math.abs(pEnd) <= PITCH_TOL && it > 0) break;
-    const dl = step([rows.w], [pEnd], m);
+    const dl = step([rows.w], [pEnd], m, free);
     c = Float64Array.from(c, (x, k) => q(x + dl[k], D.DEC.kv));   // quantised as stored: what is placed is what is measured
     rows = pitchRows(P, st, c, head.p, sgn);
   }
+  // over the tail the car is never lifted off, nor pressed onto its chassis, where it was not already: each station's load into the road (m/s², at the
+  // open track's speed) stays ≥ 0 and ≤ the chassis line (limits.js chassisG, 40 g: the validator's 'load-on-the-chassis'), or no worse than it was.
+  // A short tail that pulled a nose-down end up at hundreds of g would be no level end at all; a piece that already lifts the car off on its own climb
+  // is not made a reason to refuse levelling its end
+  const s0 = U[a0], was = F.was, load = (j) => G * Math.cos(rows.p[j]) + V_OPEN * V_OPEN * rows.kv[j] + DF, CH = MACH6.chassisG * G;
+  const lifts = st.some((x, j) => x.s >= s0 - 1e-9 && (load(j) < Math.min(0, was[j]) - 1e-9 || load(j) > Math.max(CH, was[j]) + 1e-9));
+  return { c, tailM: P.length - s0, ok: Math.abs(rows.p[rows.p.length - 1]) <= PITCH_TOL && !lifts };
+}
+/** The shortest tail that works, from the last free point back to the first after the joint; null when none does. */
+function shortestTail(F) { for (let a0 = F.m - 3; a0 >= 2; a0--) { const r = tailSolve(F, a0); if (r.ok) return r; } return null; }
+/** The default tail of piece i (m, from its end), or null when no tail levels it without lifting the car off. */
+function levelEndTail(doc, i) { const r = shortestTail(endFrame(doc, i)); return r ? r.tailM : null; }
+
+function levelEnd(doc, i, opts = {}) {
+  const F = endFrame(doc, i), { P, m, U } = F;
+  let r;
+  if (opts.tailM === undefined) {
+    r = shortestTail(F);
+    if (!r) throw new D.CoreError('LEVEL_LIFTS_OFF', `no tail of this ${P.length} m piece levels its end without lifting the car off at ${MACH6.vmaxKmh} km/h: make the piece longer`);
+  } else {
+    const T = opts.tailM;
+    if (typeof T !== 'number' || !Number.isFinite(T) || T <= 0) throw new D.CoreError('BAD_TAIL', `the tail is a length in metres from the end of the piece, more than 0 (got ${T})`);
+    let a0 = 2; while (a0 <= m - 3 && U[a0] < P.length - T - 1e-9) a0++;
+    r = a0 <= m - 3 ? tailSolve(F, a0) : null;
+    if (!r || !r.ok) {
+      const best = shortestTail(F), why = !r ? 'holds no climb point it can move' : `would lift the car off at ${MACH6.vmaxKmh} km/h`;
+      throw Object.assign(new D.CoreError('LEVEL_TAIL_SHORT', best ? `a tail of ${T} m ${why}: it needs at least ${Math.ceil(best.tailM)} m` : `a tail of ${T} m ${why}, and no tail of this piece levels it: make the piece longer`), { needM: best ? best.tailM : null });
+    }
+  }
   const pieces = doc.pieces.slice();
-  pieces[i] = { ...P, channels: { ...P.channels, kv: Array.from(c) } };
+  pieces[i] = { ...P, channels: { ...P.channels, kv: Array.from(r.c) } };
   const N = pieces[i + 1];
   if (N && N.type === 'road') {
     const e = D.endState({ ...doc, pieces: pieces.slice(0, i + 1) }).kv, h1 = N.knots.length ? N.knots[0] : N.length, kv = N.channels.kv.slice();
@@ -189,4 +233,4 @@ function levelEnd(doc, i) {
   return freeze(D.checkDoc({ ...doc, pieces }));
 }
 
-module.exports = { extendLevel, extendToFloor, shortestToFloor, levelEnd, headOf, V_OPEN };
+module.exports = { extendLevel, extendToFloor, shortestToFloor, levelEnd, levelEndTail, headOf, V_OPEN };

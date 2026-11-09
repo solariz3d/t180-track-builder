@@ -7,11 +7,12 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
-- **The end of a piece already placed can be levelled.** The core can now flatten the end of any road piece to level (pitch 0, climbing no more), changing only that piece's climb: its turn, bank, width and length stay exactly as they were, it still joins the piece before it smoothly, and the pieces after it follow. It works past the top of a loop too. A piece too short to reshape is refused by name. The button for it comes next, once where it sits is chosen.
+- **The end of a piece already placed can be levelled, over its last stretch only.** The core can now flatten the end of any road piece to level (pitch 0, climbing no more) by reshaping only a tail at its end: the climb before the tail, the turn, bank, width and length stay exactly as they were, it still joins the piece before it smoothly, and the pieces after it follow. The tail is as short as it can be while the car stays on the road and off its chassis at full speed (on a 1 km turning piece pitched 2.8° up, its last 100 m), or as long as asked; too short a tail is refused with the length that works. It works past the top of a loop too. The button for it comes next, once where it sits is chosen.
 
 ### Fixed
 
 - **Level and To floor no longer refuse when the climb field holds a climb.** With "turn & climb as" set to corner, the fields carry the last piece's climb on to the next, so after any climbing piece Level refused ("place the climb with Extend first"). The climb is what Level and To floor work out themselves, so a climb in the field is now simply not used, and the turn is still placed exactly.
+- **A refused command now always shows why.** With a piece selected the side panel is long, and a refusal's words were written at its foot, below the edge of a smaller window, so pressing Level (or any command) looked like nothing happened. A new refusal is now scrolled into view.
 
 ## [0.4.39] - 2026-11-06
 

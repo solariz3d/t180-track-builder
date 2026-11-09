@@ -3,7 +3,8 @@
 // the copy. "Applied" means the replaced string occurs EXACTLY once; "caught" means at least one test FAILED on the mutant. The CONTROL runs the files
 // whole on an unmutated copy, so a copy that is missing a file cannot make every mutant look caught.
 // Equivalent, left out on purpose: the next piece's re-join carries the levelled end's slope on (value + slope·span/3), but levelEnd always ends with
-// rate 0 and slope 0, so a mutant of the span or the divisor there cannot change a document.
+// rate 0 and slope 0, so a mutant of the span or the divisor there cannot change a document. And the tail's load check read over the whole piece
+// instead of the tail: before the tail the climb is unchanged, so every station there passes "no worse than it was" either way.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -16,7 +17,7 @@ const LV = 'core/level.js';
 const MUTANTS = [
   // levelEnd
   { id: 'E1 the levelled piece keeps its end slope (only the rate is set to 0)', pattern: 'row 1|row 4', edits: [[LV, 'let c = Float64Array.from(P.channels.kv); c[m - 1] = 0; c[m - 2] = 0;', 'let c = Float64Array.from(P.channels.kv); c[m - 1] = 0;']] },
-  { id: 'E2 the flipped frame is ignored (the correction goes the wrong way past the top of a loop)', pattern: 'row 5', edits: [[LV, 'sgn = flipOf(before) ? -1 : 1;', 'sgn = 1;']] },
+  { id: 'E2 the flipped frame is ignored (the correction goes the wrong way past the top of a loop)', pattern: 'row 5', edits: [[LV, 'sgn = flipOf(before) ? -1 : 1, r0', 'sgn = 1, r0']] },
   { id: 'E3 the pitch is read from the track\'s start, not the end of the piece before', pattern: 'row 1|row 4', edits: [[LV, 'head = headOf(before), sgn', 'head = headOf({ ...doc, pieces: [] }), sgn']] },
   { id: 'E4 the next piece is not re-joined (its joint keeps the old climb)', pattern: 'row 4', edits: [[LV, "if (N && N.type === 'road') {", 'if (false) {']] },
   { id: 'E5 the step goes the wrong way', pattern: 'row 1', edits: [[LV, 'c = Float64Array.from(c, (x, k) => q(x + dl[k], D.DEC.kv));', 'c = Float64Array.from(c, (x, k) => q(x - dl[k], D.DEC.kv));']] },
@@ -25,13 +26,24 @@ const MUTANTS = [
   { id: 'E8 a fractional index is accepted', pattern: 'row 7', edits: [[LV, 'if (!Number.isInteger(i) || i < 0 || i >= n)', 'if (i < 0 || i >= n)']] },
   { id: 'E9 a flight is levelled as if it were road', pattern: 'row 7', edits: [[LV, "if (P.type !== 'road') throw new D.CoreError('LEVEL_NOT_ROAD'", "if (false) throw new D.CoreError('LEVEL_NOT_ROAD'"]] },
   { id: 'E10 a closed loop is levelled (its seam opens)', pattern: 'row 7', edits: [[LV, "if (doc.closed) throw new D.CoreError('CLOSED', 'the loop is closed: levelling a piece", "if (false) throw new D.CoreError('CLOSED', 'the loop is closed: levelling a piece"]] },
-  { id: 'E11 the joint\'s first two control points are free too (C1 with the piece before is lost)', pattern: 'row 3|row 1', edits: [[LV, 'for (let i = 2; i <= m - 3; i++) free.push(i);', 'for (let i = 0; i <= m - 3; i++) free.push(i);']] },
-  { id: 'E12 the end\'s two control points are free too (it no longer ends straight)', pattern: 'row 1', edits: [[LV, 'for (let i = 2; i <= m - 3; i++) free.push(i);', 'for (let i = 2; i <= m - 1; i++) free.push(i);']] },
-  { id: 'E13 a piece with no free point is not refused by name', pattern: 'row 6', edits: [[LV, "if (!free.length) throw new D.CoreError('LEVEL_TOO_SHORT'", "if (false) throw new D.CoreError('LEVEL_TOO_SHORT'"]] },
+  { id: 'E11 the joint\'s first two control points are free too (C1 with the piece before is lost)', pattern: 'row 3|row 10', edits: [[LV, 'for (let a = a0; a <= m - 3; a++) free.push(a);', 'for (let a = Math.min(a0, 0); a <= m - 3; a++) free.push(a);']] },
+  { id: 'E12 the end\'s two control points are free too (it no longer ends straight)', pattern: 'row 1|row 4', edits: [[LV, 'for (let a = a0; a <= m - 3; a++) free.push(a);', 'for (let a = a0; a <= m - 1; a++) free.push(a);']] },
+  { id: 'E13 a piece with no free point is not refused by name', pattern: 'row 6', edits: [[LV, "if (m - 3 < 2) throw new D.CoreError('LEVEL_TOO_SHORT'", "if (false) throw new D.CoreError('LEVEL_TOO_SHORT'"]] },
+  // the tail
+  { id: 'T1 the default tail is the first tried, whether it keeps the car on the road or not', pattern: 'row 11|row 13|row 14', edits: [[LV, 'const r = tailSolve(F, a0); if (r.ok) return r; }', 'const r = tailSolve(F, a0); if (true) return r; }']] },
+  { id: 'T2 the default tail is searched from the joint (the longest that works: the whole turn reshaped)', pattern: 'row 10|row 11', edits: [[LV, 'for (let a0 = F.m - 3; a0 >= 2; a0--)', 'for (let a0 = 2; a0 <= F.m - 3; a0++)']] },
+  { id: 'T3 the crest bound is dropped (a tail that lifts the car off is taken)', pattern: 'row 11|row 13', edits: [[LV, '(load(j) < Math.min(0, was[j]) - 1e-9 ||', '(false ||']] },
+  { id: 'T4 the chassis bound is dropped (a short pull-up at hundreds of g is taken)', pattern: 'row 14', edits: [[LV, '|| load(j) > Math.max(CH, was[j]) + 1e-9)', '|| false)']] },
+  { id: 'T5 a station the piece already failed counts against the tail (no "no worse than it was")', pattern: 'row 5', edits: [[LV, 'load(j) < Math.min(0, was[j]) - 1e-9', 'load(j) < 0 - 1e-9']] },
+  { id: 'T6 a tail asked for is ignored (the whole piece after the joint is reshaped)', pattern: 'row 12', edits: [[LV, 'while (a0 <= m - 3 && U[a0] < P.length - T - 1e-9) a0++;', 'while (false) a0++;']] },
+  { id: 'T7 a tail that is not a positive number is accepted', pattern: 'row 12', edits: [[LV, "if (typeof T !== 'number' || !Number.isFinite(T) || T <= 0) throw", 'if (false) throw']] },
+  { id: 'T8 the refusal of a short tail does not name the length that works', pattern: 'row 11|row 12', edits: [[LV, '{ needM: best ? best.tailM : null }', '{ needM: null }']] },
+  { id: 'T9 a tail asked for is used even when it lifts the car off', pattern: 'row 11', edits: [[LV, 'if (!r || !r.ok) {', 'if (!r) {']] },
   // Level as Extend
   { id: 'X1 a climb read as a corner is refused again', pattern: 'row 8', edits: [[LV, 'const { climbDeg, ...given } = opts;', "if ('climbDeg' in opts) throw new D.CoreError('CLIMB_AS_CORNER', 'refused'); const given = opts;"]] },
   { id: 'X2 Level as Extend ignores the flipped frame', pattern: 'flipped-frame end', edits: [[LV, 'const sgn = (flip === null ? flipOf(doc) : flip) ? -1 : 1;', 'const sgn = 1;']] },
   { id: 'X3 To floor places a piece that did not reach the floor', pattern: 'row 3', edits: [[LV, 'if (r.converged && r.crest >= 0) return r.doc;', 'return r.doc;']] },
+  { id: 'X4 Level as Extend frees the joint\'s first two points (C1 lost)', pattern: 'row 1', edits: [[LV, 'if (!given) for (let i = 2; i <= m - 3; i++) free.push(i);', 'if (!given) for (let i = 0; i <= m - 3; i++) free.push(i);']] },
 ];
 const FILES = ['core_level.test.js', 'core_level_end.test.js', 'core_close_flip.test.js'];
 const HELPERS = ['core_close_flip_lap.js'];

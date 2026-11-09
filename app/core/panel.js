@@ -1170,7 +1170,7 @@ function mount(root, shell, mountOpts = {}) {
   };
   doc.addEventListener('t180:build-request', onBuildRequest);
   let wasSculpt = false;
-  let shownFor = null, lentFrom = null;   // lentFrom: the selected piece whose values the fields hold (2026-10-15)
+  let shownFor = null, lentFrom = null, shownMsg = null;   // lentFrom: the selected piece whose values the fields hold (2026-10-15); shownMsg: the message last drawn
   const draw = (st) => {
     swingApply.disabled = swingCancel.disabled = !(st.bankProposal && st.bankProposal.base === st.history.present);
     // the exit bank: off on a closed lap with no jump (the core refuses it there: the shift after the stretch would come round to its start)
@@ -1207,6 +1207,10 @@ function mount(root, shell, mountOpts = {}) {
     extendBtn.disabled = jumpBtn.disabled = !!d.closed || !!st.sculpt; straightBtn.disabled = !!st.sculpt; closeBtn.disabled = !!d.closed || !d.pieces.length;
     drawProposal();
     msg.textContent = plainMessage(st.message) || ''; msg.className = st.messageKind === 'ok' ? 'message ok' : 'message';
+    // a NEW refusal is brought into view: with a piece selected the panel is long, and its words were written below the window's edge, so pressing a
+    // command looked like nothing happened (the user, 2026-11-09: "throw a turn or climb into it, and it just disappears")
+    if (st.message && st.message !== shownMsg && st.messageKind !== 'ok' && typeof msg.scrollIntoView === 'function') msg.scrollIntoView({ block: 'nearest' });
+    shownMsg = st.message;
     readout();   // the track changed, so the piece the fields would add changed
     hintNow(); fillLanding();
     if (d !== jumpNoteFor) { jumpNoteFor = d; sayJump(); }   // a new document: the note is empty again (it shows only a refusal's words; the standing hint is the button's tooltip)
