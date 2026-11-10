@@ -155,8 +155,9 @@ const MUTANTS = [
   { id: 'EX10 a refusal past a single-span spike names the comfort length as holding (it does not: the road is not monotone in the span)', pattern: 'row 8:', edits: [[X, 'if (span >= c.X - 1e-9) {', 'if (false) {']] },
   { id: 'EX11 a corner\'s piece is returned unchecked', pattern: 'row 4:', edits: [[T, 'const checked = (doc, opts, out) => { checkBankAsBuilt(doc, plainOf(opts), out); return out; };', 'const checked = (doc, opts, out) => out;']] },
   { id: 'EX12 the corner\'s inner extend checks its eased piece, whose turn is not yet solved (a turning road read as straight)', pattern: 'row (2|3|11):', edits: [[T, 'return extend(doc, { ...o, bankCheck: false });', 'return extend(doc, o);']] },
+  { id: 'EX13 a refusal under the fit floor of the bank names the floor as its mark, which the road as built may still refuse', pattern: 'the limit a refusal states', edits: [[X, 'from at most ${(end - X).toFixed(1)}, got ${F}`), { channel: ch, change: k, needM: need });', 'from at most ${(end - need).toFixed(1)}, got ${F}`), { channel: ch, change: k, needM: need });']] },
 ];
-const FILES = ['core_extra_change.test.js', 'core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js', 'core_width_at_start_f.test.js', 'core_changes.test.js', 'core_additive.test.js'];
+const FILES = ['core_mirror_refusal.test.js', 'core_extra_change.test.js', 'core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js', 'core_width_at_start_f.test.js', 'core_changes.test.js', 'core_additive.test.js'];
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-ramp-mut-'));
   for (const d of ['src', 'tools', 'app/core', 'app/camera', 'app/lib', 'app/validate-ui']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });   // the app folders app/core/panel.js loads

@@ -561,7 +561,9 @@ function changeLists(changes, second, targets, typed, length, Lof0, startV = () 
       if (ch === 'phi' && !spanHolds(ch, prev, T, base, end - F)) {
         const X = secondMinM(ch, prev, T, base), need = Math.min(X, BANK_FIT_FLOOR_M);
         if (end - F >= need - 1e-9) { deferred.push({ k, F, end, what, prev, T, name, X, base }); prev = T; return; }
-        throw Object.assign(new D.CoreError('BAD_SECOND', `${name} ${changeName(ch, k)}, from ${+prev.toPrecision(6)} to ${+T.toPrecision(6)}, needs at least ${need.toFixed(1)} m before ${what} (the built road rounds a shorter one back over the hold): from at most ${(end - need).toFixed(1)}, got ${F}`), { channel: ch, change: k, needM: need });
+        // the limit it states, applied, must be laid (test/core_mirror_refusal.test.js): the fit floor is necessary, not enough, since at 26 m the road as built still decides
+        // (a change the same way on a straight road is rounded back there), so the mark it names is the comfort length's, which is always laid
+        throw Object.assign(new D.CoreError('BAD_SECOND', `${name} ${changeName(ch, k)}, from ${+prev.toPrecision(6)} to ${+T.toPrecision(6)}, needs at least ${need.toFixed(1)} m before ${what} (the built road rounds a shorter one back over the hold${X > need + 1e-9 ? `; ${X.toFixed(1)} m holds` : ''}): from at most ${(end - X).toFixed(1)}, got ${F}`), { channel: ch, change: k, needM: need });
       }
       if (!spanHolds(ch, prev, T, base, end - F)) {
         minM = secondMinM(ch, prev, T, base);
