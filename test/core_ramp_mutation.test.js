@@ -130,22 +130,39 @@ const MUTANTS = [
   // D642, E's 9a1a566f §5: the bank's shortest is read off the built road (extend.js builtMin)
   { id: 'AD11 the built-road search stops where it starts (the change alone at the bar)', pattern: 'D642 3[efg]', edits: [[X, 'while (L2 < top && !ok(L2)) L2 = Math.min(top, L2 + PROBE_STEP_M);', '']] },   // re-anchored (E's 48b2ccf3): the search with no neighbour, in gridMin
   { id: 'AD12 the probe lays the first ramp as the quintic whatever its shape', pattern: 'D642 3[efg]', edits: [[X, '...(shape ? { bankShape: shape } : {})', '']] },
-  { id: 'AD13 a span past the change\'s own minimum is taken without the built road probed', pattern: 'D642 3h', edits: [[X, ' && probePeak(0, gridded(a, b), base, span) <= PROBE_BAR;', ';']] },   // re-anchored (E's 48b2ccf3): the probe is the gridded change's
+  // AMENDED (2026-11-10: the rows that pinned it (core_additive 3h, 3k, 3l) were amended to the rule that a bank change is refused only where the road as built does not hold it; core_extra_change row 8 pins it now)
+  { id: 'AD13 a span past the change\'s own minimum is taken without the built road probed', pattern: 'D642 3h|row 8:', edits: [[X, ' && probePeak(0, gridded(a, b), base, span) <= PROBE_BAR;', ';']] },   // re-anchored (E's 48b2ccf3): the probe is the gridded change's
   // D642, E's 48b2ccf3: a drag reuses the built road (extend.js gridded, gridMin)
   { id: 'AD14 the probes are kept by the exact change, not its grid step (a drag reuses nothing)', pattern: 'D642 3i', edits: [[X, 'const gridded = (a, b) => { const d = (b - a) / (Math.PI / 180); return (Math.sign(d) * Math.ceil(Math.abs(d) / PROBE_GRID_DEG - 1e-9) * PROBE_GRID_DEG * Math.PI) / 180; };', 'const gridded = (a, b) => b - a;']] },
   { id: 'AD15 a new grid step searches from scratch, not from its neighbour', pattern: 'D642 3i', edits: [[X, 'const lo = Math.abs(dG) > Math.abs(one) + 1e-12 ? PROBE_MEMO.get(memoKey(0, dG - one, base, [-2])) : undefined, hi = PROBE_MEMO.get(memoKey(0, dG + one, base, [-2]));', 'const lo = undefined, hi = undefined;']] },
   { id: 'AD16 the grid rounds the change down (a smaller change than asked is probed)', pattern: 'D642 3i', edits: [[X, 'Math.ceil(Math.abs(d) / PROBE_GRID_DEG - 1e-9)', 'Math.floor(Math.abs(d) / PROBE_GRID_DEG + 1e-9)']] },
   // the librarian's ruling on B's §9: the probe's bar is the adapter's own 1.0
-  { id: 'AD17 the bar of the probe is set back to the 0.97 margin', pattern: 'D642 3k', edits: [[X, 'const PROBE_BAR = 1.0, PROBE_STEP_M = 5,', 'const PROBE_BAR = 0.97, PROBE_STEP_M = 5,']] },
+  // AMENDED (2026-11-10: the rows that pinned it (core_additive 3h, 3k, 3l) were amended to the rule that a bank change is refused only where the road as built does not hold it; core_extra_change row 8 pins it now)
+  { id: 'AD17 the bar of the probe is set back to the 0.97 margin', pattern: 'D642 3k|row 8:', edits: [[X, 'const PROBE_BAR = 1.0, PROBE_STEP_M = 5,', 'const PROBE_BAR = 0.97, PROBE_STEP_M = 5,']] },
   // pane E's 72b9faf4 §2: the probe asks past the ceiling too
-  { id: 'AD18 a span at or past the closed-form ceiling is taken unprobed again', pattern: 'D642 3l', edits: [[X, "  if (ch === 'phi' && share > 0) return span >= own - 1e-9 && probePeak(0, gridded(a, b), base, span) <= PROBE_BAR;", "  if (span >= ceil - 1e-9) return true;\n  if (ch === 'phi' && share > 0) return span >= own - 1e-9 && probePeak(0, gridded(a, b), base, span) <= PROBE_BAR;"]] },
+  // AMENDED (2026-11-10: the rows that pinned it (core_additive 3h, 3k, 3l) were amended to the rule that a bank change is refused only where the road as built does not hold it; core_extra_change row 8 pins it now)
+  { id: 'AD18 a span at or past the closed-form ceiling is taken unprobed again', pattern: 'D642 3l|row 8:', edits: [[X, "  if (ch === 'phi' && share > 0) return span >= own - 1e-9 && probePeak(0, gridded(a, b), base, span) <= PROBE_BAR;", "  if (span >= ceil - 1e-9) return true;\n  if (ch === 'phi' && share > 0) return span >= own - 1e-9 && probePeak(0, gridded(a, b), base, span) <= PROBE_BAR;"]] },
+  // 2026-11-10, AN EXTRA CHANGE IS REFUSED ONLY WHERE THE ROAD AS BUILT CANNOT CARRY IT (src/core/extend.js CHANGE_FLOOR_M, floorOf, bankAsBuilt; test/core_extra_change.test.js)
+  { id: 'EX1 the width, cup and edges are held to their old comfort length again', pattern: 'row [567]:|L139 5a', edits: [[X, 'const floorOf = (ch, a, b) => Math.min(CHANGE_FLOOR_M[ch], comfortOf(ch, Math.abs(b - a)));', 'const floorOf = (ch, a, b) => comfortOf(ch, Math.abs(b - a));']] },
+  { id: 'EX2 the comfort length no longer lays a tiny change (the measured floor alone)', pattern: 'L139 5a', edits: [[X, 'const floorOf = (ch, a, b) => Math.min(CHANGE_FLOOR_M[ch], comfortOf(ch, Math.abs(b - a)));', 'const floorOf = (ch, a, b) => CHANGE_FLOOR_M[ch];']] },
+  { id: 'EX3 the width\'s floor is 30 m, under where its fit overshoots', pattern: 'row [57]:', edits: [[X, '{ w: 40, c: 26, e: 26, er: 26 }', '{ w: 30, c: 26, e: 26, er: 26 }']] },
+  { id: 'EX4 the cup\'s floor is 20 m, under where its fit moves the road before the mark', pattern: 'row [57]:', edits: [[X, '{ w: 40, c: 26, e: 26, er: 26 }', '{ w: 40, c: 20, e: 26, er: 26 }']] },
+  { id: 'EX5 a bank change the comfort length does not pass is refused again, not read on the road as built', pattern: 'row [23]:', edits: [[X, "if (end - F >= need - 1e-9) { deferred.push({ k, F, end, what, prev, T, name, X, base }); prev = T; return; }", 'if (false) { prev = T; return; }']] },
+  { id: 'EX6 the bank has no fit floor (a 0.5 m change is left to the built road)', pattern: 'row 10:', edits: [[X, 'need = Math.min(X, BANK_FIT_FLOOR_M);', 'need = 0;']] },
+  { id: 'EX7 the bank change is not checked on the road as built', pattern: 'row [48]:|L139 5b phi', edits: [[X, 'if (opts.bankCheck !== false) bankAsBuilt(doc, laid, deferred);', '']] },
+  { id: 'EX8 the hold before the mark is not read (only the change\'s span and its end)', pattern: 'row [48]:|L139 5b phi', edits: [[X, 'if (s <= c.F) ok = Math.abs(b - v(s)) <= BUILT_TOL;', 'if (s <= c.F) ok = true;']] },
+  { id: 'EX9 the built road may leave the document by 5°, not 0.5°', pattern: 'row [48]:|L139 5b phi', edits: [[X, 'const BUILT_TOL = (0.5 * Math.PI) / 180;', 'const BUILT_TOL = (5 * Math.PI) / 180;']] },
+  { id: 'EX10 a refusal past a single-span spike names the comfort length as holding (it does not: the road is not monotone in the span)', pattern: 'row 8:', edits: [[X, 'if (span >= c.X - 1e-9) {', 'if (false) {']] },
+  { id: 'EX11 a corner\'s piece is returned unchecked', pattern: 'row 4:', edits: [[T, 'const checked = (doc, opts, out) => { checkBankAsBuilt(doc, plainOf(opts), out); return out; };', 'const checked = (doc, opts, out) => out;']] },
+  { id: 'EX12 the corner\'s inner extend checks its eased piece, whose turn is not yet solved (a turning road read as straight)', pattern: 'row (2|3|11):', edits: [[T, 'return extend(doc, { ...o, bankCheck: false });', 'return extend(doc, o);']] },
 ];
-const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js', 'core_width_at_start_f.test.js', 'core_changes.test.js', 'core_additive.test.js'];
+const FILES = ['core_extra_change.test.js', 'core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js', 'core_width_at_start_f.test.js', 'core_changes.test.js', 'core_additive.test.js'];
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-ramp-mut-'));
   for (const d of ['src', 'tools', 'app/core', 'app/camera', 'app/lib', 'app/validate-ui']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });   // the app folders app/core/panel.js loads
   fs.mkdirSync(path.join(dir, 'test')); for (const f of FILES) fs.copyFileSync(path.join(__dirname, f), path.join(dir, 'test', f));   // D459: the C2 rows too; D482: the banded fit's; bank the bend's
   fs.mkdirSync(path.join(dir, 'test', 'fixtures')); for (const f of fs.readdirSync(path.join(__dirname, 'fixtures')).filter((x) => x.endsWith('.core2.json'))) fs.copyFileSync(path.join(__dirname, 'fixtures', f), path.join(dir, 'test', 'fixtures', f));
+  fs.copyFileSync(path.join(__dirname, 'fixtures', 'extra-bank-short-2026-11-10.t180track'), path.join(dir, 'test', 'fixtures', 'extra-bank-short-2026-11-10.t180track'));   // core_extra_change's: his track
   return dir;
 }
 function runTests(dir, pattern) {

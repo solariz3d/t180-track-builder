@@ -352,6 +352,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     return entry;   // the caller puts it in the SAME state change as the preview (a panel drawn for the preview must already see its check)
   }
   const doc = () => st.history.present;
+  const refusalsOf = { doc: null, map: new Map() };   // (2026-11-10) changeRefusal's kept answers, for one document
   // 2026-10-15: THE CLOSE OFF THE THREAD (closeRunner): the job being worked out for closeBest, { job }, and its stop
   let closeJob = null;
   // the open track's reds as the page's live checker found them, per document (app/validate-ui/index.js noteCheck): a press reuses them instead of checking
@@ -753,6 +754,21 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     // D642 (E's review of d87ba99: the panel's fit check ran secondMinM's full search, a dozen probe roads, on every drag move): whether a change of `span` metres holds, as
     // secondMinM would say, at most ONE probe (extend.js spanHolds, what changeLists asks). null where this core does not export it: the panel then compares with secondMinM
     spanHolds: (ch, a, b, base, span) => (typeof EXT.spanHolds === 'function' ? EXT.spanHolds(ch, a, b, base, span) : null),
+    // (2026-11-10) a bank change its comfort length does not pass is decided on the road as built, which only laying it can tell (extend.js bankAsBuilt): the refusal
+    // of change k of field ch when these options are laid now, { needM, built (the built road refused it, not its floor), message }, or null when that change is laid
+    // k null: any change of that field. The answers are kept for the document and the options (the panel asks the same options from its readout, ghost and handles)
+    changeRefusal: (opts, ch, k) => {
+      const d = doc(); let key = null; try { key = JSON.stringify([opts, ch, k]); } catch (e) { /* not kept */ }
+      if (refusalsOf.doc !== d) { refusalsOf.doc = d; refusalsOf.map.clear(); }
+      if (key !== null && refusalsOf.map.has(key)) return refusalsOf.map.get(key);
+      let out = null;
+      try { TB.extendCorner(d, opts); } catch (e) {
+        if (e && e.code === 'BAD_SECOND' && e.channel === ch && (k === null || e.change === k)) out = { needM: e.needM, built: !!e.built, longer: !!e.longer, message: e.message };
+      }
+      if (key !== null) { if (refusalsOf.map.size >= 16) refusalsOf.map.delete(refusalsOf.map.keys().next().value); refusalsOf.map.set(key, out); }
+      return out;
+    },
+    bankFitFloorM: () => (Number.isFinite(EXT.BANK_FIT_FLOOR_M) ? EXT.BANK_FIT_FLOOR_M : null),
     secondFloorM: () => (Number.isFinite(EXT.SECOND_FLOOR_M) ? EXT.SECOND_FLOOR_M : null),
     cornerMinM: (d, o) => (typeof TB.cornerMinM === 'function' ? TB.cornerMinM(d, o) : null),
     cornerChangeMinM: (d, o, deg, baseDeg) => (typeof TB.cornerChangeMinM === 'function' ? TB.cornerChangeMinM(d, o, deg, baseDeg) : null),   // L139 R1 (pane B): a later corner's shortest, by its angle; D642: and the first corner's degrees under it

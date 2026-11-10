@@ -183,7 +183,7 @@ const EARLY_TITLE = Object.freeze({
 // change, ending at a climb rate of 0 (a steady pitch, level only when it ends at pitch 0).
 // `head`: the head's end values as coreshell headState gives them (phi in rad; c, e, er in degrees), which a cross-section ramp at the start is measured from;
 // without one (an empty track, or a caller that has none) the change is measured from 0
-function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null, changes = null, secondMinM = null, cornerChangeMinM = null, secondFloorM = null }) {
+function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null, changes = null, secondMinM = null, cornerChangeMinM = null, secondFloorM = null, bankFloorM = null, bankRefusal = null }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
   const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup), corner = turnAs === 'corner' && t !== null && t !== 0, climbCorner = turnAs === 'corner' && c !== null && c !== 0;
   if (turnAs !== 'rate' && turnAs !== 'corner') throw new Error(`BAD_TURN_AS: the turn is read as 'rate' or 'corner', got ${turnAs}`);
@@ -221,6 +221,7 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
     if (ch === 'phi') out.bankShape = startShapeOf(transition.phi);
     else (out.startShapes = out.startShapes || {})[ch] = startShapeOf(transition[ch]);
   }
+  let bankComfort = null; const items0 = { bank: ((changes && changes.bank) || []).map((x) => ({ from: num(x.from) })) };   // (2026-11-10) the bank's comfort-clamped marks, asked for only when the floor's are refused
   // THE LATER CHANGES (L139; L135 the bank's): each field's list in the core's units, each change with its own from (B's names, 2026-11-05):
   // changes: { kh|kv|phi|w|c|e|er: [{ from, target }, …] }, and as corners changes.turnDeg / climbDeg: [{ from, deg }, …] after the first corner. Only for a field with a
   // target of its own; a then left blank is no change. NOT clamped: the core refuses a mark out of range, or a segment under its minimum, by name (BAD_SECOND, naming the
@@ -243,12 +244,20 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
     const base = baseOfRamp(transition[ch], targets[ch], rampStart(empty ? targets : null, head, ch), out.length), minM = base && typeof secondMinM === 'function' ? (c, a, b) => secondMinM(c, a, b, base) : secondMinM;
     // Way 1: the extra bank behind the piece's first extra turn (its list was laid above: turn comes before bank in SECOND_FIELDS)
     const turnList = f === 'bank' ? later.turnDeg : null, lead = turnList && turnList.length ? { firstAt: turnList[0].from - EXTRA_BANK_LEAD_SHARE * out.length, floor: Number.isFinite(secondFloorM) && secondFloorM > 0 ? secondFloorM : DEFAULT_FLOOR_M } : {};
-    const froms = changeFroms(out.length, list, targets[ch], ch, { lo: transition[ch] || 0, minM, ...lead });
+    // (2026-11-10) A BANK CHANGE IS LAID WHERE THE ROAD AS BUILT CARRIES IT (src/core/extend.js bankAsBuilt): its default mark is first clamped only by the bank's fit floor
+    // (bankFloorM, 26 m), so a mark at his 47.5 m on a 125 m piece stays there while the extra bank is dragged; when the core then refuses it on the road as built (bankRefusal,
+    // below, once the options are whole), the default marks fall back to the comfort length's clamp, which always lays (a straight road's end, as before)
+    const floored = ch === 'phi' && Number.isFinite(bankFloorM) && typeof minM === 'function' ? (c, a, b) => Math.min(bankFloorM, minM(c, a, b)) : minM;
+    const froms = changeFroms(out.length, list, targets[ch], ch, { lo: transition[ch] || 0, minM: floored, ...lead });
     later[ch] = list.map((x, k) => ({ from: froms[k], target: x.target }));
+    if (floored !== minM) bankComfort = () => changeFroms(out.length, list, targets[ch], ch, { lo: transition[ch] || 0, minM, ...lead });
   }
   if (Object.keys(later).length) out.changes = later;
   if (Object.keys(transition).length) out.transition = transition;
   if (empty && Object.keys(targets).length) out.first = { ...targets };   // on an empty track the typed values are the first piece's start
+  if (bankComfort && typeof bankRefusal === 'function' && items0.bank.some((x) => x.from === null) && bankRefusal(out)) {
+    const froms = bankComfort(); out.changes = { ...out.changes, phi: out.changes.phi.map((x, k) => ({ ...x, from: froms[k] })) };
+  }
   return out;
 }
 /** A cup angle as the readout shows it: the bank cell's rounding (one decimal, half away from zero), no sign on a depth. */
@@ -476,7 +485,8 @@ function mount(root, shell, mountOpts = {}) {
   const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), edgeR: rightTarget(), start: asTyped('start'), tube: asTyped('tube'),
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
     empty: !shell.getState().history.present.pieces.length, turnAs: turnAs.value, head: shell.headState(),
-    changes: secChanges(), secondMinM: shellMinM, cornerChangeMinM: shellCornerMin, secondFloorM: secondFloor() });
+    changes: secChanges(), secondMinM: shellMinM, cornerChangeMinM: shellCornerMin, secondFloorM: secondFloor(),
+    bankFloorM: typeof shell.bankFitFloorM === 'function' ? shell.bankFitFloorM() : null, bankRefusal: (o) => (typeof shell.changeRefusal === 'function' ? !!shell.changeRefusal(o, 'phi', null) : false) });
   // (the user, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
   // document it made; when Undo steps from that document back to the one it was made from, the fields are put back (the length, every field as typed or left as
   // shown, the at-start ticks), so Extend again rebuilds the same piece. Redo, a brush and open show the head, as before
@@ -1288,7 +1298,12 @@ function mount(root, shell, mountOpts = {}) {
     const prevOf = (k) => (k === 0 ? first : arr[k - 1].target), spanOf = (k) => (k + 1 < arr.length ? arr[k + 1].from : L) - arr[k].from;
     const memo = new Array(arr.length), min = (k) => (memo[k] === undefined ? (memo[k] = corner ? cornerMin(o, Number(arr[k].deg), first) : secondMinOf(mm, key, prevOf(k), arr[k].target)) : memo[k]);
     const holds = (k) => {
-      if (!corner && typeof shell.spanHolds === 'function') { const b = shell.spanHolds(key, prevOf(k), arr[k].target, baseFor(o, key), spanOf(k)); if (typeof b === 'boolean') return b; }
+      if (!corner && typeof shell.spanHolds === 'function') {
+        const b = shell.spanHolds(key, prevOf(k), arr[k].target, baseFor(o, key), spanOf(k));
+        // (2026-11-10) a bank change under its comfort length is laid where the road AS BUILT holds and reaches it (where the road turns, or where the change turns the bank back), so the core is asked
+        if (b === false && key === 'phi' && typeof shell.changeRefusal === 'function') return !shell.changeRefusal(o, key, k);
+        if (typeof b === 'boolean') return b;
+      }
       return spanOf(k) >= min(k) - 1e-6;
     };
     return { key, corner, arr, first, lo0: (o.transition && o.transition[key]) || 0, min, holds, L };
@@ -1393,8 +1408,9 @@ function mount(root, shell, mountOpts = {}) {
   // amount is held at its edge, the handle's box says where it is held, what the drag asks, the stretch that asks needs and has, and why. '' when the handle is not
   // the one dragged, or its drag is not held. The stretch is the first one that does not hold with the asked amount (its own, or the next change's); its shortest is a
   // search of the built road (a few ms), asked once for each amount shown
-  const HELD_WHY = { turn: 'it has no room to ease in and out', climb: 'it has no room to ease in and out', bank: 'it rolls faster than it can be ridden smoothly',
-    width: 'it widens or narrows faster than it can be ridden smoothly', cup: 'its cup changes faster than it can be ridden smoothly' };
+  // (2026-11-10) the bank, width and cup are held only where the road as built cannot carry the change; the bank's words, when the built road refused it, are its own (below)
+  const HELD_WHY = { turn: 'it has no room to ease in and out', climb: 'it has no room to ease in and out', bank: 'the road as built rounds it back over the bank it held',
+    width: 'the road as built overshoots it', cup: 'the road as built moves the cup before its mark' };
   const heldWhy = (kind) => {
     const d = exDrag, f = exFieldOf(kind); if (!d || d.kind !== kind || !d.held || !f) return '';
     const want = show(d.held.want); if (d.why && d.why.want === want) return d.why.text;
@@ -1404,7 +1420,10 @@ function mount(root, shell, mountOpts = {}) {
       const S = secSegs(f), k = S.arr.findIndex((c, j) => !S.holds(j));
       if (k >= 0) {
         const has = (k + 1 < S.arr.length ? S.arr[k + 1].from : S.L) - S.arr[k].from, u = secUnit(f), mine = secLive(f).indexOf(d.x);
-        text = `held at ${show(d.held.at)}${u}: ${want}${u} needs ${S.min(k).toFixed(1)} m from ${k === mine ? 'its mark' : `change ${k + 1}'s mark`}, it has ${has.toFixed(1)} m (shorter, ${HELD_WHY[f]})`;
+        const where = k === mine ? 'its mark' : `change ${k + 1}'s mark`, r = S.key === 'phi' && typeof shell.changeRefusal === 'function' ? shell.changeRefusal(opts(), 'phi', k) : null;
+        text = r && r.built
+          ? `held at ${show(d.held.at)}${u}: the road as built rounds ${want}${u} back over the bank it held in the ${has.toFixed(1)} m from ${where}; ${r.needM.toFixed(1)} m ${r.longer ? 'still ' : ''}holds`
+          : `held at ${show(d.held.at)}${u}: ${want}${u} needs ${(r ? r.needM : S.min(k)).toFixed(1)} m from ${where}, it has ${has.toFixed(1)} m (shorter, ${HELD_WHY[f]})`;
       }
     } finally { d.x.then.value = was; }
     d.why = { want, text }; return text;

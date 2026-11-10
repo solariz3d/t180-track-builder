@@ -238,8 +238,13 @@ test('L135 C13: on a 300 m piece, 30° then 0, the default from is clamped to 30
   const n = p.shell.getState().history.present.pieces.length; p.extend();
   assert.equal(p.shell.getState().history.present.pieces.length, n + 1, `the clamped default is laid by the core (${msgText(p)})`);
   p.shell.undo();
-  p.set(p.fromBank(), Math.round((clamp + 0.01) * 100) / 100);   // 1 cm past the clamp: the core's own minimum refuses it
-  assert.match(msgText(p), new RegExp(`no preview of this piece: .*${min.toFixed(1).replace('.', '\\.')}`), `1 cm past the clamp the core refuses, naming its minimum (${msgText(p)})`);
+  // AMENDED 2026-11-10 (rule changed: a bank change under its comfort length is refused only where the road as built rounds it back over its hold, or under the bank's fit
+  // floor, 26 m; the user, 2026-11-10, on the extra bank: "now the same thing happens when I want to bank the turn that u fixed"). Was: 1 cm past the clamp the core refuses,
+  // naming the comfort length. Now this piece's built bank holds there, so its preview is built; a from that leaves under 26 m is refused, naming the floor
+  p.set(p.fromBank(), Math.round((clamp + 0.01) * 100) / 100);
+  assert.doesNotMatch(msgText(p), /no preview of this piece/, `1 cm past the clamp the road as built holds it: the preview is built (${msgText(p)})`);
+  p.set(p.fromBank(), 274.2);
+  assert.match(msgText(p), /no preview of this piece: .*26\.0 m/, `25.8 m before the end: refused, naming the fit floor (${msgText(p)})`);
   p.set(p.fromBank(), 255);
   assert.equal(p.fromBank().value, '255', 'a typed from stays as typed'); assert.equal(p.opts().changes.phi[0].from, 255, 'and is sent as typed (the core refuses it by name)');
   p.panel.unmount();

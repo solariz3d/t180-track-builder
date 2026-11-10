@@ -31,6 +31,13 @@ function builtTurnPeak(d, a, b, pitch = false) {
   const atS = (s) => { let lo = 0, hi = H.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (H[m].s <= s) lo = m; else hi = m; } const f = (s - H[lo].s) / (H[hi].s - H[lo].s); return H[lo].v + f * (H[hi].v - H[lo].v); };
   let m = 0; for (let s = a; s <= b; s += 0.5) m = Math.max(m, Math.abs(atS(s + 1) - 2 * atS(s) + atS(s - 1))); return m / BAR;
 }
+/** AMENDED 2026-11-10 (helper): the built bank of the piece at index i (the adapter's, bankPlan) against its document from 250 m before the mark F to the change's end E:
+ *  { hold: the most it leaves the document before F, reach: how far it is from the document at E } in degrees. A bank change is now refused only where these pass 0.5°. */
+function builtBankOf(d, i, F, E) {
+  const A = require('../src/core/adapter.js'), plan = A.bankPlan(d), P = d.pieces[i], v = (t) => D.channelValue(P, 'phi', t), b = (t) => (plan[i].fn ? plan[i].fn(t) : v(t));
+  let hold = 0; for (let t = Math.max(0, F - 250); t <= F; t += 0.5) hold = Math.max(hold, Math.abs(b(t) - v(t)));
+  return { hold: hold / (Math.PI / 180), reach: Math.abs(b(E) - v(E)) / (Math.PI / 180) };
+}
 /** The built road's roll acceleration (2 m second differences of the adapter's roll), peak over [a, b] in track metres, ÷ the bar (core_changes.test.js builtRollPeak). */
 function builtRollPeak(d, a, b) {
   const S = A.toPath(d).path.samples, r = (s) => { let lo = 0, hi = S.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S[m].s <= s) lo = m; else hi = m; } return S[lo].roll; };
@@ -104,7 +111,10 @@ test('D642 3d: his bank 88.45° over 1,000 m with an extra back to −30° at th
   const make = (L2) => () => extend(flat(), { length: 1000, targets: { phi: 88.45 * DEG }, changes: { phi: [{ from: 1000 - L2, target: -30 * DEG }] } });
   // AMENDED (the librarian's ruling on B's §9, by name: the probe's bar is the adapter's 1.0, and the shortest is the built-road search's, on whole metres: the span a metre
   // under it is the one the search found refused; 0.2 m under it now holds)
-  assert.throws(make(raw - 1), (e) => e.code === 'BAD_SECOND' && e.message.includes(raw.toFixed(1)), `refused a metre under ${raw} m, naming it`);
+  // AMENDED 2026-11-10 (rule changed: under its comfort length a bank change is refused only where the road as built rounds it back over its hold, the user, 2026-11-10, on the extra bank: "now the same thing happens when I want to bank the turn that u fixed"). Was: refused a
+  // metre under it. Now laid there, its built bank holding and reaching within 0.5°; at the comfort length the built roll is still under the bar (below)
+  const under = make(raw - 1)(), ub = builtBankOf(under, 1, 1000 - (raw - 1), 1000);
+  assert.ok(ub.hold <= 0.5 && ub.reach <= 0.5, `a metre under ${raw} m: laid, its built bank ${ub.hold.toFixed(3)}° off before the mark, ${ub.reach.toFixed(3)}° at the end`);
   const d = extend(make(min)(), { length: 200 }), pk = builtRollPeak(d, 1000 + 20, 2000 + 20);
   assert.ok(pk <= 1.05, `the built roll reads ${pk.toFixed(3)} × the bar (extra over its shortest, ${min} m)`);
 });
@@ -156,12 +166,15 @@ test('D642 3g: the bank\'s shortest under a moving first ramp is no longer than 
 });
 // ── 3h. and the other side of tight: a span past the change's own minimum that the built road cannot carry is still refused by name (his picture, the panel's rounded bank:
 // at 262 m, its own 256.2 m plus 6, the road reads well over the bar), naming a shortest that does hold
-test('D642 3h: a span the built road cannot carry, past the change\'s own minimum, is refused by name, and the shortest it names holds', () => {
+// AMENDED 2026-11-10 (rule changed: a span is refused only where the road as built does not hold and reach the change, no longer where its roll accelerates over the bar, the user, 2026-11-10, on the extra bank: "now the same thing happens when I want to bank the turn that u fixed").
+// Was: 262 m refused (well over the bar), naming a shortest that held under it. Now: 262 m is laid, its built bank holding and reaching within 0.5°; the comfort length's
+// ceiling still builds under the bar
+test('D642 3h: a span past the change\'s own minimum whose roll is over the bar is laid where the road as built holds and reaches it; the ceiling still builds under the bar', () => {
   const own = X.secondMinM('phi', 66.14 * DEG, 0), make = (L2) => () => extend(flat(), { length: 750, targets: { phi: 66.14 * DEG }, bankShape: 'rounded', changes: { phi: [{ from: 750 - L2, target: 0 }] } });
-  let named = null;
-  assert.throws(make(Math.ceil(own) + 6), (e) => { named = Number((e.message.match(/needs at least ([\d.]+) m/) || [])[1]); return e.code === 'BAD_SECOND' && named > Math.ceil(own) + 6; }, `refused at ${Math.ceil(own) + 6} m`);
-  const d = extend(make(Math.ceil(named * 10) / 10)(), { length: 200 }), pk = builtRollPeak(d, 1000 + 750 - named - 20, 1000 + 750 + 20);
-  assert.ok(pk <= 1.05, `at the named ${named} m the built roll reads ${pk.toFixed(3)} × the bar`);
+  const L2 = Math.ceil(own) + 6, at = make(L2)(), bb = builtBankOf(at, 1, 750 - L2, 750);
+  assert.ok(bb.hold <= 0.5 && bb.reach <= 0.5, `${L2} m: laid, its built bank ${bb.hold.toFixed(3)}° off before the mark, ${bb.reach.toFixed(3)}° at the end`);
+  const ceil = X.secondMinM('phi', 66.14 * DEG, 0, { step: 66.14 * DEG, length: 750 }), d = extend(make(Math.ceil(ceil * 10) / 10)(), { length: 200 }), pk = builtRollPeak(d, 1000 + 750 - ceil - 20, 1000 + 750 + 20);
+  assert.ok(pk <= 1.05, `at the ceiling, ${ceil.toFixed(1)} m, the built roll reads ${pk.toFixed(3)} × the bar`);
 });
 // ── 3i. (pane E's review 48b2ccf3) A DRAG REUSES THE BUILT ROAD: dragging his bank back asked the core's shortest 13 times a move and built 12-18 probe roads each move
 // (106 ms a move), because every target was a new key. The probes are now kept by a 1° grid of the change, rounded up, and a new step starts from its neighbour's answer.
@@ -187,21 +200,24 @@ test('D642 3i: a drag of the extra bank, 40 moves of 0.5° with 13 asks a move, 
 // ── 3k. (the librarian's ruling on pane B's §9) THE PROBE'S BAR IS THE ADAPTER'S OWN, 1.0 (src/core/adapter.js BANK_BAR: the bar its rounding brings every corner under), not
 // pane B's 0.97 margin, which sat on the ~0.97 plateau his rounded bank keeps whatever the span. Of E's 15 marks of his p2 the panel kept and the core refused (a99775ef §1),
 // the bar alone clears 14; 521 (a span of 479 m, a single-span spike of the bank rounding: 1.044 x on the built path) stays refused by name, for the panel's walk (pane C).
-test('D642 3k: his p2\'s marks that the bar of 1.0 clears are laid (441-525 but 521), and 521, a single-span spike, is still refused by name', () => {
-  const at = (F) => () => TB.extendCorner(flat(), { ...HIS_P2, changes: { ...HIS_P2.changes, phi: [{ from: F, target: -88.45 * DEG }] } });
-  for (const F of [441, 442, 445, 462, 482, 483, 484, 485, 501, 503, 504, 522, 523, 525]) assert.doesNotThrow(at(F), `the mark at ${F} is laid`);
-  assert.throws(at(521), (e) => e.code === 'BAD_SECOND', 'the mark at 521 (a span of 479 m) is refused by name');
+// AMENDED 2026-11-10 (rule changed: the bar no longer refuses; the road as built does, the user, 2026-11-10, on the extra bank: "now the same thing happens when I want to bank the turn that u fixed"). Was: 521, a single-span spike of the bank's rounding at 1.044 × the
+// bar, refused by name. Now it is laid with the others, its built bank holding and reaching within 0.5°
+test('D642 3k: his p2\'s marks 441-525 are all laid, 521 (a single-span spike of the bar) too, each holding and reaching as built', () => {
+  const at = (F) => TB.extendCorner(flat(), { ...HIS_P2, changes: { ...HIS_P2.changes, phi: [{ from: F, target: -88.45 * DEG }] } });
+  for (const F of [441, 442, 445, 462, 482, 483, 484, 485, 501, 503, 504, 521, 522, 523, 525]) { const bb = builtBankOf(at(F), 1, F, HIS_P2.length); assert.ok(bb.hold <= 0.5 && bb.reach <= 0.5, `the mark at ${F}: ${bb.hold.toFixed(3)}°, ${bb.reach.toFixed(3)}°`); }
 });
 // ── 3l. (pane E's review 72b9faf4 §2) THE PROBE ASKS PAST THE CEILING TOO: spanHolds took any span at or past the closed-form ceiling without a probe, and on the rounded ramp
 // single-metre spikes sit past it: his picture's 66.14° back to 0 laid a span of 373 m at 1.059 x the bar and 331 at 1.003. Every from of his picture's mark slid 360-470 (a span
 // of 390-280 m) that the core lays builds under the bar on the built path (× 1.05).
-test('D642 3l: every from of his picture\'s mark from 360 to 470 that the core lays builds under the bar (× 1.05)', () => {
-  const over = [];
+// AMENDED 2026-11-10 (rule changed, the user, 2026-11-10, on the extra bank: "now the same thing happens when I want to bank the turn that u fixed"): the rule a laid change keeps is no longer the bar but the road as built: it holds the bank before its mark and reaches
+// its value. Was: every from laid builds under the bar (× 1.05)
+test('D642 3l: every from of his picture\'s mark from 360 to 470 that the core lays holds and reaches its bank on the road as built (within 0.5°)', () => {
+  const off = [];
   for (let F = 360; F <= 470; F++) {
     let d;
     try { d = extend(flat(), { length: 750, targets: { phi: 66.14 * DEG }, bankShape: 'rounded', changes: { phi: [{ from: F, target: 0 }] } }); } catch (e) { if (e.code !== 'BAD_SECOND') throw e; continue; }
-    const pk = builtRollPeak(extend(d, { length: 200 }), 1000 + F - 20, 1000 + 750 + 20);
-    if (pk > 1.05) over.push(`${F} (a span of ${750 - F} m): ${pk.toFixed(3)}`);
+    const bb = builtBankOf(d, 1, F, 750);
+    if (bb.hold > 0.5 || bb.reach > 0.5) off.push(`${F}: ${bb.hold.toFixed(3)}°, ${bb.reach.toFixed(3)}°`);
   }
-  assert.deepEqual(over, [], `laid over the bar: ${over.join('; ')}`);
+  assert.deepEqual(off, [], `laid though the built road does not hold or reach: ${off.join('; ')}`);
 });

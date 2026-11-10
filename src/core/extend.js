@@ -343,8 +343,25 @@ const changeName = (ch, k) => `change ${k + 1} (its ${NTH[k + 1] || `${k + 2}th`
 const ROUTE_BAR = 29.4 / (10 * 170 * 170);
 /** The floor every change is held to, one knot span (document.js KNOT_M; the panel's AT_START_M): the width, cup and edges' minimum, the turn's and climb's least, and the panel's reveal floor. */
 const SECOND_FLOOR_M = 20;
-/** The wheel the cross-section's ride is read at (test/core_joint_c2.test.js, a wheel 8.4 m from the centre). */
+/**
+ * THE FLOOR OF AN EXTRA WIDTH, CUP OR EDGE CHANGE, measured on the BUILT road (the user, 2026-11-10, after the extra turn was freed: "now the same thing happens when I want
+ * to bank the turn that u fixed"; the extra changes had been held to the route's comfort length, smooth all around, where a first change over the whole piece is not). The
+ * adapter builds these as the document lays them, so the floor is the fit's: the shortest span from which every span up to 60 m longer reaches the change's value at its end,
+ * holds the value before its mark, and never leaves the two, within 0.05 m (the width) and 0.5° (the cup, the edges), on a 300 m and a 1,000 m piece, straight or turning:
+ * the width 40 m for every change measured (1 to 25 m; shorter, the fit overshoots the target by up to 0.2 m at 37 to 39 m), the cup and the edges 26 m (20 m for a 1° change;
+ * shorter, the fit moves the road before the mark, 0.15° a degree of change at 25 m). Neither grows with the change. test/core_extra_change.test.js row 6 re-reads them.
+ */
+const CHANGE_FLOOR_M = Object.freeze({ w: 40, c: 26, e: 26, er: 26 });
+/** The width's, cup's and edges' comfort length before 2026-11-10 (the change's own peak under the route's bar, a cube: the smooth-all-around law), at least
+ *  SECOND_FLOOR_M. A change it passes is never refused: the floor is the shorter of the two, so a tiny change keeps today's 20 m. */
 const WHEEL_M = 8.4;
+const comfortOf = (ch, d) => Math.max(SECOND_FLOOR_M, ch === 'w' ? Math.cbrt((30 * d) / (0.9 * ROUTE_BAR)) : Math.cbrt((60 * WHEEL_M * d * (Math.PI / 180)) / ROUTE_BAR));
+const floorOf = (ch, a, b) => Math.min(CHANGE_FLOOR_M[ch], comfortOf(ch, Math.abs(b - a)));
+/** The bank's fit has the same floor as the cup's, read on the document (it is a C2 channel too): 26 m (20 m for 1°, 23 m for 2°; shorter, the fit moves the bank before the
+ *  mark, 0.15° a degree of change at 25 m). Its built road is read apart (bankAsBuilt). */
+const BANK_FIT_FLOOR_M = 26;
+/** How far the built bank may leave the document and still be the change asked for (the floors' measure, and the old K = 15 one's): 0.5°. */
+const BUILT_TOL = (0.5 * Math.PI) / 180;
 /**
  * The shortest a change of `ch` from `a` to `b` may be laid over, in metres (pane E's registration, Amendment A, fc21dcdd; the panel reads it and copies no number):
  * the bank K·√(the change in degrees), K = SECOND_MIN_K (measured, L135 row 6); the turn and the climb max(20, 3·|Δ| / ROUTE_BAR), the panel's own at-start rule
@@ -357,6 +374,7 @@ const WHEEL_M = 8.4;
 function secondMinM(ch, a, b, base = null) {
   if (!CHANGE_CHANNELS.includes(ch)) throw new D.CoreError('BAD_TARGET', `a change moves ${CHANGE_CHANNELS.join(', ')}, got "${ch}"`);
   if (!Number.isFinite(a) || !Number.isFinite(b)) throw new D.CoreError('BAD_TARGET', `a change's minimum needs two finite values, got ${a} and ${b}`);
+  if (CHANGE_FLOOR_M[ch] !== undefined) return floorOf(ch, a, b);   // the width, cup and edges: their measured floor (or the comfort length, where shorter), whatever the first ramp under it
   const { own, share, m } = ceilOf(ch, a, b, base);
   // TIGHT, FOR THE BANK (pane E's tip review 9a1a566f §5): the share below, sized on the worst picture, is a ceiling, not the minimum: it refused his own p2 bank-back (88.45° to
   // −88.45° from 500 on 1,000 m: 592.5 m asked, 500 there) though the built road carried it at 0.955 × the bar. So the bank's shortest under a moving first ramp is read off
@@ -381,6 +399,7 @@ function ceilOf(ch, a, b, base) {
 /** Whether a change of `span` metres holds, as secondMinM would say, without searching for the shortest: at or past the ceiling it does; for the bank under a moving
  *  first ramp, between its own minimum and the ceiling, ONE probe of the built road at that span decides (changeLists asks this on every extend, a drag's included). */
 function spanHolds(ch, a, b, base, span) {
+  if (CHANGE_FLOOR_M[ch] !== undefined) return span >= floorOf(ch, a, b) - 1e-9;
   const { own, share, m } = ceilOf(ch, a, b, base), ceil = ch === 'phi' ? m : Math.max(SECOND_FLOOR_M, m);
   // the bank under a moving first ramp is probed at EVERY span past its own minimum, the ceiling's and past it included (pane E's review 72b9faf4 §2: on the rounded ramp
   // single-metre spikes sit past the closed-form ceiling, and taking those spans unprobed laid his picture's 66.14° back to 0 at a span of 373 m at 1.059 x the bar)
@@ -469,12 +488,10 @@ function probeBase(base, shape, HOLD) {
   return PROBE_BASES.get(key);
 }
 /** A change's own shortest for a step d, and the power its peak falls with its length (the peak is under the bar when (own / L)^p ≤ 1): the bank a square, the turn and
- *  climb linear, the width, cup and edges a cube (secondMinM's sources). Not floored. */
+ *  climb linear (secondMinM's sources). Not floored. The width, cup and edges have no law: their floor is measured (CHANGE_FLOOR_M). */
 function minLaw(ch, d) {
   if (ch === 'phi') return [SECOND_MIN_K * Math.sqrt(d / (Math.PI / 180)), 2];
-  if (ch === 'kh' || ch === 'kv') return [(3 * d) / ROUTE_BAR, 1];
-  if (ch === 'w') return [Math.cbrt((30 * d) / (0.9 * ROUTE_BAR)), 3];   // sized for 0.9 of the bar: the cubic's fit of the quintic reads up to ~9% over it (wscan.js)
-  return [Math.cbrt((60 * WHEEL_M * d * (Math.PI / 180)) / ROUTE_BAR), 3];   // the cup and the edges, in degrees
+  return [(3 * d) / ROUTE_BAR, 1];
 }
 /** The most of a change's budget a first ramp under it may take (turnby.js keeps its own copy for a corner): a first ramp sharper than that is already the user's to judge. */
 const BASE_SHARE_MAX = 0.5;
@@ -495,7 +512,7 @@ function baseShare(ch, base, p) {
  * minimum) when shorter than secondMinM. The first mark is at or after the field's first ramp's end, or anywhere inside the piece when that ramp is the whole piece (which
  * keeps its whole-piece shape: until D642 it was squeezed into [0, the first mark]). Changes at the end of the list that add nothing are dropped.
  */
-function changeLists(changes, second, targets, typed, length, Lof0, startV = () => null, shapeOf0 = () => null) {
+function changeLists(changes, second, targets, typed, length, Lof0, startV = () => null, shapeOf0 = () => null, deferred = []) {
   const given = (v) => v !== undefined && v !== null, raw = {};
   if (given(second)) {
     if (typeof second !== 'object' || Array.isArray(second)) throw new D.CoreError('BAD_SECOND', `second is { field: { from, target } }, got ${second}`);
@@ -538,6 +555,14 @@ function changeLists(changes, second, targets, typed, length, Lof0, startV = () 
       // the span is checked, not the shortest searched (E's 9a1a566f §5: one probe at most, so a drag stays quick); the shortest is searched only to name it when refused,
       // and where the built road is not monotone in the span (the search found a shorter one that holds), the refusal names the ceiling, which always does
       let minM = 0;
+      // THE BANK IS READ ON THE BUILT ROAD (2026-11-10): a span the comfort length passes is laid as before; a shorter one is not refused here but checked once the piece
+      // is laid, on the road as the adapter builds it (bankAsBuilt), so it is refused only where that road rounds it back over the hold
+      // Under the bank's fit floor (or under the comfort length where that is shorter, a change of under 0.7°) it is refused here, by name, as before
+      if (ch === 'phi' && !spanHolds(ch, prev, T, base, end - F)) {
+        const X = secondMinM(ch, prev, T, base), need = Math.min(X, BANK_FIT_FLOOR_M);
+        if (end - F >= need - 1e-9) { deferred.push({ k, F, end, what, prev, T, name, X, base }); prev = T; return; }
+        throw Object.assign(new D.CoreError('BAD_SECOND', `${name} ${changeName(ch, k)}, from ${+prev.toPrecision(6)} to ${+T.toPrecision(6)}, needs at least ${need.toFixed(1)} m before ${what} (the built road rounds a shorter one back over the hold): from at most ${(end - need).toFixed(1)}, got ${F}`), { channel: ch, change: k, needM: need });
+      }
       if (!spanHolds(ch, prev, T, base, end - F)) {
         minM = secondMinM(ch, prev, T, base);
         if (minM <= end - F + 1e-9) {
@@ -549,7 +574,7 @@ function changeLists(changes, second, targets, typed, length, Lof0, startV = () 
           const c = ceilOf(ch, prev, T, base); minM = ch === 'phi' ? c.m : Math.max(SECOND_FLOOR_M, c.m);
         }
       }
-      if (minM > 0) throw new D.CoreError('BAD_SECOND', `${name} ${changeName(ch, k)}, from ${+prev.toPrecision(6)} to ${+T.toPrecision(6)}, needs at least ${minM.toFixed(1)} m before ${what} (the built road rounds a shorter one back over the hold): from at most ${(end - minM).toFixed(1)}, got ${F}`);
+      if (minM > 0) throw Object.assign(new D.CoreError('BAD_SECOND', `${name} ${changeName(ch, k)}, from ${+prev.toPrecision(6)} to ${+T.toPrecision(6)}, needs at least ${minM.toFixed(1)} m before ${what} (the built road rounds a shorter one back over the hold): from at most ${(end - minM).toFixed(1)}, got ${F}`), { channel: ch, change: k, needM: minM });
       prev = T;
     });
     out[ch] = { items: items.map(({ from, target }) => ({ from, target })), whole };
@@ -610,7 +635,8 @@ function extend(doc, opts = {}) {
   const Lof0 = (ch) => (perChannel ? (ramp[ch] === undefined ? length : ramp[ch]) : transition === undefined ? length : transition);
   // L135 THE SECOND BANK, L139 ANY NUMBER OF CHANGES ON EVERY FIELD: checked here, where each first ramp's end is known. D642: every first ramp keeps its own length (a
   // whole-piece one is no longer squeezed into [0, its first mark]: the keeper, 19:54Z, "it makes it more sharp and takes the original shape away"). See changeLists.
-  const head0 = D.endState(doc), lists = changeLists(changes, second, targets, opts.targets, length, Lof0, (ch) => (head0 && head0[ch] ? head0[ch].v : first && Number.isFinite(first[ch]) ? first[ch] : null), (ch) => (ch === 'phi' ? shape : null));   // the bank's own shape, named (null: the quintic)
+  const deferred = [], head0 = D.endState(doc), lists = changeLists(changes, second, targets, opts.targets, length, Lof0, (ch) => (head0 && head0[ch] ? head0[ch].v : first && Number.isFinite(first[ch]) ? first[ch] : null), (ch) => (ch === 'phi' ? shape : null), deferred);   // the bank's own shape, named (null: the quintic)
+  if (opts.bankCheck === 'list') return deferred;   // checkBankAsBuilt's question: which bank changes the built road must decide
   const Lof = Lof0;
   const shortRamps = Object.keys(ramp).filter((ch) => ramp[ch] < length - 1e-9 && targets[ch] !== undefined && targets[ch] !== null);
   const shapeOf = (ch) => (ch === 'phi' ? shape : (startShapes && shortRamps.includes(ch) && startShapes[ch]) || null);   // the bank's shape, or a cup's or edge's at start
@@ -729,7 +755,52 @@ function extend(doc, opts = {}) {
     }
     laid = secondRamp(laid, plan);
   }
+  if (opts.bankCheck !== false) bankAsBuilt(doc, laid, deferred);   // a caller that reshapes the piece after (turnby.js) checks the piece it returns instead
   return D.appendPiece(doc, laid);
 }
 
-module.exports = { extend, secondMinM, spanHolds, SECOND_MIN_K, SECOND_FLOOR_M, CHANGE_CHANNELS, roundedLinear, rampShape, BANK_ROUND_M, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, sampleBasis, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };
+/**
+ * THE BANK CHANGE, READ ON THE ROAD AS BUILT (2026-11-10). The adapter (src/core/adapter.js bankPlan) re-rounds a bank wherever it rolls faster than its bar, and a change
+ * shorter than the comfort length (SECOND_MIN_K·√degrees, where the change's own quintic reaches that bar) is spread back over the value it held before its mark, EXCEPT
+ * where the road turns (bankPlan moves a turning road's bank by at most 4°) and where the change turns the bank back the other way (bankPlan pins a bank's turning point, so
+ * its rounding stays after the mark). Measured: on a straight road's end, a change carrying on from a bank held still holds from 58 m for 5° and from 136 m for 20° (the
+ * comfort length 70 and 141); on the user's 125 m piece it holds and reaches every change tried, to −90° over 77.5 m, both because the piece turns (−90° and back) and,
+ * on a straight piece too, because its extra bank goes back the other way from its first 0.13°; the same way as the first bank, a straight piece rounds it back. So a change the
+ * comfort length does not pass is laid when, on THIS piece as built (with the piece before it, whose bank the joint carries), the built bank stays within BUILT_TOL of the
+ * document from 250 m before its mark to its end and never leaves the document's range there, and refused otherwise, by name, with the length the comfort length finds that
+ * holds (or, where a longer span than that is refused, the longest shorter one that holds: the built road is not monotone in the span).
+ */
+function bankAsBuilt(doc, piece, deferred) {
+  if (!deferred.length) return;
+  const A = require('./adapter.js');   // at call time, as probePeak
+  const before = doc.pieces.length ? doc.pieces[doc.pieces.length - 1] : null, mini = { closed: false, start: doc.start, pieces: before && before.type === 'road' ? [before, piece] : [piece] };
+  const i = mini.pieces.length - 1, fn = A.bankPlan(mini)[i].fn;
+  if (!fn) return;   // the bank is built as the document lays it
+  for (const c of deferred) {
+    const v = (t) => D.channelValue(piece, 'phi', t);
+    let lo = Infinity, hi = -Infinity; for (let t = c.F; t <= c.end + 1e-9; t += 0.5) { const x = v(Math.min(t, c.end)); lo = Math.min(lo, x); hi = Math.max(hi, x); }
+    let ok = true;
+    for (let t = Math.max(0, c.F - 250); ok && t <= c.end + 1e-9; t += 0.5) {
+      const s = Math.min(t, c.end), b = fn(s);
+      if (s <= c.F) ok = Math.abs(b - v(s)) <= BUILT_TOL; else ok = b >= lo - BUILT_TOL && b <= hi + BUILT_TOL;
+    }
+    if (ok) ok = Math.abs(fn(c.end) - v(c.end)) <= BUILT_TOL;
+    if (ok) continue;
+    const span = c.end - c.F, head = `${c.name} ${changeName('phi', c.k)}, from ${+c.prev.toPrecision(6)} to ${+c.T.toPrecision(6)}`;
+    // at or past the length named as holding, the built road is not monotone in the span (a single-span spike of the bank's rounding): name the longest shorter span that the
+    // comfort length passes, as before (a refusal that names a span that holds is not naming a bound unless the property is monotone)
+    if (span >= c.X - 1e-9) {
+      let S = Math.floor(span); while (S > c.X && !spanHolds('phi', c.prev, c.T, c.base, S)) S--;
+      throw Object.assign(new D.CoreError('BAD_SECOND', `${head}, is rounded back over the hold by the built road at ${+span.toFixed(1)} m before ${c.what} (the built road rounds a longer one back over the hold; ${S} m still holds): from at least ${(c.end - S).toFixed(1)}, got ${c.F}`), { channel: 'phi', change: c.k, needM: S, built: true, longer: true });
+    }
+    throw Object.assign(new D.CoreError('BAD_SECOND', `${head}, needs more than ${+span.toFixed(1)} m before ${c.what} on this road (the built road rounds a shorter one back over the hold; ${c.X.toFixed(1)} m holds): from at most ${(c.end - c.X).toFixed(1)}, got ${c.F}`), { channel: 'phi', change: c.k, needM: c.X, built: true });
+  }
+}
+/** For a caller that lays the piece through extend with { bankCheck: false } and reshapes it after (turnby.js, the corners): the bank changes of `opts` the comfort length
+ *  does not pass, checked on the piece `out` ends with, as extend checks its own. */
+function checkBankAsBuilt(doc, opts, out) {
+  if (!opts || !opts.changes || !opts.changes.phi) { if (!opts || !opts.second || !opts.second.phi) return; }
+  bankAsBuilt(doc, out.pieces[out.pieces.length - 1], extend(doc, { ...opts, bankCheck: 'list' }));
+}
+
+module.exports = { extend, checkBankAsBuilt, secondMinM, spanHolds, CHANGE_FLOOR_M, BANK_FIT_FLOOR_M, SECOND_MIN_K, SECOND_FLOOR_M, CHANGE_CHANNELS, roundedLinear, rampShape, BANK_ROUND_M, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, sampleBasis, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };

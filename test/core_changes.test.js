@@ -97,7 +97,10 @@ test('L139 4b (the amendment): M3 with two changes on the turn (→ −1/300 fro
 
 // ── the minimums (E's (A)): exported, refused by name at min − 0.1 m, laid at the minimum
 // The minimums are the keeper's ruling of 07:00Z ("smooth all around", pane E 711d7d10): every change's own peak under its bar on the built road (scratch smooth.js, the hand-back).
-test('L139 5a: secondMinM is the core\'s, one function: bank 31.5·√Δ°, turn and climb max(20, 3·|Δ|/ROUTE_BAR), width ∛(30·Δw/(0.9·BAR)), cup and edges ∛(60·8.4·Δ/BAR), never under 20 m', () => {
+// AMENDED 2026-11-10 (rule changed: the width, cup and edges are refused only below the floor measured on the built road, 40 m and 26 m, or their old comfort length where that is
+// shorter, so a tiny change keeps 20 m; the user, 2026-11-10, on the extra bank: "now the same thing happens when I want to bank the turn that u fixed"). Was: the width ∛(30·Δw/(0.9·BAR)) (148.5 m for 10 m) and the cup and edges
+// ∛(60·8.4·Δ/BAR) (137.4 m for 30°). The bank, the turn and the climb are as they were here (the bank's comfort length is what always holds; the core reads its built road under it)
+test('L139 5a: secondMinM is the core\'s, one function: bank 31.5·√Δ°, turn and climb max(20, 3·|Δ|/ROUTE_BAR), width 40 m, cup and edges 26 m (or less for a tiny change), never under 20 m', () => {
   assert.equal(X.SECOND_MIN_K, 31.5);
   assert.equal(X.SECOND_FLOOR_M, 20);
   const near = (a, b, what) => assert.ok(Math.abs(a - b) <= 0.05, `${what}: ${a}, not ${b}`);
@@ -106,16 +109,25 @@ test('L139 5a: secondMinM is the core\'s, one function: bank 31.5·√Δ°, turn
   near(X.secondMinM('kh', 1 / 300, -1 / 300), 196.6, 'the S rate');   // 3·(2/300)/ROUTE_BAR = 196.598 (E's fc21dcdd wrote 196.7; 2 × 98.299)
   near(X.secondMinM('kv', 4 * DEG / 100, 0), 20.6, 'climb 4°/100 m → 0');
   near(X.secondMinM('kv', 1e-4, 0), 20, 'a small climb change: the 20 m floor');
-  near(X.secondMinM('w', 30, 40), Math.cbrt((30 * 10) / (0.9 * ROUTE_BAR)), 'width 30 → 40 (148.5 m)');
-  for (const ch of ['c', 'e', 'er']) near(X.secondMinM(ch, 40, 10), Math.cbrt((60 * 8.4 * 30 * DEG) / ROUTE_BAR), `${ch} 40 → 10 (137.4 m)`);
+  near(X.secondMinM('w', 30, 40), 40, 'width 30 → 40 (40 m, the measured floor)');
+  near(X.secondMinM('w', 30, 30.1), Math.cbrt((30 * 0.1) / (0.9 * ROUTE_BAR)), 'width 30 → 30.1: its old comfort length (32.0 m), shorter than the floor');
+  for (const ch of ['c', 'e', 'er']) near(X.secondMinM(ch, 40, 10), 26, `${ch} 40 → 10 (26 m, the measured floor)`);
   for (const ch of ['w', 'c', 'e', 'er']) assert.equal(X.secondMinM(ch, 30, 30.0001), 20, `${ch}: a tiny change, the 20 m floor`);
   assert.throws(() => X.secondMinM('s', 0, 1), (e) => e.code === 'BAD_TARGET');
 });
 for (const [ch, T1, T2, extra] of [['kh', 1 / 300, -1 / 300, {}], ['kv', 4 * DEG / 100, 0, {}], ['phi', 30 * DEG, 0, {}], ['w', 30, 40, {}], ['c', 40, 10, {}]]) {
+  // AMENDED 2026-11-10 (rule changed, the user, 2026-11-10, on the extra bank: "now the same thing happens when I want to bank the turn that u fixed"): for the bank, the minimum refused by name is its fit floor, 26 m; its comfort length (secondMinM) is
+  // where it is always laid, and between the two the road as built decides (test/core_extra_change.test.js). On this straight road's end the built road rounds a 26 m change
+  // back over its hold, so at the floor it is refused too, by the built road, naming the comfort length
   test(`L139 5b ${ch}: a change shorter than its minimum by 0.1 m is refused by name (BAD_SECOND, the field, the change and the minimum); at the minimum it is laid`, () => {
-    const min = X.secondMinM(ch, T1, T2), make = (L2) => () => extend(flat(), { length: 1000, targets: { [ch]: T1, ...extra }, transition: 120, changes: { [ch]: [{ from: 1000 - L2, target: T2 }] } });
+    const min = ch === 'phi' ? 26 : X.secondMinM(ch, T1, T2), make = (L2) => () => extend(flat(), { length: 1000, targets: { [ch]: T1, ...extra }, transition: 120, changes: { [ch]: [{ from: 1000 - L2, target: T2 }] } });
     assert.throws(make(min - 0.1), (e) => e.code === 'BAD_SECOND' && e.message.includes(ch) && e.message.includes('change 1') && e.message.includes(min.toFixed(1)), `refused at ${min - 0.1}`);
-    assert.doesNotThrow(make(min + 1e-6), `laid at ${min}`);
+    if (ch !== 'phi') assert.doesNotThrow(make(min + 1e-6), `laid at ${min}`);
+    else {
+      const comfort = X.secondMinM(ch, T1, T2);
+      assert.throws(make(min + 1e-6), (e) => e.code === 'BAD_SECOND' && /the built road rounds/.test(e.message) && e.message.includes(comfort.toFixed(1)), 'at the fit floor this straight road\'s built bank does not hold: refused, naming the comfort length');
+      assert.doesNotThrow(make(comfort + 1e-6), 'at the comfort length: laid');
+    }
   });
 }
 test('L139 5c: a segment between two marks is held to the minimum as well (a change 10 m after the one before it is refused, naming change 1, the segment it starts)', () => {
@@ -134,6 +146,13 @@ test('L139 6: refusals by name: no first target, marks out of order, a mark befo
 });
 
 // ── nothing asked, nothing moved: the bytes
+/** AMENDED 2026-11-10 (helper): the built bank of the piece at index i (the adapter's, bankPlan) against its document from 250 m before the mark F to the change's end E:
+ *  { hold: the most it leaves the document before F, reach: how far it is from the document at E } in degrees. A bank change is now refused only where these pass 0.5°. */
+function builtBankOf(d, i, F, E) {
+  const A = require('../src/core/adapter.js'), plan = A.bankPlan(d), P = d.pieces[i], v = (t) => D.channelValue(P, 'phi', t), b = (t) => (plan[i].fn ? plan[i].fn(t) : v(t));
+  let hold = 0; for (let t = Math.max(0, F - 250); t <= F; t += 0.5) hold = Math.max(hold, Math.abs(b(t) - v(t)));
+  return { hold: hold / (Math.PI / 180), reach: Math.abs(b(E) - v(E)) / (Math.PI / 180) };
+}
 test('L139 7: no change asked, the same bytes: `changes` undefined, null, {} and empty lists leave a piece as it was; his sketch with its typed from 637.5 is refused by name (E 711d7d10 item 6)', () => {
   const base = { length: 750, targets: { phi: 30 * DEG, w: 25 }, transition: { phi: 300 } }, want = D.serialize(extend(flat(), base));
   for (const changes of [undefined, null, {}, { phi: [] }]) assert.equal(D.serialize(extend(flat(), { ...base, changes })), want, `changes: ${JSON.stringify(changes)}`);
@@ -141,8 +160,11 @@ test('L139 7: no change asked, the same bytes: `changes` undefined, null, {} and
   const sketch = { length: 750, targets: { phi: -0.4968952380427856, w: 30, c: 15 }, bankShape: { rise: 0.08888888888888889, fall: 0.9111111111111111 }, second: { phi: { from: 637.5, target: 0 } },
     turnDeg: 270, climbDeg: -6, startShapes: { c: { rise: 0.08888888888888889, fall: 0.9111111111111111 } }, transition: { phi: 300, c: 300 } };
   // E's registration pinned its 0df08db document (sha256 a33c039f…); under K = 31.5 its 28.47° second bank needs 168.1 m against the 112.5 m it was typed with, and E's
-  // item 6, restated (711d7d10), is that the typed from is refused by name (the panel's default from moves to 750 − 168.1)
-  assert.throws(() => TB.extendCorner(extend(D.createDoc('e'), { length: 1000, family: 'bowl' }), sketch), (e) => e.code === 'BAD_SECOND' && e.message.includes('168.1'), 'his sketch, from 637.5');
+  // item 6, restated (711d7d10), was that the typed from is refused by name.
+  // AMENDED 2026-11-10 (rule changed: under the comfort length a bank change is read on the road as built, the user, 2026-11-10, on the extra bank: "now the same thing happens when I want to bank the turn that u fixed"): his sketch turns 270°, and its built
+  // bank holds and reaches over the 112.5 m it was typed with, so it is laid as he typed it
+  const laid = TB.extendCorner(extend(D.createDoc('e'), { length: 1000, family: 'bowl' }), sketch), bb = builtBankOf(laid, 1, 637.5, 750);
+  assert.ok(bb.hold <= 0.5 && bb.reach <= 0.5, `his sketch, from 637.5, is laid: its built bank leaves the document by ${bb.hold.toFixed(3)}° before the mark and ${bb.reach.toFixed(3)}° at the end`);
   assert.doesNotThrow(() => TB.extendCorner(extend(D.createDoc('e'), { length: 1000, family: 'bowl' }), { ...sketch, second: { phi: { from: 750 - 168.1, target: 0 } } }), 'at the new default it lays');
 });
 

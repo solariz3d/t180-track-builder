@@ -24,7 +24,7 @@
 // turn are amber), so a short sharp turn is the user's to judge by driving it; how sharp a builder turn can be is still to measure.
 'use strict';
 const D = require('./document.js');
-const { extend, bloss } = require('./extend.js');
+const { extend, bloss, checkBankAsBuilt } = require('./extend.js');
 const { basisN } = require('../../tools/piecewise.cjs');
 
 const SEG_M = 2;               // the adapter's segment (toSegments segM): the heading is integrated on its ends
@@ -61,7 +61,7 @@ function easedPiece(doc, opts, chs) {
   const targets = { ...(opts.targets || {}) }, o = { ...opts, targets };
   for (const ch of chs) targets[ch] = 0;
   if (o.transition && typeof o.transition === 'object') { const rest = { ...o.transition }; for (const ch of chs) delete rest[ch]; if (Object.keys(rest).length) o.transition = rest; else delete o.transition; }
-  return extend(doc, o);
+  return extend(doc, { ...o, bankCheck: false });   // the bank changes are checked on the piece as it is returned, once its turn and climb are solved (checked, below)
 }
 const headOf = (d) => d.pieces[d.pieces.length - 1];
 const turnOf = (w, c) => w.reduce((a, wi, i) => a + wi * c[i], 0);
@@ -148,9 +148,18 @@ function extendBy(doc, opts, aims) {
 }
 /** Extend with a piece that turns exactly theta (rad) and ends straight, or refuse by name with the shortest length that does it. Turn by's angle is its own (a
  *  turn field read as a corner is dropped); a climb field read as a corner is kept, as Turn by keeps a climb rate typed in the fields. */
-const extendTurnBy = (doc, opts, theta) => extendBy(doc, opts, { kh: theta, ...(opts && Number.isFinite(opts.climbDeg) ? { kv: (opts.climbDeg * Math.PI) / 180 } : {}) });
+const extendTurnBy = (doc, opts, theta) => checked(doc, opts, extendBy(doc, opts, { kh: theta, ...(opts && Number.isFinite(opts.climbDeg) ? { kv: (opts.climbDeg * Math.PI) / 180 } : {}) }));
 /** Climb: Extend with a piece whose pitch changes by exactly dp (rad, + = nosing up) and ends at a climb rate of 0 (a steady pitch, not necessarily level). */
-const extendClimbBy = (doc, opts, dp) => extendBy(doc, opts, { kv: dp });
+const extendClimbBy = (doc, opts, dp) => checked(doc, opts, extendBy(doc, opts, { kv: dp }));
+/** The fields as extend reads them: the corners (turnDeg, climbDeg and their lists) are this file's. */
+function plainOf(opts) {
+  const { turnDeg, climbDeg, ...o } = opts || {};
+  if (o.changes && typeof o.changes === 'object' && !Array.isArray(o.changes)) { const c = { ...o.changes }; for (const [, k] of CORNER_FIELDS) delete c[k]; if (Object.keys(c).length) o.changes = c; else delete o.changes; }
+  return o;
+}
+/** The piece returned, its bank changes checked on the road as built (extend.js checkBankAsBuilt): the solve reshapes the turn and climb after extend lays the bank, and
+ *  where the road turns the adapter keeps its bank, so the check is made on the piece as it is returned, not on extend's. */
+const checked = (doc, opts, out) => { checkBankAsBuilt(doc, plainOf(opts), out); return out; };
 /** Extend with the turn and the climb fields read as corners when opts.turnDeg / opts.climbDeg are given (those exact changes of heading and pitch,
  *  each ending at rate 0), else Extend as it always was. */
 function extendCorner(doc, opts = {}) {
@@ -316,12 +325,12 @@ function cornerOf(doc, opts) {
     if (!Number.isFinite(v)) throw new D.CoreError('BAD_TARGET', `a corner needs a finite number of degrees, got ${k} ${v}`);
     aims[ch] = (v * Math.PI) / 180;
   }
-  if (lists) return extendList(doc, opts, rest, lists, aims);   // L139: corners after the first, in one piece
+  if (lists) return checked(doc, opts, extendList(doc, opts, rest, lists, aims));   // corners after the first, in one piece
   if (rest.changes && typeof rest.changes === 'object' && !Array.isArray(rest.changes) && CORNER_FIELDS.some(([, k]) => k in rest.changes)) {   // empty corner lists: the corner as before
     const changes = { ...rest.changes }; for (const [, k] of CORNER_FIELDS) delete changes[k];
     if (Object.keys(changes).length) rest.changes = changes; else delete rest.changes;
   }
-  return extendBy(doc, rest, aims);
+  return checked(doc, opts, extendBy(doc, rest, aims));
 }
 
 module.exports = { extendTurnBy, extendClimbBy, extendCorner, shortestTurnBy, turnWeights, cornerMinM, cornerChangeMinM };

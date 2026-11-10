@@ -76,13 +76,17 @@ const KEY = { turn: 'turn', climb: 'climb', bank: 'bank', width: 'width', cup: '
 const near = (a, b, tol, what) => assert.ok(Math.abs(a - b) <= tol, `${what}: ${a}, not ${b} (±${tol})`);
 const FIELDS = [['turn', 'turn °'], ['climb', 'climb °'], ['bank', 'bank °'], ['width', 'width m'], ['cup', 'cup °'], ['left edge', 'left edge °'], ['right edge', 'right edge °']];
 // the core's numbers, stubbed on the SHELL where the panel reads them (shell.secondMinM, shell.secondFloorM: B's exports passed through), and put back after
+// AMENDED 2026-11-10 (the bank's default marks are first clamped by its fit floor, shell.bankFitFloorM, and fall back to the minimum when the core refuses them as built): a
+// minimum stubbed here stands for the whole rule, as these rows were written, so the bank's floor is stubbed out with it
 function withCore(p, { min, floor } = {}, body) {
-  const sh = p.shell, keep = { min: [Object.prototype.hasOwnProperty.call(sh, 'secondMinM'), sh.secondMinM], floor: [Object.prototype.hasOwnProperty.call(sh, 'secondFloorM'), sh.secondFloorM] };
+  const sh = p.shell, keep = { min: [Object.prototype.hasOwnProperty.call(sh, 'secondMinM'), sh.secondMinM], floor: [Object.prototype.hasOwnProperty.call(sh, 'secondFloorM'), sh.secondFloorM], bank: [Object.prototype.hasOwnProperty.call(sh, 'bankFitFloorM'), sh.bankFitFloorM] };
   if (min !== undefined) sh.secondMinM = min; else delete sh.secondMinM;
+  sh.bankFitFloorM = () => null;
   if (floor !== undefined) sh.secondFloorM = () => floor; else delete sh.secondFloorM;
   try { return body(); } finally {
     if (keep.min[0]) sh.secondMinM = keep.min[1]; else delete sh.secondMinM;
     if (keep.floor[0]) sh.secondFloorM = keep.floor[1]; else delete sh.secondFloorM;
+    if (keep.bank[0]) sh.bankFitFloorM = keep.bank[1]; else delete sh.bankFitFloorM;
   }
 }
 

@@ -339,10 +339,13 @@ test('his extra turn 2: an extra handle held at the edge of what fits says so, w
   p.panel.secondExtra(b.id, 90);
   const held = p.opts().changes.phi[0].target / DEG, why = p.panel.heldWhy(b.id);
   assert.ok(held > 35 && held < 90, `held between: ${held}°`);
-  const m = why.match(/^held at (-?[\d.]+)°: 90° needs ([\d.]+) m from its mark, it has ([\d.]+) m \(shorter, it rolls faster than it can be ridden smoothly\)$/);
+  // AMENDED 2026-11-10 (rule changed: a bank change is held only where the road as built rounds it back over the bank it held, not where it rolls faster than the bar; the
+  // user, 2026-11-10, on the extra bank: "now the same thing happens when I want to bank the turn that u fixed"). Was: "90° needs N m from its mark, it has M m (shorter, it
+  // rolls faster than it can be ridden smoothly)". Here the road straightens where the change is, so it is still held, and the words are the built road's
+  const m = why.match(/^held at (-?[\d.]+)°: the road as built rounds 90° back over the bank it held in the ([\d.]+) m from its mark; ([\d.]+) m holds$/);
   assert.ok(m, `the reason: "${why}"`);
-  near(Number(m[1]), held, 0.005, 'held at what is set'); near(Number(m[3]), 300 - from, 0.05, 'the stretch it has: from its mark to the end');
-  assert.ok(Number(m[2]) > Number(m[3]), `it needs more than it has: ${m[2]} against ${m[3]}`);
+  near(Number(m[1]), held, 0.005, 'held at what is set'); near(Number(m[2]), 300 - from, 0.05, 'the stretch it has: from its mark to the end');
+  assert.ok(Number(m[3]) > Number(m[2]), `what holds is more than it has: ${m[3]} against ${m[2]}`);
   assert.equal(p.panel.heldWhy('extra:turnDeg:0'), '', 'only the handle being dragged says it');
   p.panel.secondExtra(b.id, 35); assert.equal(p.panel.heldWhy(b.id), '', 'back inside: nothing');
   p.panel.unmount();
@@ -357,5 +360,26 @@ test('his extra turn 3: a ghost refusal is taken away by the next ghost that is 
   p.type('length m', '12'); assert.match(previewMsg(p), /TURN_TOO_SHORT/, '12 m: too short for −90°, it says why');
   p.type('length m', '125'); assert.equal(previewMsg(p), '', 'the 125 m ghost is built: no refusal left in the message line');
   p.shell.selectPiece(0); assert.equal(previewMsg(p), '', 'and a refusal of the shell (none here) is what the line shows');
+  p.panel.unmount();
+});
+
+// THE EXTRA BANK, AS FREE AS THE ROAD AS BUILT ALLOWS (the user, 2026-11-10: "now the same thing happens when I want to bank the turn that u fixed, it jumps to -5 degrees and
+// then stops"; "its the extra banking btw"). His track (test/fixtures/extra-bank-short-2026-11-10.t180track) up to his 125 m piece, typed as he had it: turn −90, its extra
+// turn +90 from 62.5 m, bank 0.13 and the extra bank's handle, which stands at 47.5 m (the extra turn's mark less 0.12 of the piece). The core's rule is
+// test/core_extra_change.test.js
+const BANK_STRAIGHT = (() => { const D = require('../../src/core/document.js'), d = D.parse(require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'test', 'fixtures', 'extra-bank-short-2026-11-10.t180track'), 'utf8')); return Object.freeze(D.checkDoc({ ...d, pieces: d.pieces.slice(0, 1) })); })();
+test('his extra bank 1: on his piece the extra bank\'s first move goes where it is dragged (to −20°, not to the edge at −5.49), and on to −45° and −90°, each laid', async () => {
+  const p = await mountPanel(), TB = require('../../src/core/turnby.js');
+  p.shell.adopt(BANK_STRAIGHT); p.type('length m', 125); p.type('turn °', -90); p.type('bank °', 0.13);
+  p.panel.secondExtra(p.extras().find((e) => e.field === 'turn').id, 90);
+  assert.deepEqual(p.opts().changes.turnDeg, [{ from: 62.5, deg: 90 }], 'his extra turn');
+  const b = p.extras().find((e) => e.field === 'bank'); assert.equal(b.from, 47.5, 'the extra bank stands at his 47.5 m');
+  for (const v of [-20, -45, -90]) {
+    p.panel.secondExtra(b.id, v);
+    const got = p.opts().changes.phi[0];
+    assert.ok(got.from === 47.5 && Math.abs(got.target / DEG - v) < 1e-9, `dragged to ${v}°: the change is ${(got.target / DEG).toFixed(2)}° from ${got.from}`);
+    assert.equal(p.panel.heldWhy(b.id), '', `${v}°: not held`);
+    assert.doesNotThrow(() => TB.extendCorner(p.shell.getState().history.present, p.opts()), `${v}°: laid`);
+  }
   p.panel.unmount();
 });

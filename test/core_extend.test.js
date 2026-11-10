@@ -187,14 +187,19 @@ test('L135 8: mirror on insert negates both banks: a saved piece that banks +30�
 // AMENDED L139 (rule changed: K 15 -> 31.5, the keeper 2026-11-05 07:00Z "we dont want the bumps, we want the transmutations to be smooth all around the board";
 // pane E 711d7d10): the bank's quintic is under BANK_BAR from 31.46·√Δ°. The rows below keep their rules; their numbers are the new minimum's (172.5 m for 30°).
 const minSecondM = (deg) => 31.5 * Math.sqrt(Math.abs(deg));
+// AMENDED 2026-11-10 (rule changed: a bank change the comfort length does not pass is refused only where the road as built rounds it back over its hold, and under the bank's
+// fit floor, 26 m, where the document itself cannot reach and hold it; the user, 2026-11-10, on the extra bank: "now the same thing happens when I want to bank the turn that u fixed"). 6b was: the message names the comfort length, 172.5 m. It now names the
+// fit floor, the real limit for 0.5 m. 6c was: refused at 172.4 m (0.1 m under the comfort length). It is now laid there (this straight road's built bank holds and
+// reaches), refused 0.1 m under the fit floor, and still laid at the comfort length.
 test('L135 6b: a second ramp of 0.5 m (from 749.5 on a 750 m piece) is refused by name, and the message names the shortest it may be', () => {
   assert.throws(() => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second: { phi: { from: 749.5, target: 0 } } }),
-    (e) => e.code === 'BAD_SECOND' && e.message.includes(minSecondM(30).toFixed(1)), 'BAD_SECOND, naming 172.5 m');
+    (e) => e.code === 'BAD_SECOND' && e.message.includes('26.0 m'), 'BAD_SECOND, naming the fit floor, 26 m');
 });
-test('L135 6c: a second ramp just under the shortest (172.4 m for a 30° change, the minimum 172.5 m) is refused; at the minimum it is laid', () => {
+test('6c: a second ramp just under the comfort length (172.4 m for a 30° change) is laid where the built road holds it; under the fit floor it is refused; at the comfort length it is laid', () => {
   const at = (L2) => () => extend(flat135(), { length: 750, targets: { phi: 30 * DEG }, transition: 300, second: { phi: { from: 750 - L2, target: 0 } } });
-  assert.throws(at(172.4), (e) => e.code === 'BAD_SECOND' && e.message.includes('172.5'), 'just under: refused, naming the minimum');
-  assert.doesNotThrow(at(Math.ceil(minSecondM(30) * 10) / 10), 'at the minimum: laid');
+  assert.doesNotThrow(at(172.4), 'just under the comfort length: laid, its built bank holding');
+  assert.throws(at(25.9), (e) => e.code === 'BAD_SECOND' && e.message.includes('26.0'), 'under the fit floor: refused, naming it');
+  assert.doesNotThrow(at(Math.ceil(minSecondM(30) * 10) / 10), 'at the comfort length: laid');
 });
 test('L135 6d (a guard): a second ramp at the minimum is laid and the BUILT road holds within 0.5° of the hold up to from (30° and 90° changes)', () => {
   const rollOf = (doc) => { const S = toPath(doc).path.samples; return (s) => { let lo = 0, hi = S.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S[m].s <= s) lo = m; else hi = m; } const a = S[lo], b = S[hi], t = b.s > a.s ? (s - a.s) / (b.s - a.s) : 0; return (a.roll + (b.roll - a.roll) * t) / DEG; }; };
