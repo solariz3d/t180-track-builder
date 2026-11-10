@@ -85,7 +85,7 @@ const up2 = (x) => Math.ceil(x * 100 - 1e-9) / 100, down2 = (x) => Math.floor(x 
  * the same), never before `lo` (an early first ramp's end) nor past the room the later segments need (L − the sum of their minimums). With one change this is L135's
  * clamp, min(85%, L − its minimum).
  * A CORNER list (L139 corner default, after B's R1 fix): change k is a corner of list[k].target degrees over [mark k, the next mark or L], and the core refuses it below
- * cornerChangeMinM(doc, opts, deg) = max(cornerMinM, SECOND_MIN_K·√|deg|) (src/core/turnby.js), passed in as cornerMin(deg). A missing mark still prefers the even split of
+ * cornerChangeMinM(doc, opts, deg) (src/core/turnby.js: the knot floor, cornerMinM, whatever the degrees, as the first corner laid over that span), passed in as cornerMin(deg). A missing mark still prefers the even split of
  * the piece (his S: +90 then −90 turns at the middle), but within the same bounds as above: after the previous mark plus that corner's minimum, and before the room the
  * later corners need. Without cornerMin (a shell before R1) the split is plain. The FIRST corner's own shortest (the head's shortestTurnBy) is not passed to the panel.
  */
@@ -399,8 +399,8 @@ function mount(root, shell, mountOpts = {}) {
   // document's own (the last road piece's family) is what it is asked with, as extend() would lay it
   // D642: and the first corner's degrees, and the piece's length, which the share of the first corner still turning under it is read from (turnby.js cornerChangeMinM)
   const shellCornerMin = (deg, baseDeg, L) => (typeof shell.cornerChangeMinM === 'function' ? shell.cornerChangeMinM(shell.getState().history.present, { length: L }, deg, baseDeg) : null);
-  // a corner's segment: the core's shortest corner of that angle (src/core/turnby.js cornerChangeMinM, through the shell; L139 R1, pane B: max(cornerMinM, 31.5·√|Δθ°|),
-  // smooth to ride), else the shortest after a straight (cornerMinM), else 0
+  // a corner's segment: the core's shortest corner of that angle (src/core/turnby.js cornerChangeMinM, through the shell: the knot floor, as the first corner laid over
+  // that span; until 2026-11-10 the route's comfort bar, max(cornerMinM, 31.5·√|Δθ°|)), else the shortest after a straight (cornerMinM), else 0
   // D642: `baseDeg`, the first corner still turning under it (its degrees), as extendOptions asks
   const cornerMin = (o, deg, baseDeg) => { const doc = shell.getState().history.present, v = typeof shell.cornerChangeMinM === 'function' && Number.isFinite(deg) ? shell.cornerChangeMinM(doc, o, deg, baseDeg) : typeof shell.cornerMinM === 'function' ? shell.cornerMinM(doc, o) : null; return Number.isFinite(v) && v > 0 ? v : 0; };
   const secondFloor = () => { const v = typeof shell.secondFloorM === 'function' ? shell.secondFloorM() : null; return Number.isFinite(v) && v > 0 ? v : null; };
@@ -546,6 +546,7 @@ function mount(root, shell, mountOpts = {}) {
   const previewLength = (o) => (scrubbing && scrubKind === 'length' && o.length > 2 ? { ...o, length: Math.round(o.length / 2) * 2 } : o);
   let releasing = false;   // true while a drag's LAST position is typed in, just before end(): its ghost(RELEASE) builds the exact ghost, so the cheap one between is not built
   let ghostN = 0, exCache = null;   // L140: the extra handles' cache (extraHandles), declared before ghost() can first run
+  let ghostSaid = null;   // the refusal the ghost last wrote into the message line, so the next ghost that is built takes it away
   const ghost = () => {
     ghostN++;   // L140: what the extra handles were worked out from may have changed (extraHandles' cache)
     if (releasing) return;
@@ -554,7 +555,10 @@ function mount(root, shell, mountOpts = {}) {
     readout();   // first, and synchronously: the numbers follow the fields with no timer and no frame wait
     let why = null;
     try { send('t180-ghost', { candidate: shell.candidate(previewLength(opts()), { coarse: scrubbing }), cheap: scrubbing, sliced: !scrubbing, reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e.message; }   // every ghost but a drag's (a field typed, a hover, the release) is built a slice a frame by the preview (sliced)
-    if (why) { send('t180-ghost-clear'); msg.textContent = `no preview of this piece: ${why}`; msg.className = 'message'; }
+    if (why) { send('t180-ghost-clear'); msg.textContent = ghostSaid = `no preview of this piece: ${why}`; msg.className = 'message'; }
+    // a ghost built: its last refusal is no longer true, so the line shows the shell's own message again (an emptied length field said BAD_LENGTH under the 125 typed
+    // after it, his screenshot of 2026-11-10); a line something else wrote since is left as it is
+    else if (ghostSaid !== null) { if (msg.textContent === ghostSaid) { const st = shell.getState(); msg.textContent = plainMessage(st.message) || ''; msg.className = st.messageKind === 'ok' ? 'message ok' : 'message'; } ghostSaid = null; }
   };
   // the ghost follows the fields as they change, not only a fresh hover (a pointer resting on the button fires no new mouseenter,
   // so the ghost showed the piece before the last edit, or none: found in the window proof)
@@ -866,7 +870,7 @@ function mount(root, shell, mountOpts = {}) {
       ...(pinAt.size ? { pinned: [...pinAt.keys()], yields: kinds.filter((k) => ['bank', 'climb', 'climbDeg'].includes(k)) } : {}),
       base: (k) => (exOf.has(k) ? exOf.get(k).value : fieldNum(HANDLE_FIELD[k]) ?? (corner(k) ? 0 : null)),
       ctx: (k) => (exOf.has(k) ? { half: halfAt(exOf.get(k).from), snapTo: exOf.get(k).snapTo } : { half: half(HD.KINDS[k].at) }),
-      slideBase: (k) => (exOf.has(k) ? exOf.get(k).from : 0) };
+      slideBase: (k) => (exOf.has(k) ? exOf.get(k).from : 0), held: (k) => heldWhy(k) };
   };
   // THE EXTRA HANDLES (L140; the user, 10:15Z: "after the first turn, it adds something called extra turn, and its like the same ui as the first grab turn, just added below it or
   // around it in a way to be intuitive"; the plan's REVISED reading, option (a)). For each field with a value whose own handle the ghost carries (turn, climb, bank, width, cup;
@@ -1375,15 +1379,35 @@ function mount(root, shell, mountOpts = {}) {
     // comes back inside the edge is asked again, as any other
     const fitsAt = (v) => { d.x.then.value = show(v); return secFits(secSegs(f)); };
     const was = d.x.then.value, pastEdge = Number.isFinite(d.edge) && Number.isFinite(d.bad) && value !== d.edge && Math.sign(value - d.edge) === Math.sign(d.bad - d.edge);
-    if (pastEdge) d.x.then.value = show(d.edge);
-    else if (fitsAt(value)) d.ok = value;
+    if (pastEdge) { d.x.then.value = show(d.edge); d.held = { at: d.edge, want: value }; }
+    else if (fitsAt(value)) { d.ok = value; d.held = null; }
     else if (Number.isFinite(d.ok) && fitsAt(d.ok)) {
       let a = d.ok, b = value; for (let i = 0; i < 40; i++) { const m = (a + b) / 2; if (fitsAt(m)) a = m; else b = m; }
       let v = Number(show(a)); for (let i = 0; i < 4 && !fitsAt(v); i++) v = Number(show(v + (d.ok > v ? 0.01 : -0.01)));
-      d.ok = v; d.edge = v; d.bad = b; d.x.then.value = show(v);
-    }
+      d.ok = v; d.edge = v; d.bad = b; d.x.then.value = show(v); d.held = { at: v, want: value };
+    } else d.held = null;
     lastTouched = { secUndo: () => { if (d.made) { if (SEC[f].list.includes(d.x)) secRemove(f, d.x); } else { d.x.then.value = d.before; ghost(); } } };
     if (!pastEdge || d.x.then.value !== was) ghost();
+  };
+  // WHY AN EXTRA HANDLE'S DRAG IS HELD (the user, 2026-11-10: the extra turn stopped at 1.96° and said nothing; "it doesnt let you go past 2.64ish degrees"): while the
+  // amount is held at its edge, the handle's box says where it is held, what the drag asks, the stretch that asks needs and has, and why. '' when the handle is not
+  // the one dragged, or its drag is not held. The stretch is the first one that does not hold with the asked amount (its own, or the next change's); its shortest is a
+  // search of the built road (a few ms), asked once for each amount shown
+  const HELD_WHY = { turn: 'it has no room to ease in and out', climb: 'it has no room to ease in and out', bank: 'it rolls faster than it can be ridden smoothly',
+    width: 'it widens or narrows faster than it can be ridden smoothly', cup: 'its cup changes faster than it can be ridden smoothly' };
+  const heldWhy = (kind) => {
+    const d = exDrag, f = exFieldOf(kind); if (!d || d.kind !== kind || !d.held || !f) return '';
+    const want = show(d.held.want); if (d.why && d.why.want === want) return d.why.text;
+    const was = d.x.then.value; let text = '';
+    try {
+      d.x.then.value = want;
+      const S = secSegs(f), k = S.arr.findIndex((c, j) => !S.holds(j));
+      if (k >= 0) {
+        const has = (k + 1 < S.arr.length ? S.arr[k + 1].from : S.L) - S.arr[k].from, u = secUnit(f), mine = secLive(f).indexOf(d.x);
+        text = `held at ${show(d.held.at)}${u}: ${want}${u} needs ${S.min(k).toFixed(1)} m from ${k === mine ? 'its mark' : `change ${k + 1}'s mark`}, it has ${has.toFixed(1)} m (shorter, ${HELD_WHY[f]})`;
+      }
+    } finally { d.x.then.value = was; }
+    d.why = { want, text }; return text;
   };
   const secondSlide = (kind, from) => {
     const K = HD.KINDS[kind], f = exFieldOf(kind), L = Number(len.value); if (!K || !f) return;
@@ -1441,7 +1465,7 @@ function mount(root, shell, mountOpts = {}) {
   const offSettings = Object.entries(SETTINGS).map(([k, apply]) => { apply(S.get(k, undefined)); return S.on(k, apply); });
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, flights, secondTick, marksAt, offersAt, secondDrag, secondOffer, secondExtra, secondSlide, extraHandles, secondAdd: (f, y) => { const x = secAdd(f, y); ghost(); return x; }, pieces, gripLayer, spawnsLayer, spawnDrag, levelTail, values, sculptStrip, lend, options: opts, unmount() { unsub(); if (secondTick) secondTick.unmount(); doc.removeEventListener('t180:build-request', onBuildRequest); doc.removeEventListener('t180-sculpt-key', onSculptKey); doc.removeEventListener('t180:sculpt-hover', onSculptHover); doc.removeEventListener('keydown', onAltKey); doc.removeEventListener('keyup', onAltKey); if (winEvents) win.removeEventListener('blur', onBlur); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (levelTail) levelTail.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); stage.removeEventListener('pointerleave', leave); stage.removeEventListener('wheel', wheel, { capture: true }); } root.replaceChildren(); } };
+  return { labels, handles, flights, secondTick, marksAt, offersAt, secondDrag, secondOffer, secondExtra, secondSlide, heldWhy, extraHandles, secondAdd: (f, y) => { const x = secAdd(f, y); ghost(); return x; }, pieces, gripLayer, spawnsLayer, spawnDrag, levelTail, values, sculptStrip, lend, options: opts, unmount() { unsub(); if (secondTick) secondTick.unmount(); doc.removeEventListener('t180:build-request', onBuildRequest); doc.removeEventListener('t180-sculpt-key', onSculptKey); doc.removeEventListener('t180:sculpt-hover', onSculptHover); doc.removeEventListener('keydown', onAltKey); doc.removeEventListener('keyup', onAltKey); if (winEvents) win.removeEventListener('blur', onBlur); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (levelTail) levelTail.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); stage.removeEventListener('pointerleave', leave); stage.removeEventListener('wheel', wheel, { capture: true }); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };

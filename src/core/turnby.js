@@ -24,7 +24,7 @@
 // turn are amber), so a short sharp turn is the user's to judge by driving it; how sharp a builder turn can be is still to measure.
 'use strict';
 const D = require('./document.js');
-const { extend, bloss, SECOND_MIN_K } = require('./extend.js');
+const { extend, bloss } = require('./extend.js');
 const { basisN } = require('../../tools/piecewise.cjs');
 
 const SEG_M = 2;               // the adapter's segment (toSegments segM): the heading is integrated on its ends
@@ -176,7 +176,7 @@ const MEMO = new WeakMap(), MEMO_MAX = 6;
 // ruling: the extra ADDS on top of the piece's own change and never squeezes it. So the piece is first laid exactly as turnDeg alone lays it (the corner over the WHOLE piece,
 // solve), and each extra corner k is the symmetric ease of its own span [its mark, the next mark or the end], ADDED on top, its height turning exactly its deg. The piece turns
 // turnDeg plus every deg in all and ends straight; a mark is no longer a straight point. An extra of 0 at the end of a list is no extra at all (cornerLists drops it), so the
-// bytes are turnDeg's alone. Each extra is refused by name when its span is shorter than cornerChangeMinM; the base corner is refused as turnDeg alone is (extendBy).
+// bytes are turnDeg's alone. Each extra is refused by name when its span is shorter than cornerChangeMinM (the knot floor); the base corner is refused as turnDeg alone is (extendBy).
 const CORNER_SUB = 8;   // knots inserted across each corner's segment, as extend.js inserts SECOND_SUB across each change
 const CORNER_FIELDS = [['kh', 'turnDeg', 'TURN_TOO_SHORT', 'turn'], ['kv', 'climbDeg', 'CLIMB_TOO_SHORT', 'climb']];
 /** The angle from 0 to s1 as weights on the control points: the adapter's trapezoid on its 2 m segments over the piece (turnWeights), cut at s1. */
@@ -213,19 +213,16 @@ function cornerMinM(doc, opts = {}) {
   return CORNER_MIN.get(key);
 }
 /**
- * THE SHORTEST LATER CORNER (L139 R1, pane E's review §3): a corner after the first is the symmetric ease of its own segment, whose curvature rate (the built heading's,
- * or the pitch's, second difference) scales as Δθ/L²: 90° read 1.021 × ROUTE_BAR over 300 m and 194 × over cornerMinM's 21 m. Under the bar from about 31.5–31.8·√(Δθ in
- * degrees), the bank's own constant from the same ease physics, so: max(cornerMinM, SECOND_MIN_K·√|Δθ°|). Exported for the panel (its offers and default marks).
- * D642, ON TOP OF THE BASE CORNER: an extra is ADDED to the piece's own corner, so the two rates add. Given the base (baseDeg over the piece's opts.length), the base's own
- * peak, SECOND_MIN_K²·|baseDeg|/L² of the bar, comes out of the extra's budget: SECOND_MIN_K·√(|Δθ°| / (1 − that share)). Measured on the built road (test/core_additive.test.js
- * D642 3): his −90° with an extra +180° read 1.119 × the bar at 31.5·√180 without it. The share is held at most BASE_SHARE_MAX: a base corner sharper than that is already the
- * user's own to judge (extendBy has no bar), and the extra then needs at most √2 × its own minimum. Without baseDeg (the panel's call): as before.
+ * THE SHORTEST LATER CORNER: the knot floor, cornerMinM, whatever its degrees. A corner after the first (the symmetric ease of its own span, added on top of the first) is
+ * refused only for what the same corner laid FIRST over that span would be: having no room for its ease. The first corner has no bar on how fast it turns (extendBy:
+ * the user's own to judge by driving it), and an extra corner has none either (the user, 2026-11-10, on a 125 m −90° corner whose extra was held under 2.64°: "it should
+ * be free to continue bending even on a shorter section"). Until then an extra was held to the route's comfort bar, max(cornerMinM, 31.5·√(|Δθ°| / (1 − the first
+ * corner's share))), which asked 298.8 m for an extra 45° on that piece. deg and baseDeg are still read (a corner with no number of degrees is refused by name), so the
+ * panel's call is unchanged. Exported for the panel (its offers, default marks and the hold of an extra handle's drag).
  */
-const BASE_SHARE_MAX = 0.5;
 function cornerChangeMinM(doc, opts, deg, baseDeg) {
   if (!Number.isFinite(deg)) throw new D.CoreError('BAD_TARGET', `a corner's minimum needs a finite number of degrees, got ${deg}`);
-  const L = opts && opts.length, share = Number.isFinite(baseDeg) && L > 0 ? Math.min(BASE_SHARE_MAX, (SECOND_MIN_K * SECOND_MIN_K * Math.abs(baseDeg)) / (L * L)) : 0;
-  return Math.max(cornerMinM(doc, opts), SECOND_MIN_K * Math.sqrt(Math.abs(deg) / (1 - share)));
+  return cornerMinM(doc, opts);
 }
 /** The corner lists asked for, checked: { kh: { marks, angles } } (rad), or null when no list has a change. */
 function cornerLists(opts) {
@@ -292,7 +289,7 @@ function solveList(doc, opts, lists, aims) {
   }
   return { doc: d, converged: Object.keys(lists).every((ch) => Math.abs(turnOf(w, headOf(d).channels[ch]) - want[ch]) <= TURN_TOL) };
 }
-/** Extend with the corner lists laid, or refuse by name: an extra corner whose span is shorter than cornerChangeMinM; the base corner as turnDeg alone (extendBy, in solveList). */
+/** Extend with the corner lists laid, or refuse by name: an extra corner whose span is shorter than cornerChangeMinM (the knot floor); the base corner as turnDeg alone (extendBy, in solveList). */
 function extendList(doc, opts, rest, lists, aims) {
   const changes = { ...(rest.changes || {}) };
   for (const [, k] of CORNER_FIELDS) delete changes[k];
@@ -301,7 +298,7 @@ function extendList(doc, opts, rest, lists, aims) {
     const { marks, angles, k, code, word } = lists[ch];
     marks.forEach((F, j) => {
       const end = j + 1 < marks.length ? marks[j + 1] : o.length, min = cornerChangeMinM(doc, o, (angles[j + 1] * 180) / Math.PI, (angles[0] * 180) / Math.PI);   // D642: on top of the base corner
-      if (end - F < min - 1e-9) throw Object.assign(new D.CoreError(code, `the ${word} change ${j + 1} (a corner of ${DEGS(angles[j + 1])}) needs at least ${min.toFixed(1)} m before ${j + 1 < marks.length ? `change ${j + 2}'s mark` : "the piece's end"} (shorter, the road turns faster than it can be ridden smoothly): from at most ${(end - min).toFixed(1)}, got ${F}`), { needM: min });
+      if (end - F < min - 1e-9) throw Object.assign(new D.CoreError(code, `the ${word} change ${j + 1} (a corner of ${DEGS(angles[j + 1])}) needs at least ${min.toFixed(1)} m before ${j + 1 < marks.length ? `change ${j + 2}'s mark` : "the piece's end"} (shorter, it has no room to ease in and out): from at most ${(end - min).toFixed(1)}, got ${F}`), { needM: min });
     });
   }
   const r = solveList(doc, o, lists, aims);

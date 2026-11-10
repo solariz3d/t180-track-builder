@@ -13,6 +13,7 @@
 //  10  the value is rounded to the kind's step even with Shift, so a fine drag lands on 0.0, not 0.03
 //  11  a double-click on a handle resets it: 0 for bank, turn, climb; the value before the drag for length, width, cup
 //  12  the label shows the exact value the drag sets, and what a double-click would set
+//  12b while a drag is held at an edge, the label's second line is the host's reason (model.held); a host with none, or nothing held, shows the value alone
 //   7  the overlay: a press ON a handle opens the drag and nothing else sees it; a press elsewhere is left alone (the brush and the camera keep their drags); at most one apply per frame; the release
 //      applies the last position and ends; hover sets the cursor; Shift and Ctrl travel with the pointer
 'use strict';
@@ -177,9 +178,9 @@ test('row 7b: no model, no pose or a refused press: no handles are drawn and a p
 // a drag rig: the overlay on a fake stage whose host keeps the fields as the panel's do (an apply sets the field, so the next press starts from it)
 const FAR = { eye: [0, 600, -400], target: [0, 0, 120], up: [0, 1, 0], fov: 60 * Math.PI / 180 };
 const B2 = { turn: 2, width: 31, length: 160, bank: 0 };
-function rig({ pose = POSE, kinds = ['width', 'turn', 'length', 'bank'], base = { width: 31, turn: 0, length: 160, bank: 0 }, ctx = null } = {}) {
+function rig({ pose = POSE, kinds = ['width', 'turn', 'length', 'bank'], base = { width: 31, turn: 0, length: 160, bank: 0 }, ctx = null, model = {} } = {}) {
   const S = fakeStage(ctx), calls = [], cur = { ...base };
-  const host = { model: () => ({ ...MODEL, kinds, base: (k) => cur[k], ctx: () => ({ half: 10 }) }), pose: () => pose,
+  const host = { model: () => ({ ...MODEL, kinds, base: (k) => cur[k], ctx: () => ({ half: 10 }), ...model }), pose: () => pose,
     begin: (h) => calls.push(['begin', h.id]), apply: (h, v, mods, final) => { cur[h.kind] = v; calls.push(['apply', h.id, v, !!final]); }, end: (h) => calls.push(['end', h.id]) };
   const ov = HD.mount(S.stage, S.win, host); S.tick();
   const at = (id) => ov.handles().find((x) => x.id === id).screen, last = () => calls.filter((c) => c[0] === 'apply').pop();
@@ -243,6 +244,20 @@ test('row 12: the label shows the exact value the drag sets, and what a double-c
   const { x, y } = R.along('turn:1', -33); R.S.fire('pointerdown', { clientX: t.x, clientY: t.y }); R.S.fire('pointermove', { clientX: x, clientY: y }); R.S.tick(); R.S.tick();
   assert.equal(R.last()[2], -0.74); assert.equal(texts[texts.length - 1], 'turn -0.74°/100 m', 'dragging: exactly what is set');
   R.S.fire('pointerup', { clientX: x, clientY: y }); R.drag('length:0', 40); const l = R.at('length:0'); texts.length = 0; R.S.fire('pointermove', { clientX: l.x, clientY: l.y }); R.S.tick(); assert.equal(texts[texts.length - 1], 'length 176.80 m · double-click: 160.00', 'length: a double-click would put back 160');
+});
+test('row 12b: while a drag is held at an edge, the label\'s second line is the host\'s reason; with none, the value alone', () => {
+  const texts = [], ctx = new Proxy({}, { get: (t, k) => (k === 'measureText' ? (x) => ({ width: x.length * 7 }) : k === 'fillText' ? (x) => { texts.push(x); } : (t[k] === undefined ? () => {} : t[k])), set: (t, k, v) => { t[k] = v; return true; } });
+  let why = 'held at 52.67°: 90° needs 244.0 m from its mark, it has 150.0 m (shorter, it rolls faster than it can be ridden smoothly)';
+  const R = rig({ ctx, base: B2, model: { held: (k) => (k === 'turn' ? why : '') } }), t = R.at('turn:1');
+  const { x, y } = R.along('turn:1', -33); R.S.fire('pointerdown', { clientX: t.x, clientY: t.y }); R.S.fire('pointermove', { clientX: x, clientY: y }); R.S.tick(); R.S.tick();
+  assert.deepEqual(texts.slice(-2), ['turn -0.74°/100 m', why], 'dragging and held: the value, then why');
+  why = ''; texts.length = 0; R.S.fire('pointermove', { clientX: x + 1, clientY: y }); R.S.tick(); R.S.tick();
+  assert.ok(texts.length && !texts.includes(why) && texts.every((s) => s.startsWith('turn ')), `not held: the value alone (${JSON.stringify(texts)})`);
+  R.S.fire('pointerup', { clientX: x + 1, clientY: y });
+  const P = rig({ ctx, base: B2 }), u = P.at('turn:1'); texts.length = 0;
+  P.S.fire('pointerdown', { clientX: u.x, clientY: u.y }); P.S.fire('pointermove', { clientX: x, clientY: y }); P.S.tick(); P.S.tick();
+  assert.deepEqual(texts.slice(-1), ['turn -0.74°/100 m'], 'a host with no reason: the value alone, as before'); assert.equal(texts.filter((s) => !s.startsWith('turn ')).length, 0);
+  P.S.fire('pointerup', { clientX: x, clientY: y });
 });
 
 // (reported: a window said "tauri.localhost to show your cursor press ESC" on the first click of the points on the track): NO POINTER LOCK. Chromium draws that

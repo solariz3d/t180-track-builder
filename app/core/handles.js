@@ -408,7 +408,9 @@ function mount(stage, win, host) {
         // An extra handle's hover adds the line naming its drag along the road (slideWords); while it slides, the box reads where its change starts
         const from = K.extra && typeof model.slideBase === 'function' ? model.slideBase(h.kind) : null, sliding = !!drag && drag.mode === 'slide' && Number.isFinite(Number(from));
         const text = sliding ? `${K.label} starts at ${Number(from).toFixed(2)} m` : drag ? format(h.kind, drag.value) : format(h.kind, model.base(h.kind)) + (K.zero ? ' · double-click: 0' : pre && pre.kind === h.kind && pre.to === model.base(h.kind) ? ` · double-click: ${Number(pre.from).toFixed(2)}` : ''); ctx.font = 'bold 12px system-ui, "Segoe UI", sans-serif';
-        const lines = [text].concat(K.extra && !drag ? [slideWords(h.kind, from, h.slideAxis)].filter(Boolean) : []), hgt = 4 + 18 * lines.length;
+        // while a drag is held at the edge of what fits, the host's reason is the second line (model.held: the panel's, for an extra handle; '' when nothing holds it)
+        const why = drag && !sliding && typeof model.held === 'function' ? model.held(h.kind) : '';
+        const lines = [text].concat(K.extra && !drag ? [slideWords(h.kind, from, h.slideAxis)].filter(Boolean) : why ? [why] : []), hgt = 4 + 18 * lines.length;
         const w = Math.max(...lines.map((t) => ctx.measureText(t).width)) + 12, bx = clamp(s.x + 14, 4, W - w - 4), by = clamp(s.y - 12 - hgt, 4, H - hgt - 2);
         if (lines.length > 1) tipBoxes.push({ x: bx, y: by, w, h: hgt });
         ctx.fillStyle = T.alpha('--veil', 0.92, '#0b0d11'); ctx.fillRect(bx, by, w, hgt); ctx.strokeStyle = K.colour; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, w, hgt);

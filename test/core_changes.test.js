@@ -190,8 +190,10 @@ test('L139 12 (E §M2): a corner after a corner needs the shortest corner from t
   assert.ok(TB.cornerMinM(flat(), { length: 1000 }) >= 20 && TB.cornerMinM(flat(), { length: 1000 }) <= 25, 'the shortest corner from a straight, the floor');
   // AMENDED D642 (rule changed: the extra adds on top of the base corner, so the base's own rate under it comes out of its budget, cornerChangeMinM's baseDeg; and the base
   // corner spans the whole piece, so it no longer has to fit before the first mark: it is refused as turnDeg alone is)
+  // AMENDED 2026-11-10 (rule changed: an extra corner is refused only below the knot floor, as the first corner laid over its span would be; the comfort bar and the base's share
+  // in it no longer refuse it, the user, 2026-11-10: "it should be free to continue bending even on a shorter section"): the minimum is cornerMinM, with or without the base
   const min = TB.cornerChangeMinM(flat(), { length: 1000 }, 30, 90), make = (L2) => () => TB.extendCorner(flat(), { length: 1000, turnDeg: 90, changes: { turnDeg: [{ from: 1000 - L2, deg: 30 }] } });
-  assert.ok(min > TB.cornerChangeMinM(flat(), { length: 1000 }, 30), `the base's rate is in it: ${min} against ${TB.cornerChangeMinM(flat(), { length: 1000 }, 30)}`);
+  assert.equal(min, TB.cornerMinM(flat(), { length: 1000 }), 'the knot floor'); assert.equal(TB.cornerChangeMinM(flat(), { length: 1000 }, 30), min, 'with no base the same');
   assert.throws(make(min - 0.1), (e) => e.code === 'TURN_TOO_SHORT' && e.message.includes('change 1') && e.message.includes(min.toFixed(1)), `refused at ${min - 0.1}`);
   assert.doesNotThrow(make(min), `laid at ${min}`);
   assert.doesNotThrow(() => TB.extendCorner(flat(), { length: 1000, turnDeg: 90, changes: { turnDeg: [{ from: 5, deg: 30 }] } }), 'an extra from 5 m: the base corner spans the piece, nothing to fit before the mark');
@@ -244,19 +246,16 @@ for (const [what, f] of [
     assert.ok(pk <= 1.05, `the built roll reads ${pk.toFixed(3)} × the bar after the mark at ${F} m`);
   });
 }
-// R1: a corner after the first is a symmetric ease over its own segment, whose curvature rate scales as Δθ/L² (pane E §3: 90° reads 1.021 over 300 m, 194 × over 21 m);
-// its shortest is max(cornerMinM, SECOND_MIN_K·√|Δθ in degrees|), the bank's own constant from the same ease physics
+// R1: a corner after the first is a symmetric ease over its own segment. AMENDED 2026-11-10 (rule changed: its shortest is the knot floor, cornerMinM, as the first corner laid over
+// its span; the comfort bar max(cornerMinM, SECOND_MIN_K·√|Δθ in degrees|), with the base's share, no longer refuses it, the user, 2026-11-10: "it should be free to continue bending even on a shorter section").
+// Was: refused 0.2 m under the comfort length, and the built rate under the bar at it. Now: refused 0.2 m under the floor by name, laid at it, exact in all, ending at rate 0
 for (const [k, deg] of [['turnDeg', 90], ['turnDeg', 30], ['climbDeg', 40]]) {
-  test(`L139 R1 ${k} ${deg}°: a corner change shorter than max(cornerMinM, 31.5·√Δθ°) by 0.1 m is refused by name; at it, the built road's ${k === 'turnDeg' ? 'turn' : 'pitch'} rate is under the bar (× 1.05)`, () => {
-    // AMENDED D642 (rule changed: the later corners ADD on top of the base corner, which spans the whole piece, so its own rate comes out of their budget; cornerChangeMinM's
-    // baseDeg). The segment is the shortest that holds on a piece three of it long: L2 = cornerChangeMinM({ length: 3·L2 }, deg, base deg), found by iterating to its fixed point
-    const own = Math.max(TB.cornerMinM(flat(), { length: 1000 }), 31.5 * Math.sqrt(deg)), seg = (L2) => ({ length: 3 * L2, [k]: deg, changes: { [k]: [{ from: L2, deg: -deg }, { from: 2 * L2, deg }] } });
-    assert.ok(typeof TB.cornerChangeMinM === 'function' && Math.abs(TB.cornerChangeMinM(flat(), { length: 1000 }, deg) - own) <= 1e-9, 'exported, for the panel (the shell); without a base, as before');
-    let min = own; for (let i = 0; i < 50; i++) min = TB.cornerChangeMinM(flat(), { length: 3 * Math.ceil(min * 10) / 10 }, deg, deg);
-    const L2 = Math.ceil(min * 10) / 10, need = TB.cornerChangeMinM(flat(), { length: 3 * L2 }, deg, deg);
-    assert.throws(() => TB.extendCorner(flat(), { length: 3 * L2, [k]: deg, changes: { [k]: [{ from: L2, deg: -deg }, { from: 2 * L2 + 0.2, deg }] } }),
-      (e) => /TOO_SHORT/.test(e.code) && e.message.includes('change 2') && e.message.includes(need.toFixed(1)), `refused 0.2 m under ${need}`);
-    const d = extend(TB.extendCorner(flat(), seg(L2)), { length: 200 }), pk = builtTurnPeak(d, 1000 + L2 - 20, 1000 + 3 * L2 + 20, k === 'climbDeg');
-    assert.ok(pk <= 1.05, `the built ${k === 'turnDeg' ? 'heading' : 'pitch'} rate reads ${pk.toFixed(3)} × the bar over the later corners`);
+  test(`L139 R1 ${k} ${deg}°: a corner change shorter than the knot floor by 0.2 m is refused by name; at it, the corners are laid exact and end at a rate of 0`, () => {
+    const ch = k === 'turnDeg' ? 'kh' : 'kv', floor = TB.cornerMinM(flat(), { length: 1000 }), seg = (L2, late = 0) => ({ length: 3 * L2, [k]: deg, changes: { [k]: [{ from: L2, deg: -deg }, { from: 2 * L2 + late, deg }] } });
+    assert.ok(typeof TB.cornerChangeMinM === 'function' && TB.cornerChangeMinM(flat(), { length: 1000 }, deg) === floor && TB.cornerChangeMinM(flat(), { length: 3 * floor }, deg, deg) === floor, 'exported, for the panel (the shell): the floor, with or without a base');
+    assert.throws(() => TB.extendCorner(flat(), seg(floor, 0.2)), (e) => /TOO_SHORT/.test(e.code) && e.message.includes('change 2') && e.message.includes(floor.toFixed(1)), `refused 0.2 m under ${floor}`);
+    const d = TB.extendCorner(flat(), seg(floor)), a = integral(d, ch, 3 * floor) / DEG, e = endOf(d, ch);
+    assert.ok(Math.abs(a - deg) <= 0.01, `${deg}°, then ${-deg}° and ${deg}° over ${floor} m each: ${a.toFixed(4)}° in all`);
+    assert.ok(Math.abs(e.v) <= 1e-9 && Math.abs(e.d1) <= 1e-9, `ends at ${e.v}, slope ${e.d1}`);
   });
 }

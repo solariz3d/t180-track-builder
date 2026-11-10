@@ -86,12 +86,15 @@ test('D642 2d: a rate field, the width 30 over the whole piece with an extra to 
 
 // ── 3. the smoothness bar: the base and the extra together, on the built road, at the extra's shortest
 for (const [what, k, deg, extra] of [['his −90° with an extra +180°', 'turnDeg', -90, 180], ['a +90° with an extra +90° the same way', 'turnDeg', 90, 90], ['a climb +40° with an extra −80°', 'climbDeg', 40, -80]]) {
-  test(`D642 3 ${what} laid at the extra's shortest: the built ${k === 'turnDeg' ? 'heading' : 'pitch'} rate stays under the bar (× 1.05) through the piece and 20 m on`, () => {
-    const L = 1000, min = Math.ceil(TB.cornerChangeMinM(flat(), { length: L }, extra, deg) * 10) / 10, make = (L2) => () => TB.extendCorner(flat(), { length: L, [k]: deg, changes: { [k]: [{ from: L - L2, deg: extra }] } });
-    assert.ok(min > 31.5 * Math.sqrt(Math.abs(extra)), `the base's own rate is taken out of the extra's budget: ${min} m against ${(31.5 * Math.sqrt(Math.abs(extra))).toFixed(1)} alone`);
+  // AMENDED 2026-11-10 (rule changed: an extra corner is refused only for what the same corner laid first over its span would be, the knot floor cornerMinM; the route's comfort
+  // bar no longer refuses it, the user, 2026-11-10: "it should be free to continue bending even on a shorter section"). Was: laid at max(floor, 31.5·√(deg / (1 − the base's share))), the built rate under the bar there. Now: refused
+  // just under the floor by name, laid at it, and the whole change exact (the base's plus the extra's)
+  test(`D642 3 ${what} laid at the extra's shortest, the knot floor: refused just under it by name, laid at it, exact in all`, () => {
+    const L = 1000, min = TB.cornerChangeMinM(flat(), { length: L }, extra, deg), make = (L2) => () => TB.extendCorner(flat(), { length: L, [k]: deg, changes: { [k]: [{ from: L - L2, deg: extra }] } });
+    assert.equal(min, TB.cornerMinM(flat(), { length: L }), 'the knot floor, whatever the degrees');
     assert.throws(make(min - 0.2), (e) => /TOO_SHORT/.test(e.code) && e.message.includes('change 1'), `refused just under ${min} m`);
-    const d = extend(make(min)(), { length: 200 }), pk = builtTurnPeak(d, 1000 + 20, 1000 + L + 20, k === 'climbDeg');
-    assert.ok(pk <= 1.05, `the built rate reads ${pk.toFixed(3)} × the bar (extra over its shortest, ${min} m, on a ${L} m piece)`);
+    const d = make(min)(), a = integral(d, k === 'turnDeg' ? 'kh' : 'kv', L) / DEG;
+    assert.ok(Math.abs(a - (deg + extra)) <= 0.01, `${deg}° and ${extra}° over its last ${min} m: ${a.toFixed(4)}° in all`);
   });
 }
 test('D642 3d: his bank 88.45° over 1,000 m with an extra back to −30° at the extra\'s shortest: the built roll accelerates under the bar (× 1.05)', () => {

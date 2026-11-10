@@ -121,7 +121,9 @@ const MUTANTS = [
   { id: 'AD5 the steps are fitted with nothing held before the first mark', pattern: 'D642 2[cde]|L139 1 |L139 2', edits: [[X, 'for (let i = 0; i < n; i++) if (U[i] < p.from - 1e-9) keep.add(i);', '']] },
   { id: 'AD6 a step is the target itself, not the target less the one before (it adds the whole value again)', pattern: 'D642 2c|L139 1 |L139 2', edits: [[X, 'channelFn({ v: 0, m: 0 }, T - prev,', 'channelFn({ v: 0, m: 0 }, T,']] },
   { id: 'AD7 a change\'s shortest ignores the first ramp still moving under it', pattern: 'D642 3[de]', edits: [[X, 'share = Math.min(BASE_SHARE_MAX, baseShare(ch, base, p));', 'share = 0;']] },   // re-anchored (C's 35ef2eb6): the share is baseShare's
-  { id: 'AD8 an extra corner\'s shortest ignores the base corner under it', pattern: 'D642 3 |L139 12', edits: [[T, 'Math.min(BASE_SHARE_MAX, (SECOND_MIN_K * SECOND_MIN_K * Math.abs(baseDeg)) / (L * L))', '0']] },
+  // AMENDED (rule changed, 2026-11-10: an extra corner is refused only below the knot floor, as the first corner laid over its span; the base's share and the comfort bar
+  // it fed are gone from turnby.js, so the mutant that dropped the share had nothing left to change). It now puts the comfort bar back, which the same rows refuse
+  { id: 'AD8 an extra corner\'s shortest is the comfort bar again, not the knot floor', pattern: 'D642 3 |L139 12', edits: [[T, '  return cornerMinM(doc, opts);\n}', '  return Math.max(cornerMinM(doc, opts), 31.5 * Math.sqrt(Math.abs(deg)));\n}']] },
   // D642, C's 35ef2eb6 (R2 read 1.174 x the bar): the bank's share is its own shape's (extend.js baseShare)
   { id: 'AD9 a rounded or swell bank under the change is read as the quintic', pattern: 'D642 3e', edits: [[X, "if (shape === 'rounded' || shape === 'swell') {", 'if (false) {']] },
   { id: 'AD10 a base with no shape named is read as the quintic, not as the rounded bank of the panel', pattern: 'D642 3e', edits: [[X, "('shape' in base ? base.shape : 'rounded')", "('shape' in base ? base.shape : null)"]] },

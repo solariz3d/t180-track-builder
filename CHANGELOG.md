@@ -5,9 +5,15 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **An extra turn or extra climb can now bend as far as the first one, even on a short piece.** On a 125 m piece turning −90°, an extra turn from halfway could not go past about 2°: an extra corner had to be long enough to ride smoothly by the route's comfort bar (31.5 m × √degrees, more with the first corner under it), so an extra 45° asked for 298.8 m. The first corner never had that bar; how sharp a turn may be is the builder's own to judge by driving it. An extra corner is now refused only for what the same corner laid first over its span would be refused for: having no room to ease in and out, the knot floor (21 m on the bowl). So −90° in 125 m with an extra −45° or +45° from 62.5 m is laid, exact, and ends straight. The panel's offers, default marks and the drag's hold follow the same floor. Bank, width, cup and edge changes keep their bars. To have the old behaviour back, the change is `cornerChangeMinM` in `src/core/turnby.js`.
+
 ### Fixed
 
 - **Hovering a box inside a row that has its own explanation now shows one explanation, not two.** Over the "early" box of a field, the builder's own hover card showed the box's explanation and Windows drew its own tooltip beside it, with the explanation of the row around the box. The card moved aside only the hovered element's title, so the row's title was still there for Windows to draw. It now moves aside the title of every element around the hovered one as well, and puts them all back when the pointer leaves; the card still says the hovered element's words. The same applied to the landing fields and to the chips of the piece readout box.
+- **A held drag now says why.** When an extra handle's drag stops at the edge of what fits (an extra bank too big for the road left after its mark, say), the handle's box says where it is held, what the drag asks, the length that needs and the length there is, and why. Before, the drag simply stopped.
+- **A refused preview no longer stays on screen after the fields are fixed.** The message line kept the last refusal of the preview ("no preview of this piece: BAD_LENGTH: extend needs a positive length, got 0", from a length field emptied while typing) even after the next preview was built, so it showed under a length that read 125. The next preview that is built now takes it away.
 
 ## [0.4.40] - 2026-11-09
 

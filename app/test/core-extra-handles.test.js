@@ -314,3 +314,48 @@ test('F5: a default extra bank\'s mark dragged along the road (to 700 m) is his:
   assert.equal(p.opts().changes.phi[0].from, 700);
   p.panel.unmount();
 });
+
+// AN EXTRA CORNER IS AS FREE AS THE FIRST (the user, 2026-11-10, on 0.4.40: "making a short turn, say a 90 degree, you cannot then add the extra turn to bend it 45 degrees
+// ahead to then make a straight, it doesnt let you go past 2.64ish degrees"). His track (test/fixtures/extra-turn-short-2026-11-10.t180track) up to his 125 m piece, the
+// piece typed as he had it (length 125, turn −90 as a corner); the core's rule is test/core_extra_corner.test.js
+const HIS_STRAIGHT = (() => { const D = require('../../src/core/document.js'), d = D.parse(require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'test', 'fixtures', 'extra-turn-short-2026-11-10.t180track'), 'utf8')); return Object.freeze(D.checkDoc({ ...d, pieces: d.pieces.slice(0, 1) })); })();
+const hisPiece = async () => { const p = await mountPanel(); p.shell.adopt(HIS_STRAIGHT); p.type('length m', 125); p.type('turn °', -90); return p; };
+test('his extra turn 1: on his 125 m −90° piece the extra turn\'s handle drags to −45° and to +45° from 62.5 m, and the core lays both', async () => {
+  const p = await hisPiece(), TB = require('../../src/core/turnby.js');
+  const t = p.extras().find((e) => e.field === 'turn'); assert.ok(t, 'the extra turn has its handle');
+  for (const v of [1.96, 2.64, 45, -45]) {
+    p.panel.secondExtra(t.id, v);
+    assert.deepEqual(p.opts().changes.turnDeg, [{ from: 62.5, deg: v }], `dragged to ${v}°: the change is ${JSON.stringify(p.opts().changes.turnDeg)}`);
+    assert.doesNotThrow(() => TB.extendCorner(p.shell.getState().history.present, p.opts()), `${v}°: laid`);
+  }
+  p.panel.unmount();
+});
+test('his extra turn 2: an extra handle held at the edge of what fits says so, why, and the length it needs; back inside, it says nothing', async () => {
+  // 300 m and a bank of 30°: on his 125 m piece no extra bank fits at all, and a bank field with nothing typed has no extra, so neither has the handle
+  const p = await hisPiece(); p.type('length m', 300); p.type('bank °', 30);
+  const b = p.extras().find((e) => e.field === 'bank'), from = b.from;
+  assert.equal(p.panel.heldWhy(b.id), '', 'not dragged: nothing');
+  p.panel.secondExtra(b.id, 35); assert.equal(p.panel.heldWhy(b.id), '', 'to 35°, it fits: nothing');
+  p.panel.secondExtra(b.id, 90);
+  const held = p.opts().changes.phi[0].target / DEG, why = p.panel.heldWhy(b.id);
+  assert.ok(held > 35 && held < 90, `held between: ${held}°`);
+  const m = why.match(/^held at (-?[\d.]+)°: 90° needs ([\d.]+) m from its mark, it has ([\d.]+) m \(shorter, it rolls faster than it can be ridden smoothly\)$/);
+  assert.ok(m, `the reason: "${why}"`);
+  near(Number(m[1]), held, 0.005, 'held at what is set'); near(Number(m[3]), 300 - from, 0.05, 'the stretch it has: from its mark to the end');
+  assert.ok(Number(m[2]) > Number(m[3]), `it needs more than it has: ${m[2]} against ${m[3]}`);
+  assert.equal(p.panel.heldWhy('extra:turnDeg:0'), '', 'only the handle being dragged says it');
+  p.panel.secondExtra(b.id, 35); assert.equal(p.panel.heldWhy(b.id), '', 'back inside: nothing');
+  p.panel.unmount();
+});
+
+// (his screenshot, 2026-11-10: "no preview of this piece: BAD_LENGTH: extend needs a positive length, got 0" under a length field reading 125): the ghost writes its
+// refusal into the message line, and the next ghost that is built did not take it away, so an emptied length field's refusal stayed under the 125 typed after it
+const previewMsg = (p) => p.root.all().filter((e) => e.attrs && e.attrs.class === 'message' && /no preview/.test(e.textContent)).map((e) => e.textContent).join(' | ');
+test('his extra turn 3: a ghost refusal is taken away by the next ghost that is built: the length field emptied, then 125 typed', async () => {
+  const p = await hisPiece();
+  p.type('length m', ''); assert.match(previewMsg(p), /BAD_LENGTH/, 'an empty length: the ghost says why');
+  p.type('length m', '12'); assert.match(previewMsg(p), /TURN_TOO_SHORT/, '12 m: too short for −90°, it says why');
+  p.type('length m', '125'); assert.equal(previewMsg(p), '', 'the 125 m ghost is built: no refusal left in the message line');
+  p.shell.selectPiece(0); assert.equal(previewMsg(p), '', 'and a refusal of the shell (none here) is what the line shows');
+  p.panel.unmount();
+});
