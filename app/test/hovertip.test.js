@@ -6,6 +6,10 @@
 //   4  near the window's right and bottom edges the card turns to the pointer's other side and stays wholly inside the window
 //   5  a title set while the element is hovered (the turn box's hint) is moved aside again, and the shown card says the new words
 //   6  an element with no title shows nothing; the card has no tabindex, is a tooltip, and is drawn as the look draws its menus
+//   7  a titled box inside a titled row (the "early" box in its span): while the box is hovered NO element from it up to the document keeps a title (else Windows
+//      draws the row's tooltip beside the card; the user, 2026-11-10: "it shows both the designed explanation window, and the auto windows hove window explanation");
+//      the card says the box's words, and leaving puts both titles back as they were
+//   8  a title set on such a row while its box is hovered (the readout box's reason) is moved aside again, and the one put back on leaving is the new one
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -15,6 +19,7 @@ function fake({ W = 1000, H = 700, cardW = 300, cardH = 60 } = {}) {
   const listeners = {}, winListeners = {}, timers = [];
   const mk = (tag, attrs = {}, parent = null) => {
     const e = { tagName: tag.toUpperCase(), attrs: { ...attrs }, parent, style: {}, hidden: false, textContent: '', children: [], className: '', id: '',
+      get parentElement() { return this.parent; },
       getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }, setAttribute(k, v) { this.attrs[k] = String(v); if (this.mo) this.mo(k); },
       removeAttribute(k) { delete this.attrs[k]; }, hasAttribute(k) { return k in this.attrs; },
       closest() { for (let p = this; p; p = p.parent) if ('title' in p.attrs || 'data-tip' in p.attrs) return p; return null; },
@@ -25,8 +30,8 @@ function fake({ W = 1000, H = 700, cardW = 300, cardH = 60 } = {}) {
     return e;
   };
   const body = mk('body');
-  // a MutationObserver that reports a title set on the observed element (what hovertip.js asks of it)
-  class MO { constructor(cb) { this.cb = cb; this.el = null; } observe(el) { this.el = el; el.mo = (k) => { if (k === 'title') this.cb([]); }; } disconnect() { if (this.el) this.el.mo = null; this.el = null; } }
+  // a MutationObserver that reports a title set on an observed element (what hovertip.js asks of it); like the real one it observes several, and disconnect stops all
+  class MO { constructor(cb) { this.cb = cb; this.els = []; } observe(el) { this.els.push(el); el.mo = (k) => { if (k === 'title') this.cb([]); }; } disconnect() { for (const el of this.els) el.mo = null; this.els = []; } }
   const win = { innerWidth: W, innerHeight: H, MutationObserver: MO, addEventListener: (t, f) => { (winListeners[t] = winListeners[t] || []).push(f); } };
   const doc = { body, defaultView: win, createElement: (t) => mk(t), addEventListener: (t, f) => { (listeners[t] = listeners[t] || []).push(f); } };
   const fire = (t, e) => (listeners[t] || []).forEach((f) => f(e));
@@ -93,4 +98,23 @@ test('row 6: an element with no title shows nothing; the card has no tabindex, i
   F.enter(plain); F.tick(); assert.equal(F.card.hidden, true);
   assert.equal(F.card.getAttribute('tabindex'), null); assert.equal(F.card.getAttribute('role'), 'tooltip'); assert.equal(F.card.id, 'hovertip');
   assert.match(F.card.className, /\bmore-menu\b/, 'drawn as the look draws its menus');
+});
+
+test('row 7: a titled box inside a titled row: while the box is hovered no element up to the document keeps a title, and leaving puts both back', () => {
+  const F = fake(), page = F.mk('div', {}, F.body), row = F.mk('span', { title: 'Reach this bank early: the row' }, page), box = F.mk('input', { title: 'Reach this bank early: the box' }, row);
+  F.enter(box);
+  for (let p = box; p; p = p.parent) assert.equal(p.getAttribute('title'), null, `no title on <${p.tagName.toLowerCase()}> while the box is hovered: Windows has nothing to draw`);
+  F.tick(); assert.equal(F.card.hidden, false); assert.equal(F.card.textContent, 'Reach this bank early: the box', 'the card says the nearest words');
+  F.leave(box, page);
+  assert.equal(box.getAttribute('title'), 'Reach this bank early: the box'); assert.equal(row.getAttribute('title'), 'Reach this bank early: the row', 'the row\'s title is back');
+  assert.equal(box.getAttribute('data-tip'), null); assert.equal(row.getAttribute('data-tip'), null);
+  assert.equal(page.getAttribute('title'), null, 'an untitled element stays untitled');
+});
+
+test('row 8: a title set on a row while its box is hovered is moved aside again, and the new one is put back on leaving', () => {
+  const F = fake(), row = F.mk('div', { title: 'the readout: why' }, F.body), chip = F.mk('span', { title: 'turn: 90' }, row);
+  F.enter(chip); F.tick();
+  row.setAttribute('title', 'the readout: a new reason');
+  assert.equal(row.getAttribute('title'), null, 'moved aside again'); assert.equal(F.card.textContent, 'turn: 90', 'the card still says the chip\'s words');
+  F.leave(chip); assert.equal(row.getAttribute('title'), 'the readout: a new reason'); assert.equal(chip.getAttribute('title'), 'turn: 90');
 });

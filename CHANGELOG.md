@@ -5,6 +5,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Hovering a box inside a row that has its own explanation now shows one explanation, not two.** Over the "early" box of a field, the builder's own hover card showed the box's explanation and Windows drew its own tooltip beside it, with the explanation of the row around the box. The card moved aside only the hovered element's title, so the row's title was still there for Windows to draw. It now moves aside the title of every element around the hovered one as well, and puts them all back when the pointer leaves; the card still says the hovered element's words. The same applied to the landing fields and to the chips of the piece readout box.
+
 ## [0.4.40] - 2026-11-09
 
 ### Added
