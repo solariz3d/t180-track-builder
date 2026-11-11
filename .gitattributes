@@ -3,3 +3,7 @@
 test/fixtures/** -text
 # The sounds (app/sounds/*.wav) are checked byte for byte against their sha256 (app/test/sound-samples.test.js, row 6): binary, never converted.
 app/sounds/*.wav binary
+# The Rust manifest and lockfile are rewritten with LF by every build (cargo tauri build; checked 2026-11-11: a build left src-tauri/Cargo.toml LF on disk, bytes equal to git's copy).
+# With core.autocrlf=true they were checked out CRLF, so git's record went stale, listed them as changed, and `git pull --ff-only` refused when a release touched them. Check them out LF.
+src-tauri/Cargo.toml text eol=lf
+src-tauri/Cargo.lock text eol=lf
