@@ -4,6 +4,10 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+### Fixed
+
+- **The exporter no longer writes an AI line that AC cannot load for a near-vertical wall.** AC crashed in `AISpline::calculateNormals` loading the AI line of a track whose wall climbed to within 0.0009 m of vertical over a 6 m step. The bar that keeps a line off vertical (`CLEAR_UP`, `src/export/ailine.js`) is a dimensionless number, the sine of a tangent's angle from vertical, and it was 1e-4; that line's least was 1.424e-4, so it cleared the bar and still crashed. The bar is now 1.93e-4, the least of a line AC is known to load (ELYSIUM's, which does not move), so every line written is at least as clear as one AC loads. A track whose vertical stretch is closer than that to vertical is exported without an AI line, as a track that stays vertical already was, and the banner says why. Only ELYSIUM's own line sits in the band between the old and new bar among the repo's tracks.
+
 
 ### Changed
 

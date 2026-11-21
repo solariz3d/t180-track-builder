@@ -14,8 +14,10 @@ const FILE = 'ailine_vertical.test.js', FIXTURES = ['F1-bowl-default-lap-closed.
 
 const MUTANTS = [
   { id: 'V1 the line is never cleared (points stay on vertical)', edits: [['src/export/ailine.js', '  clearVertical(pts, keep, (i) => onSection(secs[i], tt[i]), st, !!opts.open);', '']] },
-  { id: 'V2 the bar is 1e-6 (the value that crashed AC), not 1e-4', edits: [['src/export/ailine.js', 'const CLEAR_UP = 1e-4;', 'const CLEAR_UP = 1e-6;']] },
-  { id: 'V3 the bar is 1e-2 (it moves points of a line AC loads)', edits: [['src/export/ailine.js', 'const CLEAR_UP = 1e-4;', 'const CLEAR_UP = 1e-2;']] },
+  // AMENDED BY NAME (L217, 2026-11-21): the bar is now 1.93e-4 (TEST TRACK 100's line, 1.424e-4 at least, crashed AC under the old 1e-4); the anchors follow it, and V2b is the old bar.
+  { id: 'V2 the bar is 1e-6 (the value that crashed AC), not 1.93e-4', edits: [['src/export/ailine.js', 'const CLEAR_UP = 1.93e-4;', 'const CLEAR_UP = 1e-6;']] },
+  { id: 'V2b the bar is the old 1e-4 (TEST TRACK 100 cleared it and still crashed AC)', edits: [['src/export/ailine.js', 'const CLEAR_UP = 1.93e-4;', 'const CLEAR_UP = 1e-4;']] },
+  { id: 'V3 the bar is 1e-2 (it moves points of a line AC loads)', edits: [['src/export/ailine.js', 'const CLEAR_UP = 1.93e-4;', 'const CLEAR_UP = 1e-2;']] },
   { id: 'V4 only the tangent to the next point is read (not across both neighbours)', edits: [['src/export/ailine.js', '[[k - 1, k], [k, k + 1], [k - 1, k + 1], [k - 2, k], [k, k + 2]]', '[[k - 1, k], [k, k + 1]]']] },
   { id: 'V10 a stretch that stays vertical is not refused (the line is written on it)', edits: [['src/export/ailine.js', 'if (h(a, b) < CLEAR_UP) throw', 'if (false) throw']] },
   { id: 'V5 the export does not catch the refusal (it fails instead of finishing)', edits: [['src/export/fromwords.js', "catch (e) { if (e.code !== 'VERTICAL_TANGENT') throw e; warnings.push(`${NO_AI_LINE} (${e.message})`); }", 'catch (e) { throw e; }']] },

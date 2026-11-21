@@ -48,7 +48,12 @@ const EXTRA = ['speed', 'gas', 'brake', 'latG', 'radius', 'sideLeft', 'sideRight
 const HEADER_BYTES = 16, POINT_BYTES = 20, EXTRA_BYTES = EXTRA.length * 4;
 // THE SMALLEST |tangent × up| A LINE MAY CARRY (generateAiLine, clearVertical): AC recomputes each point's direction from its neighbours and divides by this.
 // Measured: a line whose least is 1e-6 crashed AC as it loaded; ELYSIUM's, 1.93e-4 (78 points within 6° of vertical), loads.
-const CLEAR_UP = 1e-4;
+// L217 (2026-11-21): CLEAR_UP is DIMENSIONLESS, the sine of a tangent's angle from vertical (|t x up| = horizontal run / length of the step), NOT a distance in metres.
+// Three measured lines: 1e-6 crashed AC as it loaded (2026-11-01); TEST TRACK 100's, 1.424e-4 at least (its worst steps 0.0009 m and 0.0019 m off vertical over 6 m),
+// crashed it too (2026-11-18, AISpline::calculateNormals) although it cleared the old bar of 1e-4 by 1.4x; ELYSIUM's, 1.933e-4, loads. AC's source is not ours to read, so the
+// bar is the tightest the evidence allows: 1.93e-4, ELYSIUM's least rounded down. Every line written is then at least as clear as one AC is known to load, and ELYSIUM's own
+// does not move. Raising it further would move ELYSIUM's line (test/ailine_vertical.test.js pins it byte for byte).
+const CLEAR_UP = 1.93e-4;
 
 class AiLineError extends Error {
   constructor(code, message) { super(`${code}: ${message}`); this.name = 'AiLineError'; this.code = code; }
