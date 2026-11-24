@@ -89,6 +89,21 @@ const up2 = (x) => Math.ceil(x * 100 - 1e-9) / 100, down2 = (x) => Math.floor(x 
  * the piece (his S: +90 then −90 turns at the middle), but within the same bounds as above: after the previous mark plus that corner's minimum, and before the room the
  * later corners need. Without cornerMin (a shell before R1) the split is plain. The FIRST corner's own shortest (the head's shortestTurnBy) is not passed to the panel.
  */
+/**
+ * THE FLOWING BANK's blank marks (LAP 3): `ats` is the first target's at, then each row's, null where left blank. A run of blanks is spread evenly between the typed
+ * marks either side of it (the piece's start before the first; after the last, the piece's end, which the last blank takes), to 0.01 m. Typed ones are sent as typed.
+ */
+function flowAts(length, ats) {
+  const L = Number(length), out = ats.slice(), n = out.length;
+  for (let k = 0; k < n;) {
+    if (out[k] !== null) { k++; continue; }
+    let j = k; while (j < n && out[j] === null) j++;
+    const a = k === 0 ? 0 : out[k - 1], tail = j === n, b = tail ? L : out[j], m = j - k + (tail ? 0 : 1);
+    for (let i = k; i < j; i++) out[i] = near2(a + ((b - a) * (i - k + 1)) / m);
+    k = j;
+  }
+  return out;
+}
 function changeFroms(length, list, first, ch, { lo = 0, corner = false, minM = null, cornerMin = null, firstAt = null, floor = 0 } = {}) {
   const L = Number(length), n = list.length, out = [];
   if (!(L > 0)) return list.map((x) => x.from);
@@ -183,7 +198,11 @@ const EARLY_TITLE = Object.freeze({
 // change, ending at a climb rate of 0 (a steady pitch, level only when it ends at pitch 0).
 // `head`: the head's end values as coreshell headState gives them (phi in rad; c, e, er in degrees), which a cross-section ramp at the start is measured from;
 // without one (an empty track, or a caller that has none) the change is measured from 0
-function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null, changes = null, secondMinM = null, cornerChangeMinM = null, secondFloorM = null, bankFloorM = null, bankRefusal = null }) {
+// `bankFlow` (the "flow" box on the bank field) and `bankAt` (its "at m"): THE FLOWING BANK (smooth banked turns, LAP 3, the plan's Part 5; driven side by side
+// with today's bank on one layout, 2026-11-24, it was the better). Ticked, with a bank target, the bank PASSES THROUGH its marks as one curve (src/core/extend.js
+// bankShape 'flow'): the bank field's target at `bankAt` (transition.phi; blank: the early ramp's end when "early" is ticked, else laid by flowAts), then each
+// extra bank row's then at its from (through.phi). Left out or false, nothing here changes, to the byte
+function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null, changes = null, secondMinM = null, cornerChangeMinM = null, secondFloorM = null, bankFloorM = null, bankRefusal = null, bankFlow = false, bankAt = null }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
   const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup), corner = turnAs === 'corner' && t !== null && t !== 0, climbCorner = turnAs === 'corner' && c !== null && c !== 0;
   if (turnAs !== 'rate' && turnAs !== 'corner') throw new Error(`BAD_TURN_AS: the turn is read as 'rate' or 'corner', got ${turnAs}`);
@@ -221,7 +240,8 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
     if (ch === 'phi') out.bankShape = startShapeOf(transition.phi);
     else (out.startShapes = out.startShapes || {})[ch] = startShapeOf(transition[ch]);
   }
-  let bankComfort = null; const items0 = { bank: ((changes && changes.bank) || []).map((x) => ({ from: num(x.from) })) };   // (2026-11-10) the bank's comfort-clamped marks, asked for only when the floor's are refused
+  const flow = !!bankFlow && b !== null;   // the flowing bank: its marks are sent as through.phi below, never as the bank's changes (the core refuses both together)
+  let bankComfort = null; const items0 ={ bank: ((changes && changes.bank) || []).map((x) => ({ from: num(x.from) })) };   // (2026-11-10) the bank's comfort-clamped marks, asked for only when the floor's are refused
   // THE LATER CHANGES (L139; L135 the bank's): each field's list in the core's units, each change with its own from (B's names, 2026-11-05):
   // changes: { kh|kv|phi|w|c|e|er: [{ from, target }, …] }, and as corners changes.turnDeg / climbDeg: [{ from, deg }, …] after the first corner. Only for a field with a
   // target of its own; a then left blank is no change. NOT clamped: the core refuses a mark out of range, or a segment under its minimum, by name (BAD_SECOND, naming the
@@ -238,7 +258,7 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
       later[key] = items.map((x, k) => ({ from: froms[k], deg: x.then }));
       continue;
     }
-    const ch = FIELD_CHANNEL[f]; if (targets[ch] === undefined) continue;
+    const ch = FIELD_CHANNEL[f]; if (targets[ch] === undefined || (flow && ch === 'phi')) continue;
     const per = f === 'turn' || f === 'climb' ? DEG / 100 : f === 'bank' ? DEG : 1, list = items.map((x) => ({ from: x.from, target: x.then * per }));
     // D642 (pane B's additive model): a first ramp over the whole piece (no early transition) is still moving under the change, so the change's shortest is asked with it
     const base = baseOfRamp(transition[ch], targets[ch], rampStart(empty ? targets : null, head, ch), out.length), minM = base && typeof secondMinM === 'function' ? (c, a, b) => secondMinM(c, a, b, base) : secondMinM;
@@ -251,6 +271,19 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
     const froms = changeFroms(out.length, list, targets[ch], ch, { lo: transition[ch] || 0, minM: floored, ...lead });
     later[ch] = list.map((x, k) => ({ from: froms[k], target: x.target }));
     if (floored !== minM) bankComfort = () => changeFroms(out.length, list, targets[ch], ch, { lo: transition[ch] || 0, minM, ...lead });
+  }
+  // THE FLOWING BANK's marks (the contract, plan Part 2): the first target at transition.phi, then each extra bank row as { at, target } in through.phi. A blank at is
+  // laid by flowAts; nothing is clamped: the core refuses marks out of order, under its gap, past the piece, or a list it cannot lay inside, by name (BAD_SECOND,
+  // the mark and the room it needs), and the ghost says so in its words. No at and no row: the first target is at the piece's end (the core's own rule), no transition
+  if (flow) {
+    out.bankShape = 'flow';
+    const items = ((changes && changes.bank) || []).map((x) => ({ then: num(x.then), at: num(x.from) })).filter((x) => x.then !== null && Number.isFinite(x.then));
+    const at0 = num(bankAt) !== null ? num(bankAt) : Number.isFinite(transition.phi) ? transition.phi : null;
+    if (at0 !== null || items.length) {
+      const ats = flowAts(out.length, [at0, ...items.map((x) => x.at)]);
+      transition.phi = ats[0];
+      if (items.length) out.through = { phi: items.map((x, k) => ({ at: ats[k + 1], target: x.then * DEG })) };
+    }
   }
   if (Object.keys(later).length) out.changes = later;
   if (Object.keys(transition).length) out.transition = transition;
@@ -371,7 +404,7 @@ function mount(root, shell, mountOpts = {}) {
       shown[k] = cornerMode() ? '' : show(HEAD[k][1](h)); f.value = shown[k]; lab.textContent = cornerMode() ? `${unit} °` : `${unit} °/100m`; f.setAttribute('title', title[turnAs.value]);
     }
   };
-  const showHead = () => { const h = shell.headState(); for (const [k, [input, of]] of Object.entries(HEAD)) { shown[k] = show(of(h)); input.value = shown[k]; } showTurnHead(h); for (const [k, f] of [['cup', cup], ['tube', tube]]) { f.disabled = false; f.setAttribute('title', baseTitle[k]); } fillWidthLike(); clearSecond(); };   // (baseTitle and clearSecond are set below, before the first draw; the head has no second bank)
+  const showHead = () => { const h = shell.headState(); for (const [k, [input, of]] of Object.entries(HEAD)) { shown[k] = show(of(h)); input.value = shown[k]; } showTurnHead(h); for (const [k, f] of [['cup', cup], ['tube', tube]]) { f.disabled = false; f.setAttribute('title', baseTitle[k]); } fillWidthLike(); clearSecond(); bankAtF.value = ''; };   // (LAP 3: the flowing bank's first at goes with its rows; its box is kept, as "early" is)   // (baseTitle and clearSecond are set below, before the first draw; the head has no second bank)
   // A PIECE IS A CUP OR A TUBE, never both (contract: `c` and `t` targets together are refused BAD_TARGET). CHOSEN: the field changed
   // LAST wins. Changing one puts the other back to what it shows (so it sends no target) and DISABLES it, with a tooltip saying why; putting
   // the changed one back to its shown value enables the other again, and so does every new document (showHead).
@@ -413,6 +446,23 @@ function mount(root, shell, mountOpts = {}) {
   // D642: `baseDeg`, the first corner still turning under it (its degrees), as extendOptions asks
   const cornerMin = (o, deg, baseDeg) => { const doc = shell.getState().history.present, v = typeof shell.cornerChangeMinM === 'function' && Number.isFinite(deg) ? shell.cornerChangeMinM(doc, o, deg, baseDeg) : typeof shell.cornerMinM === 'function' ? shell.cornerMinM(doc, o) : null; return Number.isFinite(v) && v > 0 ? v : 0; };
   const secondFloor = () => { const v = typeof shell.secondFloorM === 'function' ? shell.secondFloorM() : null; return Number.isFinite(v) && v > 0 ? v : null; };
+  // THE FLOWING BANK'S BOX (LAP 3, the plan's Part 5): "flow" on the bank field. Ticked, the bank passes through its marks (extendOptions bankFlow): the field's own
+  // target at "at m" (a second line of the field's row, shown only while ticked; blank, laid as extendOptions says, its place shown greyed), each extra bank row a mark "bank 2 ° at m". Kept from piece
+  // to piece, as the "early" boxes are; Undo gives it back with the rows (fieldsNow, putBack)
+  const bankFlow = el('input', { type: 'checkbox', 'aria-label': 'bank flows through its marks', title: 'flow: the bank passes through each mark as one smooth curve, carrying its roll between them (no stop at a mark). The bank °, at the metres in "at", is the first mark; each extra bank is the next, at its own metres' });
+  const bankAtF = el('input', { type: 'number', step: '1', 'aria-label': 'bank at', title: 'where the bank reaches the bank ° above, in metres from the start of the piece (its first mark). Blank: laid evenly with the other marks, or at the piece\'s end with none' });
+  // "at m" is the bank row's LAST child, laid on a second line of that row (app/index.html, .flow-at), as each extra row's "at m" is under its amount: beside "flow"
+  // and "early" on one line, the 260 px column held no room for it (the headless render, LAP 3: the at widened the row and pushed the bank's value and the rows'
+  // remove off the column). Inside the row, so a field's list of changes still sits right after its row (L135 C1, L139 S1)
+  const bankAtBox = el('span', { class: 'flow-at' }, el('span', { text: 'at m' }), bankAtF);
+  const flowBox = el('span', { class: 'at-start', title: bankFlow.getAttribute('title') }, bankFlow, el('span', { text: 'flow' }));
+  const flowOn = () => !!bankFlow.checked;
+  const showFlow = () => { bankAtBox.style.display = flowOn() ? '' : 'none'; };
+  showFlow();
+  bankFlow.onchange = () => { showFlow(); secRelabel('bank'); ghost(); };
+  bankAtF.oninput = bankAtF.onchange = () => { lastTouched = bankAtF; ghost(); };
+  // the bank's marks as the options carry them: the changes, or ticked, the flowing bank's through marks read as changes ({ from: at, target }); null: none
+  const secArr = (o, f) => { const key = secKey(f); if (key === 'phi' && o.bankShape === 'flow') return o.through && o.through.phi ? o.through.phi.map((m) => ({ from: m.at, target: m.target })) : null; return (o.changes && o.changes[key]) || null; };
   const SEC = Object.fromEntries(SECOND_FIELDS.map((f) => [f, { list: [], box: el('div', { class: 'then-list', 'aria-label': `${SECOND_NAME[f]} changes` }) }]));
   const secUnit = (f) => (f === 'turn' || f === 'climb' ? (cornerMode() ? '°' : '°/100m') : f === 'width' ? 'm' : '°');
   const secHasTarget = (f) => (f === 'bank' ? bankTarget() !== '' : f === 'edgeR' ? rightTarget() !== '' : asTyped(f) !== '');
@@ -420,13 +470,13 @@ function mount(root, shell, mountOpts = {}) {
   const secLive = (f) => SEC[f].list.filter((x) => x.then.value !== '' && Number.isFinite(Number(x.then.value)));   // the changes the options carry, in order
   // (L140, the user: "it adds something called extra turn"): a row reads "extra turn °" ("extra turn 2 °" for the second), as its handle is labelled, and is named so
   const secName = (f, k) => `extra ${SECOND_NAME[f]}${k ? ` ${k + 1}` : ''}`;
-  const secRelabel = (f) => SEC[f].list.forEach((x, k) => { x.then.setAttribute('aria-label', secName(f, k)); x.from.setAttribute('aria-label', `${secName(f, k)} from`); x.rm.setAttribute('aria-label', `remove ${secName(f, k)}`); x.unit.textContent = `${secName(f, k)} ${secUnit(f)}`; });
+  const secRelabel = (f) => SEC[f].list.forEach((x, k) => { x.then.setAttribute('aria-label', secName(f, k)); x.from.setAttribute('aria-label', `${secName(f, k)} from`); x.rm.setAttribute('aria-label', `remove ${secName(f, k)}`); x.unit.textContent = f === 'bank' && flowOn() ? `bank ${k + 2} °` : `${secName(f, k)} ${secUnit(f)}`; if (x.word) x.word.textContent = f === 'bank' && flowOn() ? 'at m' : 'from m'; });   // LAP 3: a flowing bank's row is a mark it passes through
   const secAdd = (f, { then = '', from = '', share = null } = {}) => {
     const x = { then: el('input', { type: 'number', step: '1', title: `the ${SECOND_NAME[f]} from this change's mark on: drag its offer on the next piece to make one, then type here to change it` }),
       from: el('input', { type: 'number', step: '1', title: 'where this change starts, in metres from the start of the piece (its mark on the next piece, dragged along it). Typed, it stays at those metres; cleared, it is laid again' }),
       unit: el('span', { text: '' }), share, auto: share === null && String(from) === '' };   // no from given: laid by the rule, and shown
     x.rm = el('button', { text: '−', title: 'remove this change', onclick: () => secRemove(f, x) });
-    x.row = el('label', { class: 'picker inline then-row' }, x.unit, x.then, el('span', { text: 'from m' }), x.from, x.rm);   // a label row, as every field's own
+    x.row = el('label', { class: 'picker inline then-row' }, x.unit, x.then, (x.word = el('span', { text: 'from m' })), x.from, x.rm);   // a label row, as every field's own
     x.then.value = String(then); x.from.value = String(from);
     x.then.oninput = x.then.onchange = () => { lastTouched = x.then; ghost(); };
     x.from.oninput = x.from.onchange = () => { x.share = null; x.auto = x.from.value === ''; x.dflt = false; lastTouched = x.from; ghost(); };   // typed: metres; cleared: laid by the rule (and no longer the handle's default)
@@ -437,7 +487,7 @@ function mount(root, shell, mountOpts = {}) {
   // THE ORDER FOLD-IN: the FIRST extra bank, while its mark is still where its handle stood when it was made (x.dflt: never slid, typed or dragged),
   // is laid at way 1's lead whenever the piece has an extra corner, whichever was made first: it sends a blank from, and extendOptions' changeFroms lays the lead (firstAt) with its
   // clamps. Without an extra corner it keeps the mark it was made at (its share)
-  const secLead = (f, k, x) => f === 'bank' && k === 0 && !!x.dflt && cornerMode() && secLive('turn').length > 0 && secHasTarget('turn');
+  const secLead = (f, k, x) => f === 'bank' && !flowOn() && k === 0 && !!x.dflt && cornerMode() && secLive('turn').length > 0 && secHasTarget('turn');
   const secChanges = () => Object.fromEntries(SECOND_FIELDS.filter((f) => SEC[f].list.length && secHasTarget(f)).map((f) => [f, SEC[f].list.map((x, k) => ({ then: secThen(f, x), from: secLead(f, k, x) ? '' : x.from.value }))]));
   const secKey = (f) => (f === 'turn' || f === 'climb') && cornerMode() ? (f === 'turn' ? 'turnDeg' : 'climbDeg') : FIELD_CHANNEL[f];
   /** the rows follow their field (off without a target) and the length: a dragged change keeps its share of the piece; a cleared from shows where the rule lays it */
@@ -456,9 +506,11 @@ function mount(root, shell, mountOpts = {}) {
       // (D642, the librarian's ruling on B's §9: the place it moves to is walked, like a dragged mark, to the nearest that holds on the built road; none: the latest, as before)
       for (let k = live.length - 1; k >= 0; k--) { if (live[k].auto || live[k].share === null || secLead(f, k, live[k])) continue; const S = secSegs(f); if (!S.arr[k] || S.holds(k)) continue; const r = secRange(S, k); if (S.arr[k].from > r.hi + 1e-9 && r.hi >= r.lo - 1e-9) { const w = walkToHold(f, k, live[k], down2(r.hi), up2(r.lo), down2(r.hi)); live[k].from.value = show(w === null ? down2(r.hi) : w); } }
     }
+    // LAP 3: a flowing bank's first at left blank shows, greyed, where it is laid (the piece's end with no mark after it)
+    if (flowOn() && bankAtF.value === '') { const o = opts(), a = o.transition && o.transition.phi; bankAtF.setAttribute('placeholder', Number.isFinite(a) ? show(a) : 'end'); }
     if (!SECOND_FIELDS.some((f) => SEC[f].list.some((x, k) => x.auto || secLead(f, k, x)))) return;
     const o = opts();
-    for (const f of SECOND_FIELDS) { const arr = o.changes && o.changes[secKey(f)]; if (!arr) continue; secLive(f).forEach((x, k) => { if ((x.auto || secLead(f, k, x)) && arr[k]) x.from.value = show(arr[k].from); }); }
+    for (const f of SECOND_FIELDS) { const arr = secArr(o, f); if (!arr) continue; secLive(f).forEach((x, k) => { if ((x.auto || secLead(f, k, x)) && arr[k]) x.from.value = show(arr[k].from); }); }
   };
   // "at start": one small box per field, off by default (off = ease to the value over the whole piece, as always). It is kept from
   // piece to piece, like a preference; it does nothing for a field left as shown, which has no target
@@ -486,13 +538,15 @@ function mount(root, shell, mountOpts = {}) {
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
     empty: !shell.getState().history.present.pieces.length, turnAs: turnAs.value, head: shell.headState(),
     changes: secChanges(), secondMinM: shellMinM, cornerChangeMinM: shellCornerMin, secondFloorM: secondFloor(),
-    bankFloorM: typeof shell.bankFitFloorM === 'function' ? shell.bankFitFloorM() : null, bankRefusal: (o) => (typeof shell.changeRefusal === 'function' ? !!shell.changeRefusal(o, 'phi', null) : false) });
+    bankFloorM: typeof shell.bankFitFloorM === 'function' ? shell.bankFitFloorM() : null, bankRefusal: (o) => (typeof shell.changeRefusal === 'function' ? !!shell.changeRefusal(o, 'phi', null) : false),
+    bankFlow: flowOn(), bankAt: bankAtF.value });
   // (the user, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
   // document it made; when Undo steps from that document back to the one it was made from, the fields are put back (the length, every field as typed or left as
   // shown, the at-start ticks), so Extend again rebuilds the same piece. Redo, a brush and open show the head, as before
   const madeWith = new WeakMap();
   const fieldsNow = () => ({ len: len.value, values: Object.fromEntries(Object.keys(HEAD).map((k) => [k, HEAD[k][0].value])), ticks: Object.fromEntries(Object.entries(atStart).map(([k, b]) => [k, b.checked])), turnAs: turnAs.value,
-    second: Object.fromEntries(SECOND_FIELDS.map((f) => [f, SEC[f].list.map((x) => ({ then: x.then.value, from: x.from.value, share: x.share, auto: x.auto, dflt: !!x.dflt }))])) });
+    second: Object.fromEntries(SECOND_FIELDS.map((f) => [f, SEC[f].list.map((x) => ({ then: x.then.value, from: x.from.value, share: x.share, auto: x.auto, dflt: !!x.dflt }))])),
+    flow: flowOn(), bankAt: bankAtF.value });   // LAP 3: the flowing bank's box and its first mark's at, given back with the rows
   // (the user, 2026-10-18: a piece after a turn goes straight "because the pieces dont retain the same values"): AS CORNERS, after an Extend the turn and climb fields
   // KEEP the degrees typed for the piece just placed (the new document's draw has just shown the head, blank), so Extend again places the same corner, each ending straight.
   // A blank or a typed 0 is not carried (the field stays blank, as before). Only Extend carries (and Straight, whose 0 never is): Jump, Level, To floor, Turn by, Turn to grid
@@ -506,6 +560,7 @@ function mount(root, shell, mountOpts = {}) {
   const extendHere = () => { const before = shell.getState().history.present, made = fieldsNow(); shell.extend(opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) { madeWith.set(after, { before, made }); carryCorner(made); } };
   //: the mode Undo gives back is saved through S too, or the hidden box and the Settings menu would read two different modes
   const putBack = (m) => { if (m.turnAs && m.turnAs !== turnAs.value) { turnAs.value = m.turnAs; showTurnHead(shell.headState()); S.set('turnClimbAs', m.turnAs); } len.value = appliedLen = m.len; for (const k of Object.keys(HEAD)) HEAD[k][0].value = m.values[k]; for (const [k, b] of Object.entries(atStart)) b.checked = !!m.ticks[k]; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube);
+    if (m.flow !== undefined) { bankFlow.checked = !!m.flow; bankAtF.value = m.bankAt; showFlow(); }
     clearSecond(); if (m.second) for (const f of SECOND_FIELDS) for (const y of m.second[f] || []) { const x = secAdd(f, y); x.auto = !!y.auto; x.dflt = !!y.dflt; } showSecond(); };
   // the ghost: a candidate the shell cannot build, or the preview cannot draw, says why (it used to vanish without a word)
   // THE READOUT of the piece the fields describe: 16 px bold rows, so its ink is at least 11 device px tall
@@ -906,7 +961,7 @@ function mount(root, shell, mountOpts = {}) {
       // D641 (E's item 2: his S as one piece landed 0.97° off straight, only to the pixel): a corner's extra also lands on the corner that undoes the first, so the field ends
       // where the piece started (an S dead straight, a climb back to its pitch)
       if (CORNER_KIND[f] === kind) { const first = Number(asTyped(f)); if (Number.isFinite(first) && first !== 0) snapTo.push(-first); }
-      const arr = (o.changes && o.changes[secKey(f)]) || [], live = secLive(f);
+      const arr = secArr(o, f) || [], live = secLive(f);
       // ONE extra handle per field (the user on c42f985, brief :29: "every subsequent click adds another one, perhaps we should only do two per action on the piece … until we figure
       // out how to make it work right"): its first change once there is one, else the change it can make. Later changes made another way keep their rows and marks
       const at = Math.min(1, Math.max(0, EXTRA_AT[f]));
@@ -1181,7 +1236,7 @@ function mount(root, shell, mountOpts = {}) {
     info,   // the track line first, directly under the bar (no heading above it)
     el('div', { class: 'actions' }, extendBtn, straightBtn, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
     sculptStrip,
-    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), turnField, SEC.turn.box, climbField, SEC.climb.box, fieldAt('bank °', bank, 'bank'), SEC.bank.box, ...shapeFields),
+    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), turnField, SEC.turn.box, climbField, SEC.climb.box, (() => { const r = fieldAt('bank °', bank, 'bank', flowBox); r.append(bankAtBox); return r; })(), SEC.bank.box, ...shapeFields),
     roBox,
     jumpNote, landingBox,
     el('div', { class: 'actions' }, cancelBtn), proposalBox,
@@ -1289,8 +1344,15 @@ function mount(root, shell, mountOpts = {}) {
   // target k-1 to target k; it must be at least that change's minimum (the core's, through the shell, as offersAt reads it). lo0: the first change starts after the early
   // first ramp's end. secRange(S, k): where change k's mark may stand, its neighbours and the minimums held
   const secSegs = (f, o = opts()) => {
-    const key = secKey(f), corner = key === 'turnDeg' || key === 'climbDeg', arr = (o.changes && o.changes[key]) || [];
+    const key = secKey(f), corner = key === 'turnDeg' || key === 'climbDeg', arr = secArr(o, f) || [];
     const first = corner ? Number(f === 'turn' ? asTyped('turn') : asTyped('climb')) : o.targets[key];
+    // LAP 3: a flowing bank's marks are only kept in order, each after the one before it (the first after the bank's own at); the core refuses a mark under its gap,
+    // or a list it cannot lay, by name with the room it needs, so no minimum of the core's is copied here
+    if (key === 'phi' && o.bankShape === 'flow') {
+      const L = Number(len.value), lo0 = o.transition && Number.isFinite(o.transition.phi) ? o.transition.phi : 0;
+      const holds = (k) => (k + 1 < arr.length ? arr[k + 1].from > arr[k].from : arr[k].from <= L + 1e-9) && arr[k].from > (k ? arr[k - 1].from : lo0);
+      return { key, corner: false, arr, first, lo0, min: () => 0, holds, L };
+    }
     const mm = corner ? null : minOf(o, key), L = Number(len.value);   // D642: with the first ramp under it (corners: the first corner's degrees)
     // D642 (E's review of d87ba99: 106 ms a move dragging the extra bank back toward level): each segment's shortest, asked only when a range needs its number (min); and
     // whether a segment holds at the span it has (holds), which is all the fit check needs: at most ONE probe of the built road (shell.spanHolds, extend.js spanHolds),
@@ -1321,7 +1383,16 @@ function mount(root, shell, mountOpts = {}) {
     const o = opts(), out = [], L = Number(len.value), act = handles && typeof handles.active === 'function' ? handles.active() : null, actK = act ? HD.KINDS[act.kind] : null;
     const litF = actK && actK.extra ? exFieldOf(act.kind) : null;
     for (const f of SECOND_FIELDS) {
-      const arr = o.changes && o.changes[secKey(f)]; if (!arr) continue;
+      const arr = secArr(o, f);
+      // LAP 3: a FLOWING bank shows every mark it passes through, the field's own first (index -1, at its at, or the piece's end) and then each row's, each a tick
+      // with no stretch (the bank is one curve, no ramp starts there), labelled with the bank it passes and where
+      if (f === 'bank' && o.bankShape === 'flow') {
+        const f2 = (x) => Number(x).toFixed(2), all = [{ from: o.transition && Number.isFinite(o.transition.phi) ? o.transition.phi : L, target: o.targets.phi }, ...(arr || [])];
+        all.forEach((ch, j) => { const k = j - 1; out.push({ field: f, index: k, from: ch.from, half: halfAt(ch.from), ...ST.styleOf(f), to: ch.from, halfTo: halfAt(ch.from), lit: k >= 0 && litF === f && actK.index === k,
+          label: `Bank${k >= 0 ? ` ${k + 2}` : ''} · passes ${f2(ch.target / DEG)}° at ${f2(ch.from)} m · drag to move it` }); });
+        continue;
+      }
+      if (!arr) continue;
       arr.forEach((ch, k) => {
         const base = { field: f, index: k, from: ch.from, half: halfAt(ch.from), ...ST.styleOf(f) };
         if (!EX_KIND[f] || !(L > 0)) { out.push(base); return; }
@@ -1345,10 +1416,19 @@ function mount(root, shell, mountOpts = {}) {
     const o = opts(), out = [];
     for (const f of SECOND_FIELDS) {
       if (!secHasTarget(f)) continue;
-      const key = secKey(f), corner = key === 'turnDeg' || key === 'climbDeg', arr = (o.changes && o.changes[key]) || [];
+      const key = secKey(f), corner = key === 'turnDeg' || key === 'climbDeg', arr = secArr(o, f) || [];
       if (unused && arr.length) continue;
       const first = corner ? Number(f === 'turn' ? asTyped('turn') : asTyped('climb')) : o.targets[key];
       if (!Number.isFinite(first)) continue;
+      // LAP 3: a flowing bank's next mark is offered in the middle of the room after its last mark (the bank's own at; none typed: the piece's start), while that
+      // room is at least two floors; the core says by name if the mark made there cannot be laid
+      if (key === 'phi' && o.bankShape === 'flow') {
+        const end = arr.length ? arr[arr.length - 1].from : o.transition && Number.isFinite(o.transition.phi) ? o.transition.phi : 0, R = L - end;
+        if (!(R >= 2 * floor - 1e-9)) continue;
+        const from = Number.isFinite(secPending[f]) && secPending[f] > end ? secPending[f] : near2(end + R / 2), last = arr.length ? arr[arr.length - 1] : null;
+        out.push({ field: f, index: arr.length, from, slid: Number.isFinite(secPending[f]) && secPending[f] > end, half: halfAt(from), offer: true, base: Number(last ? last.target / DEG : bankTarget()), ...ST.styleOf(f) });
+        continue;
+      }
       // D641 (E's item 3; the user on c42f985: "perhaps we should only do two per action on the piece"): a field with no extra handle (the left and right edge) is offered
       // ONE later change, as the extra handles give the others; more made another way (a typed row) keep their rows and marks
       if (!Number.isFinite(EXTRA_AT[f]) && arr.length >= 1) continue;
@@ -1449,6 +1529,11 @@ function mount(root, shell, mountOpts = {}) {
     } finally { x.from.value = was; }
   };
   const secondDrag = (mark, from) => {
+    // LAP 3: a flowing bank's first mark (index -1) is the bank field's own: dragged, it moves its at, kept before the first row's mark and inside the piece
+    if (mark.field === 'bank' && mark.index === -1 && flowOn()) {
+      const next = secArr(opts(), 'bank'), hi = next && next.length ? next[0].from : Number(len.value); if (!(hi > 0)) return;
+      bankAtF.value = show(Math.min(down2(hi), Math.max(0, near2(from)))); lastTouched = bankAtF; ghost(); return;
+    }
     const x = secLive(mark.field)[mark.index]; if (!x) return;
     if (!secDragFrom || secDragFrom.x !== x) secDragFrom = { x, value: x.from.value, share: x.share, auto: x.auto, dflt: x.dflt };
     // B's G9: never past its neighbour (plus the minimum between them), never so late its segment is short; no room at all: it stays
