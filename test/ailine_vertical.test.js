@@ -89,13 +89,14 @@ test('ELYSIUM\'s AI line (a loop through vertical that AC loads) is byte-identic
 
 // An OPEN track that climbs to vertical and STAYS there: a level straight, a piece whose pitch rate rises and falls back to 0 so it ends pointing straight up
 // (the rate scaled so its pitch sums to exactly 90°), then a vertical straight. The test export, as the page's own button makes it.
-function stayVerticalDoc() {
+// leanH (default 0): the vertical straight leans so that |tangent x up| = leanH (cos of its pitch); 0 is exactly vertical.
+function stayVerticalDoc(leanH = 0) {
   const F1 = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'F1-bowl-default-lap-closed.core2.json'), 'utf8'));
   const p1 = F1.pieces[0], n = p1.channels.kv.length, flat = { ...p1, channels: { ...p1.channels, kh: p1.channels.kh.map(() => 0) } };
   const build = (scale) => D.parse(JSON.stringify({ ...F1, closed: false, nextId: 4, pieces: [flat, { ...flat, id: 'p2', channels: { ...flat.channels, kv: Array.from({ length: n }, (_, i) => (i < 2 || i >= n - 2 ? 0 : scale)) } }, { ...flat, id: 'p3' }] }));
   const pitchAt = (doc, s) => { const sm = AD.toPath(doc, { step: 2 }).path.samples.reduce((a, b) => (Math.abs(b.s - s) < Math.abs(a.s - s) ? b : a)); return Math.asin(Math.max(-1, Math.min(1, sm.T[1]))); };
   const unit = 0.005, end = 2 * p1.length;
-  return build(Number(((unit * (Math.PI / 2)) / pitchAt(build(unit), end)).toFixed(9)));   // pitch is linear in the rate
+  return build(Number(((unit * Math.acos(leanH)) / pitchAt(build(unit), end)).toFixed(9)));   // pitch is linear in the rate
 }
 const exportOf = (doc, dir) => { const segs = AD.toSegments(doc), lift = (q) => AD.offsetPath(doc, segs, q), start = { pos: doc.start.pos.slice(), theta: doc.start.heading, p: doc.start.pitch }; return FW.exportSegments(segs, { name: 'vertical', liftPath: lift, start }, { outDir: dir, variant: 'block', markers: startLayout(segs, lift, start, { open: true }), test: true }); };
 
@@ -116,4 +117,23 @@ test('a layout folder of a track that stays vertical lists no AI line (src/expor
   const b = FW.buildFromSegments(segs, { name: 'vertical', liftPath: lift, start }, { markers: startLayout(segs, lift, start, { open: true }), test: true });
   const { files } = require('../src/export/layouts.js').layoutSet('t180b_vertical', [{ layout: 'main', name: 'vertical', main: true, b }]);
   assert.ok(Object.keys(files).length > 0 && !Object.keys(files).some((k) => /fast_lane\.ai$/.test(k)), Object.keys(files).join(', '));
+});
+
+// L217 (TEST TRACK 100, 2026-11-18): AC crashed in AISpline::calculateNormals on a line whose least |tangent x up| was 1.424e-4 (its steps within 0.0009 m and 0.0019
+// m of vertical over 6 m), above the old 1e-4 bar. CLEAR_UP is a DIMENSIONLESS number, the sine of a tangent's angle from vertical (|t x up|), not a distance:
+// the brief read it as 1e-4 m. ELYSIUM's line (1.933e-4 at least) is the one AC is known to load, so the bar is the tightest the evidence allows (1.93e-4): every
+// line written is at least as clear as a line AC loads, and TEST TRACK 100's (1.424e-4) is refused.
+const exportDir = (doc) => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-lean-')); try { const r = exportOf(doc, dir), f = r.folders[0]; return { files: f.files, onDisk: fs.existsSync(path.join(f.dir, 'ai', 'fast_lane.ai')), ai: f.files.includes('ai/fast_lane.ai') ? fs.readFileSync(path.join(f.dir, 'ai', 'fast_lane.ai')) : null, r }; } finally { fs.rmSync(dir, { recursive: true, force: true }); } };
+
+test('L217: a track whose vertical stretch leans 1.67e-4 (a step 0.001 m off vertical over 6 m, as steep as TEST TRACK 100) is exported WITHOUT an AI line', () => {
+  const x = exportDir(stayVerticalDoc(1 / 6000));
+  assert.ok(!x.files.includes('ai/fast_lane.ai') && !x.onDisk, `an AI line was written: ${x.ai ? 'least |t x up| ' + leastUp(x.ai) : ''}`);
+  assert.ok(exportWarningsWords(x.r.warnings).includes('this track goes vertical, so it has no AI line; it drives and times normally'));
+});
+
+test('L217: the crashing line (1.424e-4 at least) is below the bar, the line AC loads (1.933e-4) is not, and a lean of 1e-3 still gets its line', () => {
+  const x = exportDir(stayVerticalDoc(1e-3));
+  assert.ok(x.ai, 'a vertical stretch 1e-3 off vertical keeps its AI line');
+  assert.ok(leastUp(x.ai) >= 1.93e-4, `least |t x up| ${leastUp(x.ai)}`);
+  assert.ok(1.424e-4 < 1.93e-4 && 1.933e-4 >= 1.93e-4);
 });
