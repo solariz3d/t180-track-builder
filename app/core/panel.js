@@ -202,7 +202,7 @@ const EARLY_TITLE = Object.freeze({
 // with today's bank on one layout, 2026-11-24, it was the better). Ticked, with a bank target, the bank PASSES THROUGH its marks as one curve (src/core/extend.js
 // bankShape 'flow'): the bank field's target at `bankAt` (transition.phi; blank: the early ramp's end when "early" is ticked, else laid by flowAts), then each
 // extra bank row's then at its from (through.phi). Left out or false, nothing here changes, to the byte
-function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null, changes = null, secondMinM = null, cornerChangeMinM = null, secondFloorM = null, bankFloorM = null, bankRefusal = null, bankFlow = false, bankAt = null }) {
+function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null, changes = null, secondMinM = null, cornerChangeMinM = null, secondFloorM = null, bankFloorM = null, bankRefusal = null, bankFlow = false, bankAt = null, dragging = false }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
   const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup), corner = turnAs === 'corner' && t !== null && t !== 0, climbCorner = turnAs === 'corner' && c !== null && c !== 0;
   if (turnAs !== 'rate' && turnAs !== 'corner') throw new Error(`BAD_TURN_AS: the turn is read as 'rate' or 'corner', got ${turnAs}`);
@@ -277,6 +277,9 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
   // the mark and the room it needs), and the ghost says so in its words. No at and no row: the first target is at the piece's end (the core's own rule), no transition
   if (flow) {
     out.bankShape = 'flow';
+    // while a drag runs (`dragging`, the panel's scrubbing) the core is asked only whether the list lays: a refused list's room search cost 30-61 ms, up to 549, a
+    // frame (the second reader's finding 5); the release asks whole, and its refusal names the room
+    if (dragging) out.roomSearch = false;
     const items = ((changes && changes.bank) || []).map((x) => ({ then: num(x.then), at: num(x.from) })).filter((x) => x.then !== null && Number.isFinite(x.then));
     const at0 = num(bankAt) !== null ? num(bankAt) : Number.isFinite(transition.phi) ? transition.phi : null;
     if (at0 !== null || items.length) {
@@ -454,7 +457,8 @@ function mount(root, shell, mountOpts = {}) {
   // "at m" is the bank row's LAST child, laid on a second line of that row (app/index.html, .flow-at), as each extra row's "at m" is under its amount: beside "flow"
   // and "early" on one line, the 260 px column held no room for it (the headless render, LAP 3: the at widened the row and pushed the bank's value and the rows'
   // remove off the column). Inside the row, so a field's list of changes still sits right after its row (L135 C1, L139 S1)
-  const bankAtBox = el('span', { class: 'flow-at' }, el('span', { text: 'at m' }), bankAtF);
+  // it reads "bank 1 at m", so the first mark reads as bank 1's, as the rows under it read "bank 2" and "bank 3" (the librarian's look at the LAP 3 render)
+  const bankAtBox = el('span', { class: 'flow-at' }, el('span', { text: 'bank 1 at m' }), bankAtF);
   const flowBox = el('span', { class: 'at-start', title: bankFlow.getAttribute('title') }, bankFlow, el('span', { text: 'flow' }));
   const flowOn = () => !!bankFlow.checked;
   const showFlow = () => { bankAtBox.style.display = flowOn() ? '' : 'none'; };
@@ -539,7 +543,7 @@ function mount(root, shell, mountOpts = {}) {
     empty: !shell.getState().history.present.pieces.length, turnAs: turnAs.value, head: shell.headState(),
     changes: secChanges(), secondMinM: shellMinM, cornerChangeMinM: shellCornerMin, secondFloorM: secondFloor(),
     bankFloorM: typeof shell.bankFitFloorM === 'function' ? shell.bankFitFloorM() : null, bankRefusal: (o) => (typeof shell.changeRefusal === 'function' ? !!shell.changeRefusal(o, 'phi', null) : false),
-    bankFlow: flowOn(), bankAt: bankAtF.value });
+    bankFlow: flowOn(), bankAt: bankAtF.value, dragging: scrubbing });   // a drag asks a flowing bank only whether it lays (extendOptions dragging)
   // (the user, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
   // document it made; when Undo steps from that document back to the one it was made from, the fields are put back (the length, every field as typed or left as
   // shown, the at-start ticks), so Extend again rebuilds the same piece. Redo, a brush and open show the head, as before

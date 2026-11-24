@@ -142,7 +142,7 @@ test('flow 8: the refusals, each by its code', () => {
   r({ ...base, bankShape: 'rounded', through: through() }, 'BAD_TARGET', "bankShape 'flow'");
   r({ length: 300, bankShape: 'flow', through: through() }, 'BAD_TARGET', 'first target');
   r({ ...base, through: { phi: [{ at: 200, target: 0 }, { at: 150, target: 0.1 }] } }, 'BAD_SECOND', 'must come after');   // not the 5 m refusal, which a backward step also trips
-  r({ ...base, through: { phi: [{ at: 83, target: 0 }] } }, 'BAD_SECOND', '5 m');
+  r({ ...base, through: { phi: [{ at: 83, target: 0 }] } }, 'BAD_SECOND', 'under 5 m');   // the floor's own words: the room search's "needs 5 m after" also holds "5 m" (LAP 4, mutant R9)
   r({ ...base, through: { phi: [{ at: 301, target: 0 }] } }, 'BAD_SECOND', 'length');
   r({ ...base, through: { phi: [{ at: 200, target: NaN }] } }, 'BAD_SECOND', 'number');
   r({ ...base, through: { phi: { at: 200, target: 0 } } }, 'BAD_SECOND', 'list');

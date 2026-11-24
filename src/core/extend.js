@@ -9,6 +9,7 @@
 // a roll sized for the roll-rate amber is longer (finish.js ROLL_PEAK_OVER_MEAN).
 //
 //   extend(doc, { length, transition, targets: { kh, kv, phi, w, r, c, e, s, t }, family, knotM, grip })  -> a new document, one piece longer
+// roomSearch: false asks a flowing bank (bankShape 'flow') only whether it lays: a refusal names its mark and searches no room (the panel while a drag runs); left out, as before.
 // grip: the new piece's grip, a whole percent 50..150; left out, it is the last road piece's (the road keeps its surface until it is changed), 100 on an empty track.
 // second: { phi: { from, target } } (L135, the keeper 2026-11-04: "there is another mark towards the end you can bank again ... instead of having to place it, then flatten it
 // with the next piece"): the bank banks AGAIN inside the piece. Over [from, length] it goes from the first target to `target` (rad, absolute) with the bank's own shape (the
@@ -636,7 +637,16 @@ const FLOW_HOLD = FLOW_ROOM - FLOW_BUILT;   // rad: where the curve is held on t
 const FLOW_EVERY_M = 0.25;   // m: how often the curve is held to the marks (every check reads it every 0.5 m from the piece's start, so each of those points is held)
 const FLOW_SIDE = 1e-8;   // rad: how far on its side the curve is held between two marks of one sign (past the bank's 9-place rounding)
 const FLOW_GI_MAX = 4000;   // flowInside's rows taken, at most (each step takes one; a few dozen are usual)
-const FLOW_SEARCH_M = 5;   // m: the room search's first steps (then back down by the metre), as probePeak's PROBE_STEP_M
+const FLOW_SEARCH_M = 5;   // m: the room search's steps past FLOW_NEAR_M, as probePeak's PROBE_STEP_M (then back down by the metre while it lays: flowRoom)
+// m: the room search first tries every whole metre up to this, from the smallest (flowRoom). The second reader's finding 2: laying is not monotone in the move, and the
+// search stepping back from its first 5 m step told +58 m where +0.5 lays. Measured on the reader's drawn refusals (pane O, LAP 4): every over-ask past 5 m had a whole
+// metre within 10 that lays; trying every whole metre below the first step that lays (the least exactly) took 1.2 s a whole ask where a list needs 170 m, against 0.24
+const FLOW_NEAR_M = 10;
+// m: the knot spans tried, coarse to fine, between the marks either side of a mark the solve refuses, before it is refused (flowBank, flowRefined). The second reader's
+// finding 3 (lighthouse exo_memory/handback/p-smooth-bank-read2-C_2026-11-24.md): its refusals were short of free control points, not of metres; knotM 5 laid 43 of 72
+// at the 5 m floor. Measured on those 72 (pane O, LAP 4): knots added only there lay 48, a median of 5 knots and 177 saved bytes (max 15 and 527); added over every
+// stretch up to the last mark, 49, at 11 and 390 (max 49 and 1775)
+const FLOW_REFINE_M = [10, 5, 2.5];
 let flowInner = false;   // set while the room search lays a trial (flowRoom): a refusal then is the trial's answer, not a search of its own
 /** A flowing bank that is not what the marks ask, read every 0.5 m by v(s) (rad) over [0, L]: past the range of `all` ({ at, target }, the start included) by more
  *  than FLOW_ROOM, or the wrong way between two of them of the same sign. Returns { s, v, why } or null. */
@@ -805,7 +815,28 @@ function flowSteepest(all) {
 function flowBank(piece, marks, v0, m0, a0, trial) {
   const r = flowSolve(piece, marks, v0, m0, a0);
   if (r.piece) return r.piece;
-  throw flowRefusal(r.fail, marks, piece.length, trial);
+  // refused: tried again with knots added around the mark it refused, coarse to fine (FLOW_REFINE_M); a list that lays as it is never gets them, so its bytes are
+  // today's. A refusal that stands is the last try's (what is still wrong once the knots are there)
+  let fail = r.fail;
+  for (const h of FLOW_REFINE_M) {
+    const P = flowRefined(piece, marks, h, r.fail.k); if (!P) continue;   // around the mark first refused at every span (measured: 48 of the reader's 72 lay so, 46 following each try's own)
+    const r2 = flowSolve(P, marks, v0, m0, a0);
+    if (r2.piece) return r2.piece;
+    fail = r2.fail;
+  }
+  throw flowRefusal(fail, marks, piece.length, trial);
+}
+/** `piece` with knots added between the marks either side of mark k (0 the first target; from the joint for the first), so no span there is longer than h m: each span
+ *  between the piece's knots and the marks split evenly (insertKnots, Boehm: every other channel keeps its curve). null when no span there is longer than h. */
+function flowRefined(piece, marks, h, k) {
+  const last = marks[marks.length - 1].at, lo = k ? marks[k - 1].at : 0, hi = k + 1 < marks.length ? marks[k + 1].at : last;
+  const B = [...new Set([0, ...piece.knots.filter((x) => x > 0 && x < last), ...marks.map((m) => m.at), last].map((x) => +x.toFixed(4)))].sort((x, y) => x - y), add = [];
+  for (let i = 1; i < B.length; i++) {
+    const x0 = B[i - 1], x1 = B[i]; if (x1 <= lo + 1e-9 || x0 >= hi - 1e-9) continue;
+    const n = Math.ceil((x1 - x0) / h - 1e-9); for (let j = 1; j < n; j++) add.push(+(x0 + ((x1 - x0) * j) / n).toFixed(4));
+  }
+  const ins = add.filter((x) => x > 0.5 && x < piece.length - 0.5);
+  return ins.length ? D.insertKnots(piece, ins) : null;
 }
 const FLOW_WHY = {
   joint: 'the joint has no free control point to carry the roll the road before it ends with',
@@ -821,19 +852,29 @@ function flowRefusal(fail, marks, L, trial) {
   const name = (k) => (k ? `the bank's mark ${k} at ${+marks[k].at.toFixed(1)} m` : `the first target at ${+marks[0].at.toFixed(1)} m`);
   if (!room) return new D.CoreError('BAD_SECOND', `${name(fail.k)}: ${FLOW_WHY[fail.kind]}; it needs more room than the piece's ${L} m leaves after the mark before it`);
   const gap = +(marks[room.k].at - (room.k ? marks[room.k - 1].at : 0)).toFixed(1);
-  return new D.CoreError('BAD_SECOND', `${name(room.k)} needs at least ${room.need} m after ${room.k ? 'the mark before it' : 'the joint'} (it has ${gap} m): ${FLOW_WHY[fail.kind]}`);
+  // not "at least": laying is not monotone in the move, so a smaller move than the one found can lay (the second reader's finding 2; flowRoom)
+  return new D.CoreError('BAD_SECOND', `${name(room.k)} needs ${room.need} m after ${room.k ? 'the mark before it' : 'the joint'} (it has ${gap} m): ${FLOW_WHY[fail.kind]}`);
 }
-/** The room a refusal names: for the stretch ending at mark k (and, failing that, every other stretch, the steepest first), the shortest stretch that lays the
- *  list with that mark and every mark after it moved on by the same metres (in FLOW_SEARCH_M steps, then back by the metre, as probePeak searches). The first
- *  target moves only when `trial` can move it (trial.first). null when no stretch inside the piece lays it. */
+/** The room a refusal names: for the stretch ending at mark k (and, failing that, every other stretch, the steepest first), a stretch that lays the list with that
+ *  mark and every mark after it moved on by the same metres: the least whole metre up to FLOW_NEAR_M that lays, else up in FLOW_SEARCH_M steps to the first that lays
+ *  and back down by the metre while it lays (as probePeak searches). Laying is not monotone in the move (the second reader's finding 2: a list laid at +27, +65..+67
+ *  and +72 on), so past FLOW_NEAR_M a smaller move than the one named can lay, and the refusal does not say "at least". The first target moves only when `trial`
+ *  can move it (trial.first). null when no stretch inside the piece lays it at a step tried. */
 function flowRoom(marks, L, trial, k0) {
   const order = [k0, ...marks.map((_, k) => k).filter((k) => k !== k0).sort((a, b) => Math.abs(marks[b].target - (b ? marks[b - 1].target : 0)) / (marks[b].at - (b ? marks[b - 1].at : 0)) - Math.abs(marks[a].target - (a ? marks[a - 1].target : 0)) / (marks[a].at - (a ? marks[a - 1].at : 0)))];
   for (const k of order) {
     if (k === 0 && !trial.first) continue;
     const top = L - marks[marks.length - 1].at, ok = (dm) => { flowInner = true; try { return trial.lays(marks.map((m, j) => (j >= k ? { at: +(m.at + dm).toFixed(4), target: m.target } : m))); } finally { flowInner = false; } };
-    let dm = 0; while (dm < top && !ok(dm)) dm = Math.min(top, dm + FLOW_SEARCH_M);
-    if (!(dm <= top) || !ok(dm)) continue;
-    while (dm - 1 >= 0 && ok(dm - 1)) dm -= 1;
+    const near = Math.min(FLOW_NEAR_M, Math.floor(top));
+    let dm = null;
+    for (let d = 1; d <= near && dm === null; d++) if (ok(d)) dm = d;
+    if (dm === null) {
+      let d = near, lays = false;
+      while (d < top) { d = Math.min(top, d + FLOW_SEARCH_M); if (ok(d)) { lays = true; break; } }
+      if (!lays) continue;
+      while (d - 1 > near && ok(d - 1)) d -= 1;
+      dm = d;
+    }
     return { k, need: +(marks[k].at + dm - (k ? marks[k - 1].at : 0)).toFixed(1) };
   }
   return null;
@@ -1051,7 +1092,9 @@ function extend(doc, opts = {}) {
     const last = held ? doc.pieces[doc.pieces.length - 1] : null, a0 = last && last.type !== 'flight' ? D.channelAt(last, 'phi', last.length).d2 : 0;
     if (opts.bankCheck === 'flow') return { marks, v0: from.phi.v };   // checkBankAsBuilt's question for a corner: what the built road is held to
     // a list the solve refuses names the room it needs: the search lays the list again with marks moved (flowRoom), through extend itself, so the built road is read too
-    const trial = { first: !!(transition && typeof transition === 'object' && Number.isFinite(transition.phi)), lays: (m) => flowLays(() => extend(doc, flowMoved(opts, m))) };
+    // roomSearch: false (the panel while a drag runs; the second reader's finding 5: the search costs 30-61 ms a refused list, up to 549) asks only whether the list lays:
+    // no trial, so a refusal names its mark and no room (flowRefusal), and a list that lays is the same piece
+    const trial = opts.roomSearch === false ? null : { first: !!(transition && typeof transition === 'object' && Number.isFinite(transition.phi)), lays: (m) => flowLays(() => extend(doc, flowMoved(opts, m))) };
     laid = flowBank(laid, marks, from.phi.v, held ? from.phi.m : 0, a0, trial);
     // and on the road as built: the adapter re-rounds what rolls faster than its bar, so the built bank is held to the marks as the document is (a caller that reshapes the
     // piece after, turnby.js, checks the piece it returns instead: checkBankAsBuilt)
@@ -1106,7 +1149,7 @@ function checkBankAsBuilt(doc, opts, out, relay) {
   // needs, found by laying the corner again through `relay` (turnby.js: extendCorner with the marks moved) when the caller gives one
   if (opts && opts.bankShape === 'flow') {
     const f = extend(doc, { ...opts, bankCheck: 'flow' }), w = flowBuiltWrong(doc, out.pieces[out.pieces.length - 1], f.marks, f.v0);
-    const t = opts.transition, trial = relay && { first: !!(t && typeof t === 'object' && Number.isFinite(t.phi)), lays: (m) => flowLays(() => relay(flowMoved(opts, m))) };
+    const t = opts.transition, trial = opts.roomSearch !== false && relay && { first: !!(t && typeof t === 'object' && Number.isFinite(t.phi)), lays: (m) => flowLays(() => relay(flowMoved(opts, m))) };
     if (w) throw flowRefusal(w, f.marks, opts.length, trial);
     return;
   }

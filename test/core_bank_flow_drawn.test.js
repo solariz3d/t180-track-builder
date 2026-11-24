@@ -84,8 +84,15 @@ test('drawn 1: the reader\'s three lists (finding 1) lay inside their marks\' ra
   READER_1.forEach((L, k) => checkList(L, `list ${k + 1}`));
 });
 
-test('drawn 2: the reader\'s lists the solve could not carry (finding 2) are refused by name (BAD_SECOND, the mark and its room), never an untyped throw', () => {
-  READER_2.forEach((L, k) => { const r = lay(L); assert.equal(r.laid, false, `list ${k + 1} laid`); assertNamedRefusal(r.error, `list ${k + 1}`); });
+// LAP 4: the solve refused READER_2 for want of free control points; with knots added before refusing (extend.js flowRefined) both lay, so they are held to the bar,
+// and two drawn lists that are still refused (the second reader's, seed 11, 5 m floor) hold the refusal by name
+const STILL_REFUSED = [
+  { first: deg(74.4, 4.1), marks: [deg(83.1, 23.7)] },
+  { first: deg(69.8, -2.6), marks: [deg(95.9, -12.3), deg(109.1, 15.2)] },
+];
+test('drawn 2: the reader\'s lists the solve could not carry (finding 2) lay inside the bar with knots added, and lists still refused are refused by name (BAD_SECOND, the mark and its room), never an untyped throw', () => {
+  READER_2.forEach((L, k) => assert.equal(checkList(L, `list ${k + 1}`), 'laid', `list ${k + 1}`));
+  STILL_REFUSED.forEach((L, k) => { const r = lay(L); assert.equal(r.laid, false, `still refused ${k + 1} laid`); assertNamedRefusal(r.error, `still refused ${k + 1}`); });
 });
 
 test('drawn 3: 160 lists drawn with marks at least 5 m apart (flowMarks\' own floor) each lay inside the bar on the document and the built road, or are refused by name', () => {
@@ -108,7 +115,7 @@ test('drawn 6: the room a refusal names is honest: the list with that mark moved
   let tried = 0;
   for (const L of [...READER_2, ...drawn(5, 160)]) {
     const r = lay(L); if (r.laid) continue;
-    const m = /mark (\d+) at ([\d.]+) m needs at least ([\d.]+) m after/.exec(r.error.message);
+    const m = /mark (\d+) at ([\d.]+) m needs ([\d.]+) m after/.exec(r.error.message);
     if (!m) continue;   // a refusal naming the first target or the joint is read in drawn 7 and 8
     const k = +m[1], need = +m[3], prev = k === 1 ? L.first.at : L.marks[k - 2].at, shift = prev + need - L.marks[k - 1].at;
     const moved = { first: L.first, marks: L.marks.map((x, j) => (j >= k - 1 ? { at: +(x.at + shift).toFixed(4), target: x.target } : x)) };
@@ -118,12 +125,12 @@ test('drawn 6: the room a refusal names is honest: the list with that mark moved
   assert.ok(tried >= 3, `only ${tried} refusals named a mark's room`);
 });
 
-test('drawn 7: after fixture F5 (a road that ends rolling), a flowing bank with the transition given as ONE number is refused by name, not laid with its joint C1', () => {
+// LAP 4: refused by name on 15b1306 ("the joint has no free control point"); with knots added before refusing (extend.js flowRefined) the joint gets one, and it lays C2
+test('drawn 7: after fixture F5 (a road that ends rolling), a flowing bank with the transition given as ONE number is not laid with its joint C1: it lays C2 at the joint', () => {
   const dir = path.join(__dirname, 'fixtures'), f = D.parse(fs.readFileSync(path.join(dir, fs.readdirSync(dir).find((n) => n.startsWith('F5-'))), 'utf8'));
-  let e = null; try { extend(f, { length: 300, targets: { phi: 10 * DEG }, transition: 15, bankShape: 'flow' }); } catch (x) { e = x; }
-  assert.ok(e, 'laid');
-  assertNamedRefusal(e, 'one-number transition');
-  assert.match(e.message, /joint/, e.message);
+  const d = extend(f, { length: 300, targets: { phi: 10 * DEG }, transition: 15, bankShape: 'flow' });
+  const a = D.channelAt(f.pieces[f.pieces.length - 1], 'phi', f.pieces[f.pieces.length - 1].length), b = D.channelAt(d.pieces[d.pieces.length - 1], 'phi', 0);
+  assert.ok(Math.abs(a.v - b.v) < 1e-9 && Math.abs(a.d1 - b.d1) < 1e-9 && Math.abs(a.d2 - b.d2) < 1e-9, `${JSON.stringify(a)} -> ${JSON.stringify(b)}`);
 });
 
 test('drawn 8: the same with the transition given for the bank alone lays, C2 at the joint (the case flow 4b covers, kept beside its refusal)', () => {

@@ -9,6 +9,7 @@
 //   3  the box and its marks survive: Undo gives them back (the panel's put-back), and the piece saved, closed and reopened is the same bytes, through its marks
 //   4  mirror negates the marks: the piece laid by the panel, saved and inserted mirrored, banks the exact negative, through each mark's negative
 //   5  a refusal of the flowing bank reaches the panel in the core's own words, naming the mark and the room it needs; Extend adds nothing
+//   6  during a drag the panel asks the core only whether the list lays (roomSearch: false); the release asks whole and names the room (the second reader's finding 5)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -164,11 +165,12 @@ test('row 4: mirror negates the marks: the piece the panel laid, saved and inser
 });
 
 test('row 5: a refusal of the flowing bank reaches the panel in the core\'s own words, naming the mark and the room it needs; Extend adds nothing', async () => {
-  // the reader's first list the solve cannot carry (test/core_bank_flow_drawn.test.js READER_2), whose refusal names the bank's own first mark; and a list whose refusal
-  // names a row's mark (measured on 57e4b1c's core: "the bank's mark 1 at 70 m needs at least 21 m after the mark before it")
+  // a list whose refusal names the bank's own first mark, and one whose refusal names a row's mark (the second reader's drawn list 64). LAP 4: the lists this row held
+  // before (READER_2, -20° at 80 then 20° at 100; and 10° at 60, -10° at 70, 10° at 90) lay since knots are added before refusing (finding 3), so these are lists
+  // still refused, and the room is the least whole metre (finding 2)
   const CASES = [
-    { first: { at: 80, deg: -20 }, marks: [{ at: 100, deg: 20 }], named: /^BAD_SECOND: the first target at 80 m needs at least [\d.]+ m after the joint \(it has 80 m\)/ },
-    { first: { at: 60, deg: 10 }, marks: [{ at: 70, deg: -10 }, { at: 90, deg: 10 }], named: /^BAD_SECOND: the bank's mark 1 at 70 m needs at least [\d.]+ m after the mark before it \(it has 10 m\)/ },
+    { first: { at: 10, deg: -20 }, marks: [{ at: 15, deg: -30 }], named: /^BAD_SECOND: the first target at 10 m needs [\d.]+ m after the joint \(it has 10 m\)/ },
+    { first: { at: 74.4, deg: 4.1 }, marks: [{ at: 83.1, deg: 23.7 }], named: /^BAD_SECOND: the bank's mark 1 at 83.1 m needs [\d.]+ m after the mark before it \(it has 8.7 m\)/ },
   ];
   for (const C of CASES) {
     const p = await mountPanel();
@@ -183,4 +185,76 @@ test('row 5: a refusal of the flowing bank reaches the panel in the core\'s own 
     assert.ok(p.msgText().includes(core.message), `Extend says it too (${p.msgText()})`);
     p.panel.unmount();
   }
+});
+
+// ── row 6 (the second reader's finding 5, lighthouse exo_memory/handback/p-smooth-bank-read2-C_2026-11-24.md): a refused flowing bank costs the room search, 30-61 ms
+// a list and up to 549 ms, so a drag across a refused region stalled every frame. During a DRAG the panel asks only whether the list lays (roomSearch: false); the
+// release asks once whole, and its refusal names the room. A stage as app/test/core-extra-bank-drag-cost.test.js has one, so the handles take a real press and drag ──
+class StageEl extends El {
+  addEventListener(e, f, o) { (this.listeners[e] = this.listeners[e] || []).push({ f, capture: !!(o === true || (o && o.capture)) }); }
+  removeEventListener(e, f) { this.listeners[e] = (this.listeners[e] || []).filter((x) => x.f !== f); }
+  getBoundingClientRect() { return { left: 0, top: 0, width: this.clientWidth || 0, height: this.clientHeight || 0 }; }
+  get isConnected() { return true; }
+  setPointerCapture() {}
+  fire(type, init) { let stopped = false; const ev = { type, ...init, preventDefault() {}, stopPropagation() { stopped = true; }, stopImmediatePropagation() { stopped = true; } };
+    const ls = (this.listeners[type] || []).slice(), order = ls.filter((l) => l.capture).concat(ls.filter((l) => !l.capture));
+    for (const l of order) { if (stopped) break; l.f(ev); } }
+}
+async function mountStage() {
+  const frames = [], doc = { ids: {}, listeners: {}, createElement: (t) => new StageEl(t, doc) };
+  doc.getElementById = (id) => doc.ids[id] || null;
+  doc.addEventListener = (e, f) => { (doc.listeners[e] = doc.listeners[e] || []).push(f); };
+  doc.removeEventListener = (e, f) => { doc.listeners[e] = (doc.listeners[e] || []).filter((x) => x !== f); };
+  doc.dispatchEvent = (ev) => { for (const f of (doc.listeners[ev.type] || []).slice()) f(ev); return true; };
+  doc.defaultView = { CustomEvent: class { constructor(type, init = {}) { this.type = type; this.detail = init.detail; } }, Option: class { constructor(t, v) { this.textContent = t; this.value = v; } },
+    requestAnimationFrame: (f) => { frames.push(f); return frames.length; }, cancelAnimationFrame: () => {}, setTimeout: () => 0, clearTimeout: () => {} };
+  const tick = () => { for (let i = 0; i < 3; i++) { const fs = frames.splice(0); for (const f of fs) f(0); } };
+  const stage = doc.createElement('div'); stage.setAttribute('id', 'preview'); stage.clientWidth = 1200; stage.clientHeight = 800;
+  const root = doc.createElement('div'), shell = await createCoreShell({ brushFn: null });
+  shell.extend({ length: 1000, family: 'bowl' });
+  const L = 300;
+  const ghostOf = () => { const s0 = 1000, samples = []; for (let s = s0; s <= s0 + L + 1e-9; s += 2) samples.push({ s, pos: [0, 0, s], T: [0, 0, 1], L: [1, 0, 0], U: [0, 1, 0] }); return { s0, samples, segments: [], jump: false }; };
+  doc.addEventListener('t180:ghost-request', (e) => e.detail.reply(ghostOf()));
+  doc.addEventListener('t180:view', (e) => e.detail.reply({ pose: { eye: [0, 0.6 * L, 1000 - 0.25 * L], target: [0, 0, 1000 + 0.5 * L], up: [0, 1, 0], fov: Math.PI / 3 } }));
+  // every question the panel asks the shell about a flowing bank, with the phase of the gesture it was asked in
+  const asked = []; let phase = 'still';
+  for (const [k, v] of Object.entries(shell)) if (typeof v === 'function') shell[k] = (...a) => { if (a[0] && a[0].bankShape === 'flow') asked.push({ k, phase, roomSearch: a[0].roomSearch }); return v(...a); };
+  const panel = require('../core/panel.js').mount(root, shell);
+  const label = (text) => root.all().find((e) => e.tagName === 'LABEL' && e.children[0] && e.children[0].textContent === text);
+  const byAria = (a) => root.all().find((e) => e.attrs && e.attrs['aria-label'] === a);
+  const type = (text, v) => { const f = label(text).children[1]; f.value = String(v); f.oninput(); tick(); };
+  const msgText = () => root.all().filter((e) => e.attrs && e.attrs.class === 'message').map((e) => e.textContent).join(' | ');
+  const handle = (kind, side) => panel.handles.handles().find((h) => h.kind === kind && h.side === side && h.screen);
+  const drag = (h, dx, dy, during = () => {}) => {
+    const s = h.screen; phase = 'drag'; stage.fire('pointerdown', { clientX: s.x, clientY: s.y, pointerId: 1, button: 0 });
+    for (let i = 1; i <= 4; i++) { stage.fire('pointermove', { clientX: s.x + (dx * i) / 4, clientY: s.y + (dy * i) / 4, pointerId: 1, timeStamp: i * 16 }); tick(); during(); }
+    phase = 'release'; stage.fire('pointerup', { clientX: s.x + dx, clientY: s.y + dy, pointerId: 1 }); tick(); phase = 'still';
+  };
+  return { shell, panel, type, byAria, msgText, handle, drag, asked, tick };
+}
+
+test('row 6: during a drag the panel asks only whether the flowing bank lays (roomSearch: false on every question); the release asks whole, and its refusal names the room', async () => {
+  // a: the mapping. Dragging adds roomSearch: false to a flowing bank's call and to nothing else; unticked, a drag's call is the still one
+  const base = { length: '300', turn: '', climb: '', bank: '-20', width: '', cup: '', edge: '', edgeR: '', start: '', tube: '', grip: 100, changes: { bank: [{ then: '20', from: '100' }] } };
+  assert.deepEqual(extendOptions({ ...base, bankFlow: true, bankAt: '80', dragging: true }), { ...extendOptions({ ...base, bankFlow: true, bankAt: '80' }), roomSearch: false }, 'flowing, dragged');
+  assert.deepEqual(extendOptions({ ...base, dragging: true }), extendOptions(base), 'unticked, a drag changes nothing');
+  assert.equal('roomSearch' in extendOptions({ ...base, bankFlow: true, bankAt: '80' }), false, 'still: the whole question');
+  // b: a real drag of the bank's handle on the stage, across a refused region: the second reader's drawn list 6 (0.3° at 40.9 m, then 13° at 46.6 m: it needs 60.7 m
+  // where it has 5.7, so every frame of the drag stays refused). LAP 4: the reader's READER_2 this row held lays now (knots added before refusing)
+  const p = await mountStage();
+  p.type('length m', 300); p.type('bank °', 0.3);
+  const box = p.byAria('bank flows through its marks'); box.checked = true; box.onchange();
+  const at = p.byAria('bank at'); at.value = '40.9'; at.oninput();
+  p.panel.secondAdd('bank', { then: '13', from: '46.6' }); p.tick();
+  assert.match(p.msgText(), /needs [\d.]+ m after the mark before it/, `still, the refusal names the room (${p.msgText()})`);
+  const h = p.handle('bank', 1); assert.ok(h, 'the bank handle is on the stage');
+  const during = [];
+  p.drag(h, 0, -12, () => during.push(p.msgText()));   // the handle moves the first mark's degrees: away from the next mark's 13°, so it stays refused
+  const inDrag = p.asked.filter((a) => a.phase === 'drag'), onRelease = p.asked.filter((a) => a.phase === 'release');
+  assert.ok(inDrag.length > 0, 'the drag asked the shell about the flowing bank');
+  assert.deepEqual(inDrag.filter((a) => a.roomSearch !== false).map((a) => a.k), [], 'every question during the drag is asked without the room search');
+  assert.ok(during.length > 0 && during.every((m) => /a flowing bank .+ \(mark 1\)/.test(m) && !/needs/.test(m)), `every frame of the drag is refused by its mark, with no room (${during.join(' / ')})`);
+  assert.ok(onRelease.some((a) => a.roomSearch === undefined), 'the release asks whole');
+  assert.match(p.msgText(), /needs [\d.]+ m after the mark before it/, `after the release the refusal names the room again (${p.msgText()})`);
+  p.panel.unmount();
 });
