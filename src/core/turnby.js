@@ -159,7 +159,7 @@ function plainOf(opts) {
 }
 /** The piece returned, its bank changes checked on the road as built (extend.js checkBankAsBuilt): the solve reshapes the turn and climb after extend lays the bank, and
  *  where the road turns the adapter keeps its bank, so the check is made on the piece as it is returned, not on extend's. */
-const checked = (doc, opts, out) => { checkBankAsBuilt(doc, plainOf(opts), out); return out; };
+const checked = (doc, opts, out) => { checkBankAsBuilt(doc, plainOf(opts), out, (o) => extendCorner(doc, { ...opts, transition: o.transition, through: o.through })); return out; };
 /** Extend with the turn and the climb fields read as corners when opts.turnDeg / opts.climbDeg are given (those exact changes of heading and pitch,
  *  each ending at rate 0), else Extend as it always was. */
 function extendCorner(doc, opts = {}) {

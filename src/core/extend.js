@@ -619,8 +619,42 @@ function flowMarks(list, first, length) {
   });
   return out;
 }
-/** The flowing bank laid on `piece` (the piece as laid, every other channel final): knots at the marks, then the bank's control points solved. Returns the new piece. */
-function flowBank(piece, marks, v0, m0, a0 = 0) {   // v0, m0, a0: the bank, its rate and its roll acceleration at the joint (C2)
+/**
+ * WHAT A FLOWING BANK MAY DO (LAP 2, the librarian's ruling on a second reader's findings, lighthouse exo_memory/handback/p-smooth-bank-read-C_2026-11-24.md):
+ * every list flowMarks accepts lays a bank inside its marks' range plus FLOW_ROOM (the bank it starts from counts as a mark), on the document and on the built
+ * road, and never banks the wrong way between two marks of the same sign; a list that cannot is refused by name (BAD_SECOND), naming the mark and the room it
+ * needs. The reader drew lists as a hand would and found the least bending alone laid one to −93.8° with every mark under 30°; and a fast rise into a slow one
+ * overshoots MORE as the room grows (0 → 20° at 50 m → 21°: 5.3° past at 100 m of room, 13.9° at 200, measured 2026-11-24), so no room cures it and the solve
+ * itself must stay inside. It does by rows read on the curve every FLOW_EVERY_M (inside the range, on the marks' side between two of one sign), and the least
+ * bending inside them is the curve laid, found by Goldfarb and Idnani's dual method (flowInside). Bounding the control points instead (the convex hull) was
+ * tried first and refused 112 of 160 drawn lists at the 5 m floor, most of them lists a curve can meet: near a mark of the other sign the hull asks a point to
+ * be on both sides. A list whose least bending is already inside (the banked S) is never touched: it lays the same bytes as before.
+ */
+const FLOW_ROOM = 0.5 * Math.PI / 180;   // rad: how far past its marks' range a flowing bank may go (the ruling's 0.5°)
+const FLOW_BUILT = 0.05 * Math.PI / 180;   // rad: of FLOW_ROOM, what is left to the road as built (the adapter's rounding moved a bank held at the bar 0.0025° past it, measured 2026-11-24)
+const FLOW_HOLD = FLOW_ROOM - FLOW_BUILT;   // rad: where the curve is held on the document
+const FLOW_EVERY_M = 0.25;   // m: how often the curve is held to the marks (every check reads it every 0.5 m from the piece's start, so each of those points is held)
+const FLOW_SIDE = 1e-8;   // rad: how far on its side the curve is held between two marks of one sign (past the bank's 9-place rounding)
+const FLOW_GI_MAX = 4000;   // flowInside's rows taken, at most (each step takes one; a few dozen are usual)
+const FLOW_SEARCH_M = 5;   // m: the room search's first steps (then back down by the metre), as probePeak's PROBE_STEP_M
+let flowInner = false;   // set while the room search lays a trial (flowRoom): a refusal then is the trial's answer, not a search of its own
+/** A flowing bank that is not what the marks ask, read every 0.5 m by v(s) (rad) over [0, L]: past the range of `all` ({ at, target }, the start included) by more
+ *  than FLOW_ROOM, or the wrong way between two of them of the same sign. Returns { s, v, why } or null. */
+function flowWrong(v, all, L) {
+  const hi = Math.max(...all.map((m) => m.target)), lo = Math.min(...all.map((m) => m.target));
+  for (let s = 0; s <= L + 1e-9; s += 0.5) {
+    const x = v(Math.min(s, L));
+    if (x > hi + FLOW_ROOM || x < lo - FLOW_ROOM) return { s, v: x, why: `leaves its marks' range (${+(lo / DEG_).toFixed(2)}° to ${+(hi / DEG_).toFixed(2)}°) by more than ${FLOW_ROOM / DEG_}°` };
+    const j = all.findIndex((m) => m.at > s);
+    if (j > 0 && all[j - 1].target * all[j].target > 0 && x * all[j - 1].target < -1e-9) return { s, v: x, why: `banks the wrong way between two marks of the same sign` };
+  }
+  return null;
+}
+const DEG_ = Math.PI / 180;
+/** The flowing bank laid on `piece` (the piece as laid, every other channel final): knots at the marks, then the bank's control points solved. Returns
+ *  { piece } or { fail: { kind, k } }: kind 'joint' (the joint's roll acceleration has no free point to carry it), 'mark' (mark k's conditions outnumber the free
+ *  points that reach it), 'range' (no curve through the marks stays inside them); k indexes `marks` (0 is the first target). Never throws for what the marks ask. */
+function flowSolve(piece, marks, v0, m0, a0 = 0) {   // v0, m0, a0: the bank, its rate and its roll acceleration at the joint (C2)
   const near = (P, s) => P.knots.some((h) => Math.abs(h - s) < FLOW_SNAP_M);
   const ins = [...new Set(marks.map((m) => +m.at.toFixed(4)).filter((s) => s > 0.5 && s < piece.length - 0.5 && !near(piece, s)))].sort((a, b) => a - b);
   const P = D.insertKnots(piece, ins), U = D.knotVector(P), L = P.length, n = P.channels.phi.length, dec = D.DEC.phi;
@@ -628,8 +662,6 @@ function flowBank(piece, marks, v0, m0, a0 = 0) {   // v0, m0, a0: the bank, its
   // fixed: the joint's two (the head's value and slope continued) and every point whose support reaches past the anchor (the hold), with the last three always
   const fixed = new Map([[0, v0], [1, v0 + (m0 * U[4]) / 3]]);
   for (let i = 2; i < n; i++) if (U[i + 4] > anchor + 1e-9 || i >= n - 3) fixed.set(i, last.target);
-  const free = []; for (let i = 0; i < n; i++) if (!fixed.has(i)) free.push(i);
-  const pos = new Map(free.map((i, k) => [i, k])), nf = free.length;
   // the bending's Gram matrix over [0, anchor] (the hold adds nothing), 3-point Gauss per span: φ″ is linear and φ′ quadratic on a span, so both squares are read exactly
   const Q = Array.from({ length: n }, () => new Float64Array(n));
   for (let k = 3; k < n; k++) {
@@ -639,15 +671,27 @@ function flowBank(piece, marks, v0, m0, a0 = 0) {   // v0, m0, a0: the bank, its
       for (let p = 0; p < 4; p++) for (let q = 0; q < 4; q++) Q[B.first + p][B.first + q] += W * (B.D2[p] * B.D2[q] + FLOW_TENSION * B.D1[p] * B.D1[q]);
     }
   }
-  // the constraints, each a row over all n points: curvature 0 at the start, and each mark before the last passed exactly
+  // the constraints, each a row over all n points: curvature 0 at the start, and each mark before the last passed exactly; k names whose it is (−1 the joint)
   const rows = [];
-  { const B = basis(U, 0), r = new Float64Array(n); for (let p = 0; p < 4; p++) r[B.first + p] = B.D2[p]; rows.push({ r, d: a0 }); }
-  for (const m of marks.slice(0, -1)) { const B = basis(U, Math.min(m.at, L)), r = new Float64Array(n); for (let p = 0; p < 4; p++) r[B.first + p] = B.N[p]; rows.push({ r, d: m.target }); }
+  { const B = basis(U, 0), r = new Float64Array(n); for (let p = 0; p < 4; p++) r[B.first + p] = B.D2[p]; rows.push({ r, d: a0, k: -1 }); }
+  marks.slice(0, -1).forEach((m, k) => { const B = basis(U, Math.min(m.at, L)), r = new Float64Array(n); for (let p = 0; p < 4; p++) r[B.first + p] = B.N[p]; rows.push({ r, d: m.target, k }); });
   // a mark where the bank turns back (the marks go one way into it and the other way out) is the bank's peak there: its roll is 0 at the mark, so the curve does not
   // round the turn past it (row 5: with the least bending alone the bank went 2.1° past a -27° peak, measured 2026-11-24)
   if (FLOW_PEAK_REST) marks.slice(0, -1).forEach((m, k) => { const before = k ? marks[k - 1].target : v0, after = marks[k + 1].target;
-    if ((m.target - before) * (after - m.target) < 0) { const B = basis(U, Math.min(m.at, L)), r = new Float64Array(n); for (let p = 0; p < 4; p++) r[B.first + p] = B.D1[p]; rows.push({ r, d: 0 }); } });
-  const live = rows.filter(({ r }) => free.some((i) => Math.abs(r[i]) > 0));
+    if ((m.target - before) * (after - m.target) < 0) { const B = basis(U, Math.min(m.at, L)), r = new Float64Array(n); for (let p = 0; p < 4; p++) r[B.first + p] = B.D1[p]; rows.push({ r, d: 0, k }); } });
+  // the free points and the rows they carry: a row with no free point is CHECKED against the fixed ones, never dropped (the reader's finding 3: with the transition one
+  // number, the joint's row lost its last free point and the joint went C1 without a word); a row whose free part depends on the rows before it is a mark with too
+  // little room (finding 2: two conditions on one free point)
+  const free = []; for (let i = 0; i < n; i++) if (!fixed.has(i)) free.push(i);
+  const pos = new Map(free.map((i, k) => [i, k])), nf = free.length, live = [];
+  for (const row of rows) {
+    if (free.some((i) => Math.abs(row.r[i]) > 0)) { live.push(row); continue; }
+    let res = row.d, size = Math.abs(row.d); for (const [j, x] of fixed) { res -= row.r[j] * x; size += Math.abs(row.r[j] * x); }
+    if (Math.abs(res) > 1e-9 * size + 1e-15) return { fail: { kind: row.k < 0 ? 'joint' : 'mark', k: Math.max(0, row.k) } };
+  }
+  const dep = flowDependent(live, free);
+  if (dep) return { fail: { kind: dep.k < 0 ? 'joint' : 'mark', k: Math.max(0, dep.k) } };
+  // the least bending through the marks (the KKT system, solved once): the curve laid whenever it already stays inside what the marks ask
   const nc = live.length, A = Array.from({ length: nf + nc }, () => new Array(nf + nc).fill(0)), rhs = new Array(nf + nc).fill(0);
   for (const i of free) {
     const a = pos.get(i); for (const j of free) A[a][pos.get(j)] = Q[i][j];
@@ -659,9 +703,161 @@ function flowBank(piece, marks, v0, m0, a0 = 0) {   // v0, m0, a0: the bank, its
     rhs[nf + c] = v;
   });
   const x = nf + nc ? denseSolve(A, rhs) : [];
+  let y = x.slice(0, nf);
+  // what the marks ask of the curve, read every FLOW_EVERY_M: inside their range (the start included) by FLOW_HOLD, and on their side between two of the same sign.
+  // Each is a row c·y ≥ b on the free points (the fixed ones moved to b); one with no free point is checked as it stands (the joint or the hold decides it)
+  const all = [{ at: 0, target: v0 }, ...marks], top = Math.max(...all.map((m) => m.target)) + FLOW_HOLD, bot = Math.min(...all.map((m) => m.target)) - FLOW_HOLD, ineq = [];
+  for (let s = 0; s <= anchor + 1e-9; s += FLOW_EVERY_M) {
+    const B = basis(U, Math.min(s, anchor)), j = all.findIndex((m) => m.at > s), same = j > 0 && all[j - 1].target * all[j].target > 0 ? Math.sign(all[j].target) : 0;
+    const lo = same > 0 ? Math.max(bot, FLOW_SIDE) : bot, hi = same < 0 ? Math.min(top, -FLOW_SIDE) : top;
+    for (const [sg, b] of [[1, lo], [-1, -hi]]) {   // N·P ≥ lo, and −N·P ≥ −hi
+      const c = new Float64Array(nf); let bb = b, any = false;
+      for (let p = 0; p < 4; p++) { const i = B.first + p, v = sg * B.N[p]; if (pos.has(i)) { c[pos.get(i)] = v; any = any || v !== 0; } else bb -= v * fixed.get(i); }
+      if (any) ineq.push({ c, b: bb });
+      else if (bb > 1e-12) return { fail: { kind: s <= U[4] + 1e-9 ? 'joint' : 'range', k: flowSteepest(all) } };
+    }
+  }
+  const slack = (q, v) => { let t = -q.b; for (let a = 0; a < nf; a++) t += q.c[a] * v[a]; return t; };
+  if (ineq.some((q) => slack(q, y) < -1e-12)) {
+    y = flowInside(free.map((i) => Float64Array.from(free, (j) => Q[i][j])), y, live.map(({ r }) => Float64Array.from(free, (i) => r[i])), ineq);
+    if (!y) return { fail: { kind: 'range', k: flowSteepest(all) } };
+  }
   const C = new Array(n);
-  for (let i = 0; i < n; i++) C[i] = Number((fixed.has(i) ? fixed.get(i) : x[pos.get(i)]).toFixed(dec)) + 0;
-  return { ...P, channels: { ...P.channels, phi: C } };
+  for (let i = 0; i < n; i++) C[i] = Number((fixed.has(i) ? fixed.get(i) : y[pos.get(i)]).toFixed(dec)) + 0;
+  const out = { ...P, channels: { ...P.channels, phi: C } };
+  // read once more as laid (rounded to the bank's places), every 0.5 m as every check reads it
+  const w = flowWrong((s) => D.channelValue(out, 'phi', s), all, L);
+  return w ? { fail: { kind: w.s <= U[4] + 1e-9 ? 'joint' : 'range', k: flowSteepest(all) } } : { piece: out };
+}
+/**
+ * The least bending ½yᵀGy (+ the fixed points' part, already in y0's optimum) on the free points y, through the marks (E·y fixed, as y0 meets them) and inside
+ * what they ask (each q.c·y ≥ q.b): Goldfarb and Idnani's dual method (Math. Programming 27, 1983, "A numerically stable dual method for solving strictly convex
+ * quadratic programs"), dense, for a few dozen points. It starts from y0, the least bending through the marks alone, adds the row most violated, and keeps every
+ * multiplier of an inequality ≥ 0 on the way (dropping a row whose multiplier reaches 0), so it ends at the constrained optimum in finitely many steps, or finds
+ * that no curve meets every row (null). G is positive definite on the free points (the joint's two are fixed, and so is every point past the anchor).
+ */
+function flowInside(G, y0, E, ineq) {
+  const nf = y0.length, dot = (a, b) => { let s = 0; for (let k = 0; k < nf; k++) s += a[k] * b[k]; return s; };
+  const Gi = flowInverse(G), mul = (v) => Gi.map((row) => dot(row, v));   // G⁻¹ is symmetric, as G is
+  const slack = (q, v) => dot(q.c, v) - q.b;
+  const GE = E.map(mul), act = [], GA = [], u = [], on = new Uint8Array(ineq.length);
+  let y = Float64Array.from(y0);
+  for (let it = 0; it < FLOW_GI_MAX; it++) {
+    let p = -1, worst = -1e-12; ineq.forEach((q, k) => { if (!on[k]) { const s = slack(q, y); if (s < worst) { worst = s; p = k; } } });
+    if (p < 0) return y;
+    const np = ineq[p].c, Gn = mul(np); let up = 0;
+    for (let inner = 0; ; inner++) {
+      if (inner > ineq.length + nf) return null;   // a guard against a cycle the theory rules out (rounding)
+      const N = [...E, ...act.map((k) => ineq[k].c)], GN = [...GE, ...GA], ne = E.length;
+      let r = [], z = Gn;
+      if (N.length) {
+        const M = N.map((ci) => GN.map((g) => dot(ci, g)));
+        r = denseSolve(M, N.map((ci) => dot(ci, Gn)));
+        z = Gn.map((v, a) => { let s = v; for (let j = 0; j < GN.length; j++) s -= GN[j][a] * r[j]; return s; });
+      }
+      let t1 = Infinity, l = -1;
+      for (let j = 0; j < act.length; j++) { const rj = r[ne + j]; if (rj > 1e-14) { const t = u[j] / rj; if (t < t1) { t1 = t; l = j; } } }
+      const zn = dot(z, np), t2 = zn > 1e-10 * dot(np, Gn) ? -slack(ineq[p], y) / zn : Infinity;
+      if (t1 === Infinity && t2 === Infinity) return null;   // no curve meets the rows taken so far and this one
+      const t = Math.min(t1, t2);
+      if (t2 !== Infinity) for (let a = 0; a < nf; a++) y[a] += t * z[a];
+      for (let j = 0; j < act.length; j++) u[j] -= t * r[ne + j];
+      up += t;
+      if (t === t2) { act.push(p); GA.push(Gn); u.push(up); on[p] = 1; break; }
+      on[act[l]] = 0; act.splice(l, 1); GA.splice(l, 1); u.splice(l, 1);
+    }
+  }
+  return null;
+}
+/** The inverse of a symmetric positive definite matrix (rows of Float64Array), Gauss–Jordan with partial pivoting. */
+function flowInverse(G) {
+  const n = G.length, M = G.map((row, i) => { const r = new Float64Array(2 * n); r.set(row); r[n + i] = 1; return r; });
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]];
+    const d = M[c][c]; if (!(Math.abs(d) > 1e-300)) throw new D.CoreError('BAD_SECOND', 'a flowing bank: the bending is singular on its free points');
+    for (let j = 0; j < 2 * n; j++) M[c][j] /= d;
+    for (let r = 0; r < n; r++) if (r !== c) { const k = M[r][c]; if (k) for (let j = 0; j < 2 * n; j++) M[r][j] -= k * M[c][j]; }
+  }
+  return M.map((r) => r.slice(n));
+}
+/** The first of `rows` (in their order: the joint, then each mark and its peak) whose free part depends on the rows before it (Gaussian elimination, partial
+ *  pivoting, relative to the row's own size); null when every row has a free point of its own. */
+function flowDependent(rows, free) {
+  const basisRows = [];
+  for (const row of [...rows].sort((a, b) => a.k - b.k)) {
+    const v = free.map((i) => row.r[i]), size = Math.max(...v.map(Math.abs));
+    for (const { v: b, p } of basisRows) { const f = v[p] / b[p]; if (f) for (let j = 0; j < v.length; j++) v[j] -= f * b[j]; }
+    let p = 0; for (let j = 1; j < v.length; j++) if (Math.abs(v[j]) > Math.abs(v[p])) p = j;
+    if (!(Math.abs(v[p]) > 1e-9 * size)) return row;
+    basisRows.push({ v, p });
+  }
+  return null;
+}
+/** The mark ending the steepest stretch of the list (the change per metre from the mark before), where a refusal for range looks first: index into the list without the start. */
+function flowSteepest(all) {
+  let k = 0, top = -1;
+  for (let j = 1; j < all.length; j++) { const r = Math.abs(all[j].target - all[j - 1].target) / (all[j].at - all[j - 1].at); if (r > top) { top = r; k = j - 1; } }
+  return k;
+}
+/** The flowing bank on `piece`, or its refusal by name: flowSolve, and when it fails, the room it needs (flowRoom with `trial`, which lays the list with the marks
+ *  moved and says whether it lays). Returns the piece. */
+function flowBank(piece, marks, v0, m0, a0, trial) {
+  const r = flowSolve(piece, marks, v0, m0, a0);
+  if (r.piece) return r.piece;
+  throw flowRefusal(r.fail, marks, piece.length, trial);
+}
+const FLOW_WHY = {
+  joint: 'the joint has no free control point to carry the roll the road before it ends with',
+  mark: 'it has fewer free control points to meet it than it has conditions there',
+  range: `no curve through the marks stays inside their range (plus ${FLOW_ROOM / DEG_}°) and on their side between marks of one sign`,
+  built: `the road as built leaves the marks' range (plus ${FLOW_ROOM / DEG_}°) or banks the wrong way there`,
+};
+/** The refusal for `fail` ({ kind, k }), by name, with the room it needs: the first stretch, from the mark before, that lays the list when it is that long. */
+function flowRefusal(fail, marks, L, trial) {
+  if (flowInner || !trial) return new D.CoreError('BAD_SECOND', `a flowing bank ${FLOW_WHY[fail.kind]} (mark ${fail.k})`);   // a trial's answer: the search reads only that it failed
+  if (fail.kind === 'joint') return new D.CoreError('BAD_SECOND', `a flowing bank: ${FLOW_WHY.joint}: the joint needs a knot of the bank's own inside its first target's ${+marks[0].at.toFixed(1)} m (give the transition for the bank alone, transition: { phi: … }, which lays one)`);
+  const room = flowRoom(marks, L, trial, fail.k);
+  const name = (k) => (k ? `the bank's mark ${k} at ${+marks[k].at.toFixed(1)} m` : `the first target at ${+marks[0].at.toFixed(1)} m`);
+  if (!room) return new D.CoreError('BAD_SECOND', `${name(fail.k)}: ${FLOW_WHY[fail.kind]}; it needs more room than the piece's ${L} m leaves after the mark before it`);
+  const gap = +(marks[room.k].at - (room.k ? marks[room.k - 1].at : 0)).toFixed(1);
+  return new D.CoreError('BAD_SECOND', `${name(room.k)} needs at least ${room.need} m after ${room.k ? 'the mark before it' : 'the joint'} (it has ${gap} m): ${FLOW_WHY[fail.kind]}`);
+}
+/** The room a refusal names: for the stretch ending at mark k (and, failing that, every other stretch, the steepest first), the shortest stretch that lays the
+ *  list with that mark and every mark after it moved on by the same metres (in FLOW_SEARCH_M steps, then back by the metre, as probePeak searches). The first
+ *  target moves only when `trial` can move it (trial.first). null when no stretch inside the piece lays it. */
+function flowRoom(marks, L, trial, k0) {
+  const order = [k0, ...marks.map((_, k) => k).filter((k) => k !== k0).sort((a, b) => Math.abs(marks[b].target - (b ? marks[b - 1].target : 0)) / (marks[b].at - (b ? marks[b - 1].at : 0)) - Math.abs(marks[a].target - (a ? marks[a - 1].target : 0)) / (marks[a].at - (a ? marks[a - 1].at : 0)))];
+  for (const k of order) {
+    if (k === 0 && !trial.first) continue;
+    const top = L - marks[marks.length - 1].at, ok = (dm) => { flowInner = true; try { return trial.lays(marks.map((m, j) => (j >= k ? { at: +(m.at + dm).toFixed(4), target: m.target } : m))); } finally { flowInner = false; } };
+    let dm = 0; while (dm < top && !ok(dm)) dm = Math.min(top, dm + FLOW_SEARCH_M);
+    if (!(dm <= top) || !ok(dm)) continue;
+    while (dm - 1 >= 0 && ok(dm - 1)) dm -= 1;
+    return { k, need: +(marks[k].at + dm - (k ? marks[k - 1].at : 0)).toFixed(1) };
+  }
+  return null;
+}
+/** `opts` with the flowing bank's marks replaced by `m` (m[0] the first target, at its transition; the rest the through list). */
+function flowMoved(opts, m) {
+  const t = opts.transition && typeof opts.transition === 'object' ? { ...opts.transition, phi: m[0].at } : opts.transition;
+  return { ...opts, transition: t, through: { ...(opts.through || {}), phi: m.slice(1) } };
+}
+/** Whether `lay` lays: true, or false for the core's own refusal; anything else is thrown on (a trial never hides a fault). */
+function flowLays(lay) {
+  try { lay(); return true; } catch (e) { if (e instanceof D.CoreError) return false; throw e; }
+}
+/** A flowing piece on the road as built: the adapter's bank of `piece` after the piece before it (as bankAsBuilt reads it), held to the marks as the document is.
+ *  Returns the refusal's fail ({ kind: 'built', k }) or null. */
+function flowBuiltWrong(doc, piece, marks, v0) {
+  const A = require('./adapter.js');   // at call time, as bankAsBuilt
+  const before = doc.pieces.length ? doc.pieces[doc.pieces.length - 1] : null, mini = { ...doc, closed: false, pieces: before && before.type === 'road' ? [before, { ...piece, id: before.id + '+' }] : [{ ...piece, id: 'flow' }] };   // its id is appendPiece's to give; the path checks the document, so it is given one no other piece has
+  if (!A.bankPlan(mini)[mini.pieces.length - 1].fn) return null;   // built as the document lays it, and the document is held FLOW_BUILT inside (flowSolve)
+  // re-rounded: read on the road the adapter builds (its path, every 0.5 m), the piece's own metres measured from its start
+  const off = mini.pieces.length - 1 ? before.length : 0, S = A.toPath(mini, { step: 0.5 }).path.samples;
+  const at = (s) => { let lo = 0, hi = S.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S[m].s <= off + s) lo = m; else hi = m; } return (Math.abs(S[hi].s - off - s) < Math.abs(S[lo].s - off - s) ? S[hi] : S[lo]).roll; };
+  const all = [{ at: 0, target: v0 }, ...marks];
+  return flowWrong(at, all, piece.length) ? { kind: 'built', k: flowSteepest(all) } : null;
 }
 
 function extend(doc, opts = {}) {
@@ -853,7 +1049,14 @@ function extend(doc, opts = {}) {
     // the joint's roll acceleration is carried too, so the joint is C2 whatever the road before ends with (every route ends a bank at rest; a sculpted or older one may not):
     // read on the last piece when it is road; a flight lands at its bank with no roll, as endState says
     const last = held ? doc.pieces[doc.pieces.length - 1] : null, a0 = last && last.type !== 'flight' ? D.channelAt(last, 'phi', last.length).d2 : 0;
-    laid = flowBank(laid, marks, from.phi.v, held ? from.phi.m : 0, a0);
+    if (opts.bankCheck === 'flow') return { marks, v0: from.phi.v };   // checkBankAsBuilt's question for a corner: what the built road is held to
+    // a list the solve refuses names the room it needs: the search lays the list again with marks moved (flowRoom), through extend itself, so the built road is read too
+    const trial = { first: !!(transition && typeof transition === 'object' && Number.isFinite(transition.phi)), lays: (m) => flowLays(() => extend(doc, flowMoved(opts, m))) };
+    laid = flowBank(laid, marks, from.phi.v, held ? from.phi.m : 0, a0, trial);
+    // and on the road as built: the adapter re-rounds what rolls faster than its bar, so the built bank is held to the marks as the document is (a caller that reshapes the
+    // piece after, turnby.js, checks the piece it returns instead: checkBankAsBuilt)
+    const w = opts.bankCheck !== false && flowBuiltWrong(doc, laid, marks, from.phi.v);
+    if (w) throw flowRefusal(w, marks, length, trial);
   }
   if (opts.bankCheck !== false) bankAsBuilt(doc, laid, deferred);   // a caller that reshapes the piece after (turnby.js) checks the piece it returns instead
   return D.appendPiece(doc, laid);
@@ -898,9 +1101,17 @@ function bankAsBuilt(doc, piece, deferred) {
 }
 /** For a caller that lays the piece through extend with { bankCheck: false } and reshapes it after (turnby.js, the corners): the bank changes of `opts` the comfort length
  *  does not pass, checked on the piece `out` ends with, as extend checks its own. */
-function checkBankAsBuilt(doc, opts, out) {
+function checkBankAsBuilt(doc, opts, out, relay) {
+  // a flowing bank (it lays no bank changes, so nothing below applies): its built road held to its marks as extend holds a plain piece's, and a refusal names the room it
+  // needs, found by laying the corner again through `relay` (turnby.js: extendCorner with the marks moved) when the caller gives one
+  if (opts && opts.bankShape === 'flow') {
+    const f = extend(doc, { ...opts, bankCheck: 'flow' }), w = flowBuiltWrong(doc, out.pieces[out.pieces.length - 1], f.marks, f.v0);
+    const t = opts.transition, trial = relay && { first: !!(t && typeof t === 'object' && Number.isFinite(t.phi)), lays: (m) => flowLays(() => relay(flowMoved(opts, m))) };
+    if (w) throw flowRefusal(w, f.marks, opts.length, trial);
+    return;
+  }
   if (!opts || !opts.changes || !opts.changes.phi) { if (!opts || !opts.second || !opts.second.phi) return; }
   bankAsBuilt(doc, out.pieces[out.pieces.length - 1], extend(doc, { ...opts, bankCheck: 'list' }));
 }
 
-module.exports = { extend, checkBankAsBuilt, secondMinM, spanHolds, CHANGE_FLOOR_M, BANK_FIT_FLOOR_M, SECOND_MIN_K, SECOND_FLOOR_M, CHANGE_CHANNELS, roundedLinear, rampShape, BANK_ROUND_M, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, sampleBasis, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };
+module.exports = { extend, checkBankAsBuilt, flowInside, secondMinM, spanHolds, CHANGE_FLOOR_M, BANK_FIT_FLOOR_M, SECOND_MIN_K, SECOND_FLOOR_M, CHANGE_CHANNELS, roundedLinear, rampShape, BANK_ROUND_M, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, sampleBasis, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };

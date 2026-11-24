@@ -65,4 +65,4 @@ function turnOf(doc, a, b) {
   return { deg: tot / DEG, span, radius: span / (0.8 * Math.abs(tot)), s10: at10.s, s90: at90.s };
 }
 
-module.exports = { docBank, builtBank, rateOn, stops, turnOf, STOP_CHORD, STOP_SHARE, STOP_FLOOR, STOP_MERGE, TURN_CHORD };
+module.exports = { docBank, builtBank, near, rateOn, stops, turnOf, STOP_CHORD, STOP_SHARE, STOP_FLOOR, STOP_MERGE, TURN_CHORD };
