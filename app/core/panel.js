@@ -571,7 +571,8 @@ function mount(root, shell, mountOpts = {}) {
   const putBack = (m) => { if (m.turnAs && m.turnAs !== turnAs.value) { turnAs.value = m.turnAs; showTurnHead(shell.headState()); S.set('turnClimbAs', m.turnAs); } len.value = appliedLen = m.len; for (const k of Object.keys(HEAD)) HEAD[k][0].value = m.values[k]; for (const [k, b] of Object.entries(atStart)) b.checked = !!m.ticks[k]; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube);
     if (m.flow !== undefined) { bankFlow.checked = !!m.flow; bankAtF.value = m.bankAt; showFlow(); }
     clearSecond(); if (m.second) for (const f of SECOND_FIELDS) for (const y of m.second[f] || []) { const x = secAdd(f, y); x.auto = !!y.auto; x.dflt = !!y.dflt; } showSecond();
-    if (m.cmd) { const c = m.cmd; if (c.turnBy !== undefined) turnBy.value = c.turnBy; if (c.gridStep !== undefined) { gridStep.value = c.gridStep; showHeading(); } if (c.sharpDeg !== undefined) { sharpDeg.value = c.sharpDeg; sharpR.value = c.sharpR; sharpRamp.value = c.sharpRamp; } } };   // a made without cmd (a file from before) gives the Extend fields only
+    // the grid step goes through the setting (its follower sets the box and the heading line), as the turn mode above
+    if (m.cmd) { const c = m.cmd; if (c.turnBy !== undefined) turnBy.value = c.turnBy; if (c.gridStep !== undefined) S.set('gridStep', Number(c.gridStep) || 90); if (c.sharpDeg !== undefined) { sharpDeg.value = c.sharpDeg; sharpR.value = c.sharpR; sharpRamp.value = c.sharpRamp; } } };   // a made without cmd (a file from before) gives the Extend fields only
   // the ghost: a candidate the shell cannot build, or the preview cannot draw, says why (it used to vanish without a word)
   // THE READOUT of the piece the fields describe: 16 px bold rows, so its ink is at least 11 device px tall
   // cup reads from → to: the DOCUMENT's values (cupFromDeg / cupToDeg, which for a legacy piece are its rendered edge), never

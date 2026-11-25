@@ -261,3 +261,22 @@ test('T2: undo of Turn to grid gives the grid step back: the same command on the
   p.button('Turn to grid').onclick();
   assert.equal(JSON.stringify(p.shell.getState().history.present.pieces.at(-1)), removed, 'the same command lays the removed piece');
 });
+
+// V4 (pane C's, L230 re-read of b921ab1; rows taken from handback/p-l230-C-reread_2026-11-25_evidence/c-l230r-read.test.js): the grid step comes back to the SETTING as well as the box
+let SETTINGS_NOW = null;
+{ const PNL = require('../core/panel.js'), real = PNL.mount; PNL.mount = (r, s, o) => real(r, s, { ...(o || {}), ...(SETTINGS_NOW ? { settings: SETTINGS_NOW } : {}) }); }
+function stubSettings() {
+  const m = new Map(), fns = new Map();
+  return { m, get: (k, f) => (m.has(k) ? m.get(k) : f), set: (k, v) => { m.set(k, v); for (const fn of fns.get(k) || []) fn(v); },
+    on: (k, fn) => { fns.set(k, [...(fns.get(k) || []), fn]); return () => fns.set(k, (fns.get(k) || []).filter((g) => g !== fn)); } };
+}
+test('V4: after an undone Turn to grid the grid step box and the Settings menu read the same step', async () => {
+  const S = stubSettings(); SETTINGS_NOW = S; const p = await mountC(); SETTINGS_NOW = null;
+  typePiece(p, { L: 200, turn: 25, as: 'corner' }); p.button('Extend').onclick(); p.type('length m', 150); p.type('turn °', '');
+  p.set(p.byAria('grid step'), '45');
+  p.button('Turn to grid').onclick(); p.tick(); assert.equal(nPieces(p), 3, 'Turn to grid laid: ' + p.shell.getState().message);
+  p.set(p.byAria('grid step'), '15');
+  p.shell.undo(); p.tick();
+  assert.equal(String(p.byAria('grid step').value), String(S.get('gridStep')), 'box and Settings menu read two steps');
+  assert.equal(String(S.get('gridStep')), '45', 'and it is the step the command was pressed with');
+});
