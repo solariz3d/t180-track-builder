@@ -58,6 +58,7 @@ file in both places.
 - `sculpt.js`: the brush and its modes (`brush`, `sculpt`, `stretch`). `bankswing.js`: bank a whole bend as one swing (`swingBank`). `smoothramps.js`: re-lay old ramps smoothly (`smoothRamps`).
 - `close.js`: close the loop (`close`, `closeWindow`). `finish.js`: finish to start and bank the lap (`finishToStart`, `bankLap`). *why: see header*
 - `piece.js`: saved pieces: save a run, insert, mirror, delete, cut (`saveRun`, `insert`, `mirrored`, `deleteRun`, `cutRun`).
+- `shaperead.js`: (L229) what a placed road piece does READ off its built road (turns with where they start and end, climb, bank turning points), for an undone piece whose typed values were not kept; `shapeWords` says they are read, not typed.
 - `readout.js`: what a piece does, in numbers (`pieceReadout`, `candidateReadout`). `continuity.js`: how channels meet at joints (`jointSteps`, `c2Breaks`).
 - `gridturn.js` (turn to the grid), `pitflat.js` (flatten under the pit lane), `water.js` (pour water down the surface, `pour`).
 

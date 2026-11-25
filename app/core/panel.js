@@ -204,7 +204,9 @@ const EARLY_TITLE = Object.freeze({
 // extra bank row's then at its from (through.phi). Left out or false, nothing here changes, to the byte
 function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null, changes = null, secondMinM = null, cornerChangeMinM = null, secondFloorM = null, bankFloorM = null, bankRefusal = null, bankFlow = false, bankAt = null, dragging = false }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
-  const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup), corner = turnAs === 'corner' && t !== null && t !== 0, climbCorner = turnAs === 'corner' && c !== null && c !== 0;
+  // a corner of 0 with extra turn rows is still a first corner (the S he drove: turn 0, then +92 from 80 and -91 from 200; pane O, 2026-11-24): it sends turnDeg 0 so the rows have one to follow
+  const turnRows = turnAs === 'corner' && ((changes && changes.turn) || []).some((x) => num(x.then) !== null && Number.isFinite(num(x.then)));
+  const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup), corner = turnAs === 'corner' && t !== null && (t !== 0 || turnRows), climbCorner = turnAs === 'corner' && c !== null && c !== 0;
   if (turnAs !== 'rate' && turnAs !== 'corner') throw new Error(`BAD_TURN_AS: the turn is read as 'rate' or 'corner', got ${turnAs}`);
   if (t !== null && !corner) targets.kh = t * DEG / 100;          // degrees of heading per 100 m
   if (c !== null && !climbCorner) targets.kv = c * DEG / 100;          // degrees of pitch per 100 m
@@ -547,7 +549,7 @@ function mount(root, shell, mountOpts = {}) {
   // (the user, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
   // document it made; when Undo steps from that document back to the one it was made from, the fields are put back (the length, every field as typed or left as
   // shown, the at-start ticks), so Extend again rebuilds the same piece. Redo, a brush and open show the head, as before
-  const madeWith = new WeakMap();
+  const madeWith = typeof shell.noteMade === 'function' ? { set: (d, r) => shell.noteMade(d, r), get: (d) => shell.madeFor(d) } : new WeakMap();   // kept by the shell, so the undo file carries them (coreshell.js madeOf)
   const fieldsNow = () => ({ len: len.value, values: Object.fromEntries(Object.keys(HEAD).map((k) => [k, HEAD[k][0].value])), ticks: Object.fromEntries(Object.entries(atStart).map(([k, b]) => [k, b.checked])), turnAs: turnAs.value,
     second: Object.fromEntries(SECOND_FIELDS.map((f) => [f, SEC[f].list.map((x) => ({ then: x.then.value, from: x.from.value, share: x.share, auto: x.auto, dflt: !!x.dflt }))])),
     flow: flowOn(), bankAt: bankAtF.value });   // LAP 3: the flowing bank's box and its first mark's at, given back with the rows
@@ -581,6 +583,7 @@ function mount(root, shell, mountOpts = {}) {
   // in the column). A chip whose value does not change on this piece is dimmed, so the eye lands on what Extend will do; the length chip is the values' own, so it is not repeated
   const chipName = (k) => (k === 'start' ? 'edge start' : k === 'climbCorner' ? 'climb corner' : k === 'gravity' ? 'bank to gravity' : k);
   const roChips = Object.fromEntries(RO.map((k) => [k, el('span', { class: 'chip', 'data-chip': k, ...(k === 'length' ? { hidden: '' } : {}) }, el('span', { class: 'chip-name', text: chipName(k) }), roCells[k], el('span', { class: 'chip-short' }))]));
+  const roRead = el('div', { class: 'readout-read', 'aria-label': 'what the undone piece does, read from its shape', style: 'display:none' });   // only while an undo ghost with no kept values is up
   const roBox = el('div', { class: 'readout', 'aria-label': 'the piece Extend would add' }, el('span', { class: 'chip-head', text: 'next' }), ...RO.map((k) => roChips[k]));
   // unchanged on this piece: a "from → to" with both ends the same, a change of 0, or no corner
   // a dim chip's short text, shown in place of its cell under the preview's values (the cell keeps the readout's whole words): "edge 0", "climb 0°", "climb corner none"
@@ -618,6 +621,7 @@ function mount(root, shell, mountOpts = {}) {
   let ghostSaid = null;   // the refusal the ghost last wrote into the message line, so the next ghost that is built takes it away
   let ugSeen = null, undoShown = null;   // the undo ghost on screen now (the shell's st.undoGhost): typing, dragging or hovering hands the picture back to the next piece's ghost
   const ghost = () => {
+    if (undoShown) { roBox.children[0].textContent = 'next'; roRead.style.display = 'none'; }
     undoShown = null;
     ghostN++;   // L140: what the extra handles were worked out from may have changed (extraHandles' cache)
     if (releasing) return;
@@ -1243,7 +1247,7 @@ function mount(root, shell, mountOpts = {}) {
     el('div', { class: 'actions' }, extendBtn, straightBtn, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
     sculptStrip,
     el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), turnField, SEC.turn.box, climbField, SEC.climb.box, (() => { const r = fieldAt('bank °', bank, 'bank', flowBox); r.append(bankAtBox); return r; })(), SEC.bank.box, ...shapeFields),
-    roBox,
+    roBox, roRead,
     jumpNote, landingBox,
     el('div', { class: 'actions' }, cancelBtn), proposalBox,
     selBox, ...(bin ? [] : pieces.nodes.library),
@@ -1266,6 +1270,7 @@ function mount(root, shell, mountOpts = {}) {
   let wasSculpt = false;
   let shownFor = null, lentFrom = null, shownMsg = null;   // lentFrom: the selected piece whose values the fields hold (2026-10-15); shownMsg: the message last drawn
   const draw = (st) => {
+    let undoneNow = false;   // this draw is an Undo of a step whose typed values were kept: the boxes were given them back (putBack) and the ghost is the next piece's own, laid from them
     swingApply.disabled = swingCancel.disabled = !(st.bankProposal && st.bankProposal.base === st.history.present);
     // the exit bank: off on a closed lap with no jump (the core refuses it there: the shift after the stretch would come round to its start)
     { const off = !!st.history.present.closed && st.history.present.pieces.every((P) => P.type === 'road'); if (swingExit.disabled !== off) { swingExit.disabled = off; swingExit.setAttribute('title', off ? EXIT_OFF : EXIT_TITLE); } }
@@ -1278,7 +1283,7 @@ function mount(root, shell, mountOpts = {}) {
       const keep = st.lastStep && st.lastStep.op === 'landing' && !undone ? FIELDS.filter(unapplied).map((fl) => [fl, fl.value]) : [];
       showGrip(); showHead(); if (undone) putBack(m.made); for (const k of Object.keys(HEAD)) applied[k] = HEAD[k][0].value;
       if (keep.length) { for (const [fl, v] of keep) fl.value = v; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube); }
-      shownFor = d; lentFrom = null;
+      shownFor = d; lentFrom = null; undoneNow = undone;
     }
     // A SELECTED PIECE LENDS ITS VALUES (2026-10-15, the user: "when clicking a previous placed part of the track, while its highlighted, make the values
     // change to it, so you can mimic certain values within a new piece"): one selected road piece puts its end values and its length in the Extend fields.
@@ -1306,7 +1311,8 @@ function mount(root, shell, mountOpts = {}) {
     if (st.message && st.message !== shownMsg && st.messageKind !== 'ok' && typeof msg.scrollIntoView === 'function') msg.scrollIntoView({ block: 'nearest' });
     shownMsg = st.message;
     // THE UNDO GHOST: the road an undo took off the end stays up, see-through, with its own readout, until a redo, an edit, or the fields are touched (ghost() above)
-    { const ug = st.undoGhost && st.undoGhost.base === d && !st.sculpt ? st.undoGhost : null; if (ug !== ugSeen) { ugSeen = undoShown = ug; if (ug) { let why = null; try { send('t180-ghost', { candidate: ug.candidate, reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e.message; } if (why) { undoShown = null; send('t180-ghost-clear'); } } else send('t180-ghost-clear'); } }
+    { const ug = st.undoGhost && st.undoGhost.base === d && !st.sculpt ? st.undoGhost : null; if (ug !== ugSeen) { ugSeen = ug; undoShown = undoneNow ? null : ug; if (ug && undoneNow) ghost(); else if (ug) {
+        roBox.children[0].textContent = 'undone'; roRead.textContent = ug.shapeWords(); roRead.style.display = ''; let why = null; try { send('t180-ghost', { candidate: ug.candidate, reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e.message; } if (why) { undoShown = null; send('t180-ghost-clear'); } } else { send('t180-ghost-clear'); roBox.children[0].textContent = 'next'; roRead.style.display = 'none'; } } }
     readout();   // the track changed, so the piece the fields would add changed
     hintNow(); fillLanding();
     if (d !== jumpNoteFor) { jumpNoteFor = d; sayJump(); }   // a new document: the note is empty again (it shows only a refusal's words; the standing hint is the button's tooltip)

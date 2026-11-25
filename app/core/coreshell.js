@@ -86,6 +86,7 @@ const offsetPath = typeof AD.offsetPath === 'function' ? AD.offsetPath : null;
 // THE READOUT (src/core/readout.js): a piece's length and the change it makes in turn, climb and bank, for the panel
 // (the ghost, candidateReadout) and the labels on the track (every placed piece, pieceReadout)
 const RD = require('../../src/core/readout.js');
+const SHPR = require('../../src/core/shaperead.js');   // an undone piece with no kept values: what its shape does, read (computed only when the panel asks)
 // THE HEAD'S STATE: what the track is doing at its open end, for Extend's fields to SHOW instead of blanks. On an empty track it
 // is the state extend() starts the first piece from (src/core/extend.js: level, straight, the family's measured width and rate)
 const { WIDTHS, RATES } = require('../../src/geom/fonts.js');
@@ -109,8 +110,15 @@ const UNDO_KIND = 'core-undo';
 const serialText = new WeakMap();   // a document is immutable: its text is computed once, so a save or an autosave only serializes the steps made since the last
 const textOf = (d) => { let t = serialText.get(d); if (t === undefined) { t = D.serialize(d); serialText.set(d, t); } return t; };
 /** The sidecar text for a history whose present is `presentText`: the last UNDO_CAP past steps and the UNDO_CAP nearest future ones. */
+// THE VALUES THAT MADE A STEP (2026-11-25, the user: "it shows you the values of the shape ... helps users remember how they got the shape they did"): the panel notes, for the document an
+// Extend (or a Level, a Jump, ...) made, what was typed to make it ({ before, made }); the shell keeps them beside the history and the undo file carries them in an OPTIONAL `made` list
+// (one entry per step of past, present, future in order, null where none were kept). The track file is untouched, and a reader that does not know `made` ignores it (it reads kind, schema,
+// present, past and future only: checked against 3b33b38, app/test/undo-values.test.js row R8).
+const madeOf = new WeakMap();
 function packHistory(h, presentText) {
-  return JSON.stringify({ schema: 1, kind: UNDO_KIND, present: presentText, past: h.past.slice(-UNDO_CAP).map(textOf), future: h.future.slice(0, UNDO_CAP).map(textOf) });
+  const past = h.past.slice(-UNDO_CAP), future = h.future.slice(0, UNDO_CAP), chain = [...past, h.present, ...future];
+  const made = chain.map((x, k) => { const r = k > 0 ? madeOf.get(x) : null; return r && r.before === chain[k - 1] ? r.made : null; });
+  return JSON.stringify({ schema: 1, kind: UNDO_KIND, present: presentText, past: past.map(textOf), future: future.map(textOf), ...(made.some((m) => m) ? { made } : {}) });
 }
 /** { history } for a sidecar that belongs to `presentText` (the opened document `d`), { mismatch: true } for one that belongs to another file, { bad: why } for one that cannot be read. All or nothing. */
 function unpackHistory(sideText, presentText, d) {
@@ -129,6 +137,7 @@ function unpackHistory(sideText, presentText, d) {
   const docs = (list, what) => list.map((t, i) => { if (typeof t !== 'string') throw new Error(`${what} step ${i + 1} is not text`); try { return shared(D.parse(t)); } catch (e) { throw new Error(`${what} step ${i + 1}: ${e.message}`); } });
   try {
     const past = docs(o.past, 'past'), future = docs(o.future, 'future');
+    if (Array.isArray(o.made)) { const chain = [...past, d, ...future]; o.made.forEach((m, k) => { if (k > 0 && k < chain.length && m && typeof m === 'object' && !Array.isArray(m)) madeOf.set(chain[k], { before: chain[k - 1], made: m }); }); }   // values that cannot be read are dropped, never the history
     return { history: Object.freeze({ ...D.createHistory(d), past: Object.freeze(past), future: Object.freeze(future) }) };
   } catch (e) { return { bad: e.message }; }
 }
@@ -396,7 +405,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   // one but the removed: nothing is rebuilt). The preview draws a ghost only as an EXTENSION of the placed road, so an undo that changed a piece and removed none has none.
   const undoGhostOf = (was, now) => {
     if (was.closed || now.closed || was.pieces.length <= now.pieces.length || !now.pieces.every((P, i) => P.id === was.pieces[i].id)) return null;
-    try { return Object.freeze({ base: now, candidate: { segments: segmentsOf(was), closed: false, start: startOf(was) }, readout: RD.pieceReadout(was, was.pieces.length - 1), removed: was.pieces.length - now.pieces.length }); } catch (e) { return null; }
+    try { return Object.freeze({ base: now, candidate: { segments: segmentsOf(was), closed: false, start: startOf(was) }, readout: RD.pieceReadout(was, was.pieces.length - 1), removed: was.pieces.length - now.pieces.length, shapeWords: () => SHPR.shapeWords(SHPR.readFromShape(was, was.pieces.length - 1)) }); } catch (e) { return null; }
   };
   const startOf = (d) => ({ pos: d.start.pos.slice(), theta: d.start.heading, p: d.start.pitch });
   const resolvedOf = (d) => { const segments = segmentsOf(d); return { resolved: Object.freeze({ segments, closed: !!d.closed, start: startOf(d), lift: offsetPath && segments.length ? (p) => offsetPath(d, segments, p) : undefined }), resolveError: null }; };
@@ -630,6 +639,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   const withRight = (h, end) => ({ ...h, er: end && end.er && Number.isFinite(end.er.v) ? end.er.v : h[XS.CHANNEL.edge] });
   const api = {
     getState: () => st,
+    /** the values that made a step: the panel notes { before, made } for the document its Extend made; madeFor(doc) gives them back ({ before, made } or undefined). Saved in the undo file. */
+    noteMade: (after, rec) => { madeOf.set(after, rec); },
+    madeFor: (d) => madeOf.get(d),
     subscribe(f) { subs.add(f); return () => subs.delete(f); },
     brushModes: () => BRUSH_MODES.filter((m) => m !== 'local' || !!brushFn),
     /**
