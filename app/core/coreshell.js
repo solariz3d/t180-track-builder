@@ -1340,7 +1340,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       // a recipe moved as it was no longer matched its piece, and the click showed no numbers). A case-only rename is one file on a case-blind store: the recipe is rewritten IN PLACE, no save-then-delete (that deleted it)
       const moveRecipe = async (inPlace) => {
         if (typeof storage.openRecipe !== 'function' || typeof storage.saveRecipe !== 'function' || typeof storage.deleteRecipe !== 'function') return '';
-        try { const r = await storage.openRecipe(from); if (r === null || r === undefined) return ''; const rec = JSON.parse(r); rec.piece = textHash(text); await storage.saveRecipe(to, JSON.stringify(rec)); if (!inPlace) await storage.deleteRecipe(from); return ''; }
+        try { const r = await storage.openRecipe(from); if (r === null || r === undefined) return ''; const rec = JSON.parse(r); if (rec.piece !== textHash(orig)) return '';   // a recipe that was not this piece's own (another file of the name) is not carried: re-stamping it would make it pass (pane C's C6)
+          rec.piece = textHash(text); await storage.saveRecipe(to, JSON.stringify(rec)); if (!inPlace) await storage.deleteRecipe(from); return ''; }
         catch (e) { return `; its saved numbers were not moved: ${e && e.message || e}`; }
       };
       if (!storage || typeof storage.openPiece !== 'function' || typeof storage.savePiece !== 'function' || typeof storage.deletePiece !== 'function') return set({ message: 'saved pieces are not available here' });

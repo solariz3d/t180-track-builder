@@ -208,3 +208,12 @@ test('R2: a case-only Rename on a case-blind store keeps the recipe, rewritten, 
   assert.ok(pieces.has('bend'), `the piece survives: ${s.getState().message}`); assert.ok(recipes.has('bend'), 'the recipe survives a case-only rename');
   await s.showPiece('Bend'); const g = s.getState().pieceGhost; assert.ok(g && g.numbers, `no numbers after the case-only rename: ${g && g.note}`);
 });
+
+// L238, pane C's re-read (C6): a recipe that did not belong to the file under its name is refused before a rename and must still be refused after it, not re-stamped to match
+test('R3: Rename does not carry a recipe that was not the piece\'s own', async () => {
+  const st = await saved(), s = await emptyTrack(st);
+  st.pieces.set('bend', st.pieces.get('bend').replace('"bend"', '"bend2"'));   // another file now sits under the name: its recipe is not its own
+  await s.showPiece('bend'); assert.equal(s.getState().pieceGhost.numbers, null, 'refused before the rename (control)');
+  await s.renamePiece('bend', 'other'); await s.showPiece('other');
+  assert.equal(s.getState().pieceGhost.numbers, null, 'the rename made a foreign recipe the piece\'s own');
+});
