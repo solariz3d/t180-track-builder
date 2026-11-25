@@ -564,11 +564,14 @@ function mount(root, shell, mountOpts = {}) {
     if (any) { readout(); hintNow(); }
   };
   // op rides INSIDE made (packHistory writes made, not the record): only an Extend's undo shows the panel's own next-piece ghost
+  // the command's OWN fields ride in made beside the Extend fields (op names the command), so Undo gives back Turn by's angle, Sharp's three, the grid step too (L229 addendum 3)
+  const cmdMade = (op, cmd) => ({ ...fieldsNow(), op, ...(cmd ? { cmd } : {}) });
   const extendHere = () => { const before = shell.getState().history.present, made = { ...fieldsNow(), op: 'extend' }; shell.extend(opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) { madeWith.set(after, { before, made }); carryCorner(made); } };
   //: the mode Undo gives back is saved through S too, or the hidden box and the Settings menu would read two different modes
   const putBack = (m) => { if (m.turnAs && m.turnAs !== turnAs.value) { turnAs.value = m.turnAs; showTurnHead(shell.headState()); S.set('turnClimbAs', m.turnAs); } len.value = appliedLen = m.len; for (const k of Object.keys(HEAD)) HEAD[k][0].value = m.values[k]; for (const [k, b] of Object.entries(atStart)) b.checked = !!m.ticks[k]; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube);
     if (m.flow !== undefined) { bankFlow.checked = !!m.flow; bankAtF.value = m.bankAt; showFlow(); }
-    clearSecond(); if (m.second) for (const f of SECOND_FIELDS) for (const y of m.second[f] || []) { const x = secAdd(f, y); x.auto = !!y.auto; x.dflt = !!y.dflt; } showSecond(); };
+    clearSecond(); if (m.second) for (const f of SECOND_FIELDS) for (const y of m.second[f] || []) { const x = secAdd(f, y); x.auto = !!y.auto; x.dflt = !!y.dflt; } showSecond();
+    if (m.cmd) { const c = m.cmd; if (c.turnBy !== undefined) turnBy.value = c.turnBy; if (c.gridStep !== undefined) { gridStep.value = c.gridStep; showHeading(); } if (c.sharpDeg !== undefined) { sharpDeg.value = c.sharpDeg; sharpR.value = c.sharpR; sharpRamp.value = c.sharpRamp; } } };   // a made without cmd (a file from before) gives the Extend fields only
   // the ghost: a candidate the shell cannot build, or the preview cannot draw, says why (it used to vanish without a word)
   // THE READOUT of the piece the fields describe: 16 px bold rows, so its ink is at least 11 device px tall
   // cup reads from → to: the DOCUMENT's values (cupFromDeg / cupToDeg, which for a legacy piece are its rendered edge), never
@@ -688,7 +691,7 @@ function mount(root, shell, mountOpts = {}) {
   // LEVEL and TO FLOOR (the user: "a way to snap the track to the floor to be true flat … its hard to calculate by hand"): the climb is a RATE, so climb 0 keeps
   // the slope the road has. These extend with the fields' piece and let the core solve its climb (src/core/level.js): Level ends it straight and level, To floor
   // also at height 0; a piece too short for that is refused by name with the length that works (the message line says it)
-  const levelHere = (fn) => { const before = shell.getState().history.present, made = fieldsNow(); send('t180-ghost-clear'); shell[fn](opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made }); };
+  const levelHere = (fn) => { const before = shell.getState().history.present, made = cmdMade(fn); send('t180-ghost-clear'); shell[fn](opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made }); };
   const levelBtn = el('button', { text: 'Level', title: 'a piece of the length above that ends straight and LEVEL (pitch 0): its climb is solved for you, and a turn typed as a corner is placed exactly', onclick: () => levelHere('extendLevel') });
   const floorBtn = el('button', { text: 'To floor', title: 'a piece of the length above that ends straight, level and ON THE FLOOR (height 0), a turn typed as a corner placed exactly: too short a piece is refused with the length that works', onclick: () => levelHere('extendToFloor') });
   // TURN BY (the user: "90 degree turns not coming out straight"): the turn field is a RATE, and a piece eased to a rate ENDS at it, so the next piece
@@ -696,7 +699,7 @@ function mount(root, shell, mountOpts = {}) {
   // with turn rate 0; too short a piece is refused by name with the length that works
   const turnBy = num(90, 1, 'the angle the piece turns, degrees (+ = left, − = right)'); turnBy.oninput = turnBy.onchange = () => {};
   const turnByBtn = el('button', { text: 'Turn by', title: 'a piece of the length above that turns EXACTLY the angle beside it and ends straight (turn rate 0): too short a piece is refused with the length that works', onclick: () => {
-    const before = shell.getState().history.present, made = fieldsNow(); send('t180-ghost-clear'); shell.extendTurnBy(opts(), turnBy.value); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made });
+    const before = shell.getState().history.present, made = cmdMade('turnBy', { turnBy: turnBy.value }); send('t180-ghost-clear'); shell.extendTurnBy(opts(), turnBy.value); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made });
   } });
   // TURN TO GRID (2026-10-12, the user: "it should also connect to the 90 degree angle of the grid like snap to grid … Its hard to get a straight aligned to the grid
   // from a free flowing spiral turn"): Turn by, with the angle that brings the end onto the nearest grid direction (src/core/gridturn.js). The line under it says
@@ -712,7 +715,7 @@ function mount(root, shell, mountOpts = {}) {
   //: the step is picked in Build ▸ Turn to grid…, a visible control, so picking it is the setting (as a number, the Settings menu's own form)
   gridStep.onchange = () => { S.set('gridStep', Number(gridStep.value) || 90); showHeading(); };
   const gridBtn = el('button', { text: 'Turn to grid', title: 'a piece of the length above that turns onto the nearest grid direction (the step beside it) and ends straight, so the straight after it runs along the grid: too short a piece is refused with the length that works', onclick: () => {
-    const before = shell.getState().history.present, made = fieldsNow(); send('t180-ghost-clear'); shell.extendTurnToGrid(opts(), Number(gridStep.value) || 90); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made });
+    const before = shell.getState().history.present, made = cmdMade('turnToGrid', { gridStep: gridStep.value }); send('t180-ghost-clear'); shell.extendTurnToGrid(opts(), Number(gridStep.value) || 90); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made });
   } });
   // SHARP (the user: "i also want to be able to make track H 90 degrees too"): a SECOND turn type beside the broad curve, which it leaves as it is. A
   // corner of the angle typed, held at the radius typed, ramped in and out over a few metres (track H's are 0–8 m) and exiting dead straight
@@ -720,7 +723,7 @@ function mount(root, shell, mountOpts = {}) {
   const sharpDeg = num(90, 1, 'the angle of the sharp corner, degrees (+ = left, − = right)'), sharpR = num(22, 0.5, 'the radius the sharp corner holds, m'), sharpRamp = num(4, 1, 'how many metres the sharp corner takes to tighten, and to straighten after it');
   for (const f of [sharpDeg, sharpR, sharpRamp]) f.oninput = f.onchange = () => {};
   const sharpBtn = el('button', { text: 'Sharp', title: 'a SHARP corner: the angle beside it at the radius beside it, tightening and straightening over the ramp, then dead straight. Too tight a radius for the width is refused with the tightest that works', onclick: () => {
-    const before = shell.getState().history.present, made = fieldsNow(); send('t180-ghost-clear'); shell.extendSharp(opts(), { deg: sharpDeg.value, R: sharpR.value, ramp: sharpRamp.value }); const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made });
+    const before = shell.getState().history.present, made = cmdMade('sharp', { sharpDeg: sharpDeg.value, sharpR: sharpR.value, sharpRamp: sharpRamp.value }); send('t180-ghost-clear'); shell.extendSharp(opts(), { deg: sharpDeg.value, R: sharpR.value, ramp: sharpRamp.value }); const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made });
   } });
   // and the hint when the turn field asks for 0 after a turn without "at start": that eases over the whole piece, so it is not straight until its end
   // no paragraph under the buttons; the sense is the "at start" box's tooltip
@@ -1096,7 +1099,7 @@ function mount(root, shell, mountOpts = {}) {
     try { send('t180-ghost', { candidate: shell.candidateJump(opts()), reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e && e.name === 'CoreError' ? JW.jumpWords(e) : String(e && e.message || e); }
     if (why) { send('t180-ghost-clear'); sayJump(`No preview of this jump: ${why}`); }
   };
-  const jumpHere = () => { send('t180-ghost-clear'); const before = shell.getState().history.present, made = fieldsNow(); shell.jump(opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made }); };   // as Extend: Undo gives the fields back
+  const jumpHere = () => { send('t180-ghost-clear'); const before = shell.getState().history.present, made = cmdMade('jump'); shell.jump(opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made }); };   // as Extend: Undo gives the fields back
   const jumpBtn = el('button', { text: 'Jump', title: 'place the piece above, then a free landing you move by hand: this is a jump, drive it in AC and move the landing until it works', onclick: jumpHere,
     onmouseenter: jumpGhost, onmouseleave: () => send('t180-ghost-clear') });   // (not Extend's: the jump's ghost has no handles to keep up, so it always goes)
   // the landing's number boxes: shown only while a landing is the head; a typed value (change) is one undo step; a box being typed in is not rewritten from the track

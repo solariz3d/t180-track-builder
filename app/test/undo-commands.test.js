@@ -151,13 +151,16 @@ for (const [name, btn, extra] of [['Level', 'Level', null], ['Turn to grid', 'Tu
     // AMENDED BY NAME (A, L229 addendum 2): C3 asserted that Extend on the given-back boxes lays the removed piece. With the fix the ghost shown is the road removed (asserted here and in C4), so that identity is a different question: do the boxes hold the COMMAND's own numbers? They do not (fieldsNow holds the Extend boxes only, not Turn by's angle, Sharp's three, or the grid step), so it is kept below as C3b, a todo that still runs and prints.
     assert.equal(ghostSegs, ugSegs, `${name}: the ghost sent is the road the undo removed`);
   });
-  test(`C3b: an undone ${name}: Extend on the given-back boxes lays the piece ${name} laid`, { todo: 'OPEN: the boxes hold the Extend fields, not the command own numbers (Turn by angle, Sharp degrees/radius/ramp, grid step)' }, async () => {
+  test(`C3b: an undone ${name}: the SAME command pressed on the given-back boxes lays the removed piece (amended by name, L229 addendum 3: was Extend on the boxes)`, async () => {
     const p = await mountC();
     typePiece(p, { L: 200, turn: 25, as: 'corner' }); p.type('climb °', 3);
     if (extra) extra(p);
     const b = p.button(btn); assert.ok(b, `no ${btn} button`); b.onclick(); p.tick();
     const done = p.shell.getState().history.present; if (done.pieces.length < 2) { say(name, 'refused:', p.shell.getState().message); return; }
     const removed = JSON.stringify(done.pieces.at(-1)), placedM = (() => { const r = p.shell.getState().resolved.segments; return r.reduce((a, g) => a + g.length, 0); })();
+    // scramble the command's own fields, so only the undo can give them back
+    for (const [t, v] of [['turn by °', 7], ['sharp °', 11], ['sharp radius m', 33], ['sharp ramp m', 9]]) { try { p.type(t, v); } catch (e) { /* this command has no such box */ } }
+    try { p.set(p.byAria('grid step'), '15'); } catch (e) { /* no grid box */ }
     p.events.length = 0; p.shell.undo(); p.tick();
     const ev = lastGhost(p);
     say(name, 'events after undo', p.events.map((e) => e.type).join(','), '| shell undoGhost', !!p.shell.getState().undoGhost);
@@ -165,7 +168,7 @@ for (const [name, btn, extra] of [['Level', 'Level', null], ['Turn to grid', 'Tu
     const ghostSegs = JSON.stringify(ev.detail.candidate.segments.map((g) => [g.length, g.kh0 !== undefined ? g.kh0 : null]));
     const ug = p.shell.getState().undoGhost, ugSegs = ug ? JSON.stringify(ug.candidate.segments.map((g) => [g.length, g.kh0 !== undefined ? g.kh0 : null])) : null;
     // lay what the panel's ghost shows: Extend from the boxes as they are now
-    p.button('Extend').onclick();
+    p.button(btn).onclick();
     const viaExtend = JSON.stringify(p.shell.getState().history.present.pieces.at(-1));
     say(name, '| the ghost sent is the shell undo ghost:', ghostSegs === ugSegs, '| Extend from the given-back boxes lays the removed piece:', viaExtend === removed, '| ghost m', ghostLen(ev).toFixed(1), 'removed doc m', placedM.toFixed(1));
     assert.equal(viaExtend, removed, `${name}: the boxes given back, laid by Extend (the ghost shown), are not the piece ${name} laid`);
@@ -242,4 +245,19 @@ test('T1: undo of Turn to grid: the preview shows the road Turn to grid laid, an
   assert.equal(segSig(ev.detail.candidate.segments.slice(placed)), segSig(removedSegs), 'the preview is the road that was removed');
   assert.equal(p.field('length m').value, len0, 'the boxes are the ones typed for it');
   assert.ok(ug && ev.detail.candidate === ug.candidate, 'and it is the shell undo ghost');
+});
+
+// T2 (added by A, L229 addendum 3): Turn to grid's own step comes back. C3b's set-up for it is refused (its heading is already on the grid), so here from a 25 degree heading with step 45.
+test('T2: undo of Turn to grid gives the grid step back: the same command on the given-back boxes lays the removed piece', async () => {
+  const p = await mountC();
+  typePiece(p, { L: 200, turn: 25, as: 'corner' }); p.button('Extend').onclick();
+  p.type('length m', 150); p.type('turn °', ''); p.set(p.byAria('grid step'), '45');
+  p.button('Turn to grid').onclick(); p.tick();
+  const done = p.shell.getState().history.present; assert.equal(done.pieces.length, 3, 'Turn to grid laid a piece: ' + p.shell.getState().message);
+  const removed = JSON.stringify(done.pieces.at(-1));
+  p.set(p.byAria('grid step'), '15');
+  p.shell.undo(); p.tick();
+  assert.equal(p.byAria('grid step').value, '45', 'the step he pressed it with is back');
+  p.button('Turn to grid').onclick();
+  assert.equal(JSON.stringify(p.shell.getState().history.present.pieces.at(-1)), removed, 'the same command lays the removed piece');
 });
