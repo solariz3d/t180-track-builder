@@ -682,7 +682,7 @@ function mount(root, shell, mountOpts = {}) {
   // A SAVED PIECE'S GHOST (L238, the user 2026-11-25 07:02: "click a saved piece, it doesnt auto place it, it places the ghost that you then have to press place, it allows you to tweak the piece"). Place
   // lays the piece as shown (the library's own step, the saved bytes); with a field typed since, the ghost is this panel's own next piece, and Place lays THAT as an Extend. Cancel, Esc, a new document or a pick on the
   // track drops it
-  const pieceNote = el('p', { class: 'message', 'aria-label': 'saved piece shown', style: 'display:none;font-size:12px;margin:2px 0' });
+  const pieceNote = el('p', { class: 'head', 'aria-label': 'saved piece shown', style: 'display:none;font-size:12px;margin:2px 0' });
   const placeBtn = el('button', { text: 'Place piece', title: 'lay the piece shown as a ghost at the open end (one undo step); change a number first to place your own version', style: 'display:none',
     onclick: () => { if (!pgSeen) return; if (pieceShown) { void shell.placePiece(); } else { send('t180-ghost-clear'); shell.dropPieceGhost(); extendHere(); } } });
   const dropPieceBtn = el('button', { text: 'Cancel piece', title: 'drop the ghost of the saved piece: nothing is placed (Esc does the same)', style: 'display:none', onclick: () => shell.dropPieceGhost() });

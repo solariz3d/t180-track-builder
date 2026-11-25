@@ -4,6 +4,11 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+### Added
+
+- **A click on a saved piece shows it as a ghost; Place piece lays it.** A saved piece used to go down the moment it was clicked. Now the click shows it as the see-through ghost at the open end and puts the numbers that made it in the panel's boxes; change any box to make your own version (the ghost becomes the panel's own next piece), then Place piece lays it as one undo step. Cancel piece or Esc drops it. The library buttons are now "Preview at head" and "Preview mirrored". A piece saved without kept numbers shows its shape read off, and says so, and Place lays it exactly as saved.
+- **A saved piece keeps the numbers that made it, in a `.t180recipe` file beside it.** Written by Save as piece when one Extend laid exactly the selected pieces; the piece file itself is unchanged, so older builds open the piece as before and ignore the recipe. Rename carries it, Delete removes it, and a recipe left beside a different file of the same name is not used (it names the piece file by a hash).
+
 ### Fixed
 
 - **The exporter no longer writes an AI line that AC cannot load for a near-vertical wall.** AC crashed in `AISpline::calculateNormals` loading the AI line of a track whose wall climbed to within 0.0009 m of vertical over a 6 m step. The bar that keeps a line off vertical (`CLEAR_UP`, `src/export/ailine.js`) is a dimensionless number, the sine of a tangent's angle from vertical, and it was 1e-4; that line's least was 1.424e-4, so it cleared the bar and still crashed. The bar is now 1.93e-4, the least of a line AC is known to load (ELYSIUM's, which does not move), so every line written is at least as clear as one AC loads. A track whose vertical stretch is closer than that to vertical is exported without an AI line, as a track that stays vertical already was, and the banner says why. Only ELYSIUM's own line sits in the band between the old and new bar among the repo's tracks.
