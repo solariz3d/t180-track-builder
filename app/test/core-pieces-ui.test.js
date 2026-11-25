@@ -372,8 +372,8 @@ test('row 10: the panel: a click selects the piece under it and a shift-click th
   assert.match(P1.rows()[0].textContent, /two turns/); assert.match(P1.text('two turns details'), /^2 pieces · 300 m · turn \+\d+\.\d\d° · climb 0\.00° · plain$/);
   // Add at head, plain then mirrored
   const n0 = shell.getState().history.present.pieces.length;
-  P1.buttons('Add at head')[0].onclick(); await tick(); await tick(); assert.equal(shell.getState().history.present.pieces.length, n0 + 2);
-  P1.input('mirror on insert').checked = true; P1.buttons('Add at head')[0].onclick(); await tick(); await tick(); assert.equal(shell.getState().history.present.pieces.length, n0 + 4); assert.match(shell.getState().message, /mirrored/);
+  P1.buttons('Preview at head')[0].onclick(); await tick(); await tick(); assert.equal(shell.getState().history.present.pieces.length, n0, 'a click shows the ghost and lays nothing'); assert.ok(shell.getState().pieceGhost); await shell.placePiece(); assert.equal(shell.getState().history.present.pieces.length, n0 + 2);   // AMENDED BY NAME (L238): a click shows the ghost, Place lays it
+  P1.input('mirror on insert').checked = true; P1.buttons('Preview at head')[0].onclick(); await tick(); await tick(); await shell.placePiece(); assert.equal(shell.getState().history.present.pieces.length, n0 + 4); assert.match(shell.getState().message, /mirrored/);
   // Rename, with its own box; Delete, with its confirm
   P1.button('Rename').onclick(); assert.ok(P1.input('new name')); P1.input('new name').value = 'bends'; P1.button('OK').onclick(); await tick(); await tick(); await tick();
   assert.deepEqual(await st.listPieces(), ['bends']); assert.match(P1.rows()[0].textContent, /bends/);
@@ -874,11 +874,11 @@ test('row 20: the saved pieces are a drop-down bin in the top bar, not a section
   assert.ok(row().all().some((e) => e.tagName === 'CANVAS' && e.attrs['aria-label'] === 'plan view of two turns'), 'its thumbnail'); assert.match(P1.binAll().find((e) => e.attrs['aria-label'] === 'two turns details').textContent, /^2 pieces · 300 m · turn \+\d+\.\d\d° · climb 0\.00° · plain$/, 'its one-line summary'); assert.ok(row().textContent.includes('two turns'), 'its name');
   // Add at head: one undo step
   const n0 = shell.getState().history.present.pieces.length, past0 = shell.getState().history.past.length;
-  P1.binButton('Add at head').onclick(); await tick(); await tick(); assert.equal(shell.getState().history.present.pieces.length, n0 + 2); assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step');
+  P1.binButton('Preview at head').onclick(); await tick(); await tick(); assert.equal(shell.getState().history.present.pieces.length, n0, 'a click shows the ghost and lays nothing'); await shell.placePiece(); assert.equal(shell.getState().history.present.pieces.length, n0 + 2);   // AMENDED BY NAME (L238) assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step');
   // Add mirrored: its own button on the row, the mirror image
-  const n1 = shell.getState().history.present.pieces.length; P1.binButton('Add mirrored').onclick(); await tick(); await tick(); assert.equal(shell.getState().history.present.pieces.length, n1 + 2); assert.match(shell.getState().message, /mirrored/);
+  const n1 = shell.getState().history.present.pieces.length; P1.binButton('Preview mirrored').onclick(); await tick(); await tick(); await shell.placePiece(); assert.equal(shell.getState().history.present.pieces.length, n1 + 2); assert.match(shell.getState().message, /mirrored/);
   // a click on the row (not on a button) adds it at the head; a click on one of its buttons is that button's only
-  const n2 = shell.getState().history.present.pieces.length; row().onclick({ target: row() }); await tick(); await tick(); assert.equal(shell.getState().history.present.pieces.length, n2 + 2, 'a click on the row adds it at the head');
+  const n2 = shell.getState().history.present.pieces.length; row().onclick({ target: row() }); await tick(); await tick(); assert.equal(shell.getState().history.present.pieces.length, n2, 'a click on the row shows it at the head'); await shell.placePiece(); assert.equal(shell.getState().history.present.pieces.length, n2 + 2, 'and Place lays it');
   const n3 = shell.getState().history.present.pieces.length, b = P1.binButton('Rename'); row().onclick({ target: b }); await tick(); assert.equal(shell.getState().history.present.pieces.length, n3, 'a click that began on a button is not a row click');
   // Rename and Delete from the menu, as before
   P1.binButton('Rename').onclick(); const nin = P1.binAll().find((e) => e.attrs['aria-label'] === 'new name'); assert.ok(nin); nin.value = 'bends'; P1.binButton('OK').onclick(); await tick(); await tick(); await tick(); assert.deepEqual(await st.listPieces(), ['bends'], 'renamed'); assert.equal(P1.binRows()[0].attrs['data-piece'], 'bends');

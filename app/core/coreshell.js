@@ -120,6 +120,25 @@ function packHistory(h, presentText) {
   const made = chain.map((x, k) => { const r = k > 0 ? madeOf.get(x) : null; return r && r.before === chain[k - 1] ? r.made : null; });
   return JSON.stringify({ schema: 1, kind: UNDO_KIND, present: presentText, past: past.map(textOf), future: future.map(textOf), ...(made.some((m) => m) ? { made } : {}) });
 }
+// A SAVED PIECE'S RECIPE (L238; the user, 2026-11-25 07:02: "i need to know how to make it by hand with the program, as well, in saved pieces ... it allows you to tweak the piece"): the numbers an
+// Extend was typed with, kept beside the saved piece (<name>.t180recipe, the pieces folder; the piece file is unchanged, piece.js refuses unknown fields). Only for a piece the panel laid in ONE step
+// that is still exactly what that step laid (the same piece objects): a run of several steps has no single set of numbers, a piece changed since (a grip, a sculpt) is not what the numbers made, and a
+// step that was not an Extend has its own command to lay it again. The recipe names the piece file's text by a hash (FNV-1a with its length) so a sidecar left beside another file of the same name is
+// not used.
+const RECIPE_KIND = 'piece-recipe';
+const textHash = (t) => { let h = 0x811c9dc5; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return `${t.length}:${h.toString(16)}`; };
+/** The made record of the one Extend that laid exactly the selected pieces of `d` (history `h` holds it), or null. */
+function recipeMade(h, s, d) {
+  const chain = [...h.past, h.present];
+  for (let k = chain.length - 1; k > 0; k--) {
+    const r = madeOf.get(chain[k]);
+    if (!r || r.before !== chain[k - 1] || !r.made || r.made.op !== 'extend') continue;
+    const added = chain[k].pieces.slice(chain[k - 1].pieces.length);
+    if (added.length !== s.ids.length || added.length === 0 || s.from > s.to) continue;
+    if (added.every((P, i) => d.pieces[s.from + i] === P)) return r.made;
+  }
+  return null;
+}
 /** { history } for a sidecar that belongs to `presentText` (the opened document `d`), { mismatch: true } for one that belongs to another file, { bad: why } for one that cannot be read. All or nothing. */
 function unpackHistory(sideText, presentText, d) {
   let o;
@@ -246,7 +265,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     mode: 'core', history: D.createHistory(D.createDoc('untitled')), resolved: { segments: [], closed: false }, resolveError: null,
     message: startMessage, messageKind: startMessage ? 'error' : null, name: null, dirty: false, lastEdited: null, lastStep: null, keptBend: null, brush: null, landingDrag: null, spawnsDrag: null, levelTail: null, levelTailDrag: null, exportReds: null,
     localBrush: !!brushFn, recovery: recovery && !recovery.blocked ? recovery : null,
-    selection: null, deleteProposal: null, undoGhost: null, libraryStamp: 0, proposalCheck: null,   // the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
+    selection: null, deleteProposal: null, undoGhost: null, pieceGhost: null, libraryStamp: 0, proposalCheck: null,   // the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
     cutProposal: null,   // a pending cut (cutSelection's preview), dropped with the document it was made on
     bankProposal: null,   // a pending Bank the bend (proposeBankSwing's preview), dropped with the document it was made on
     sculpt: false,   // the Sculpt switch: the brush and the handles on a placed piece change its shape only, never the route
@@ -305,6 +324,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     if (patch.history && st.selection && !('selection' in patch) && patch.history.present !== st.selection.base) patch = { ...patch, selection: null };
     // THE UNDO GHOST (2026-11-25) likewise: the road an undo took off the end, shown over the document the undo left; any other change of document (a redo, an edit, an open) drops it
     if (patch.history && st.undoGhost && !('undoGhost' in patch) && patch.history.present !== st.undoGhost.base) patch = { ...patch, undoGhost: null };
+    // THE PIECE GHOST (L238) is a saved piece shown over the document it would be added to: any change of document, or picking a piece on the track, drops it
+    if (patch.history && st.pieceGhost && !('pieceGhost' in patch) && patch.history.present !== st.pieceGhost.base) patch = { ...patch, pieceGhost: null };
+    if (patch.selection && st.pieceGhost && !('pieceGhost' in patch)) patch = { ...patch, pieceGhost: null };
     if (patch.history && st.deleteProposal && !('deleteProposal' in patch) && patch.history.present !== st.deleteProposal.base) patch = { ...patch, deleteProposal: null };
     if (patch.history && st.cutProposal && !('cutProposal' in patch) && patch.history.present !== st.cutProposal.base) patch = { ...patch, cutProposal: null };
     if (patch.history && st.bankProposal && !('bankProposal' in patch) && patch.history.present !== st.bankProposal.base) patch = { ...patch, bankProposal: null };
@@ -1247,7 +1269,11 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       let text;
       try { const piece = PC.saveRun(d, s.from, s.to, { name }); text = PC.serialize(piece); } catch (e) { if (e.name !== 'CoreError') throw e; return set({ message: e.message }); }
       try { await storage.savePiece(name, text); } catch (e) { return set({ message: `the piece was not saved: ${e && e.message || e}` }); }   // a name already used is refused by the native side, and says so
-      return set({ libraryStamp: st.libraryStamp + 1, ...ok(`saved the piece "${name}": ${s.ids.length} piece${s.ids.length === 1 ? '' : 's'} from the track (it is in the library below)`) });
+      // THE RECIPE (L238): the numbers that made it, beside the piece, when one Extend laid exactly these pieces; the piece is saved either way, and a recipe that could not be written is said
+      let note = '';
+      const made = typeof storage.saveRecipe === 'function' ? recipeMade(st.history, s, d) : null;
+      if (made) { try { await storage.saveRecipe(name, JSON.stringify({ schema: 1, kind: RECIPE_KIND, piece: textHash(text), made })); } catch (e) { note = `; its numbers were not kept: ${e && e.message || e}`; } }
+      return set({ libraryStamp: st.libraryStamp + 1, ...ok(`saved the piece "${name}": ${s.ids.length} piece${s.ids.length === 1 ? '' : 's'} from the track (it is in the library below)${note}`) });
     },
     /**
      * THE LIBRARY: every saved piece, [{ name, summary, thumb, error }] sorted by name. summary is src/core/piece.js summary (pieces, roads, flights, kind, lengthM,
@@ -1271,8 +1297,51 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (!r) return st;
       return set(ok(`added the piece "${name}"${mirror ? ' mirrored' : ''} at the head: ${st.history.present.pieces.length - before.pieces.length} piece${st.history.present.pieces.length - before.pieces.length === 1 ? '' : 's'} (Ctrl+Z takes it back)`));
     },
+    /**
+     * A CLICK ON A SAVED PIECE SHOWS IT, it does not lay it (L238; the user, 07:02: "click a saved piece, it doesnt auto place it, it places the ghost that you then have to press place"). The piece
+     * is the see-through ghost at the head, over the document it would be added to, with the numbers that made it when a recipe beside it belongs to this very file (not when it is mirrored: those are
+     * the unmirrored numbers) and its shape read off otherwise (words say so). Nothing changes in the document. placePiece lays it (insertPiece's one undo step); dropPieceGhost, a change of
+     * document or picking a piece on the track drops it. A refusal (CLOSED, a missing or damaged file...) is said by name and shows nothing.
+     */
+    async showPiece(name, { mirror = false } = {}) {
+      if (!storage || typeof storage.openPiece !== 'function') return set({ message: 'saved pieces are not available here' });
+      let text, piece;
+      try { text = await storage.openPiece(name); piece = PC.parse(text); } catch (e) { return set({ message: `could not open the piece "${name}": ${e && e.message || e}`, pieceGhost: null }); }
+      const d = doc();
+      let after, candidate;
+      try { after = PC.insert(d, piece, { mirror }); candidate = { segments: segmentsOf(after), closed: false, start: startOf(after) }; }
+      catch (e) { if (e.name !== 'CoreError') throw e; return set({ message: e.message, pieceGhost: null }); }
+      let numbers = null, note = null;
+      if (!mirror && typeof storage.openRecipe === 'function') {
+        try {
+          const raw = await storage.openRecipe(name);
+          if (raw !== null && raw !== undefined) {
+            const r = JSON.parse(raw);
+            if (r && r.kind === RECIPE_KIND && r.schema === 1 && r.made && typeof r.made === 'object' && r.piece === textHash(text)) numbers = r.made;
+            else note = 'the saved numbers belong to another file of this name, so they are not used';
+          }
+        } catch (e) { note = `its saved numbers could not be read (${e && e.message || e})`; }
+      }
+      if (doc() !== d) return st;   // the document changed while the files were read: this ghost would be for a track that is gone
+      const last = after.pieces.length - 1;
+      let readout = null; try { readout = RD.pieceReadout(after, last); } catch (e) { readout = null; }
+      return set({ pieceGhost: Object.freeze({ name, mirror: !!mirror, base: d, candidate, count: after.pieces.length - d.pieces.length, numbers, readOff: numbers === null, note, readout, words: () => SHPR.shapeWords(SHPR.readFromShape(after, last)) }), message: null });
+    },
+    /** Lay the piece the ghost shows: Add at head's own step (one undo step, the same document), the ghost gone. */
+    async placePiece() {
+      const g = st.pieceGhost;
+      if (!g || g.base !== doc()) return set({ pieceGhost: null, message: 'no piece is shown to place' });
+      return api.insertPiece(g.name, { mirror: g.mirror });
+    },
+    dropPieceGhost() { if (st.pieceGhost) set({ pieceGhost: null }); },
     /** Rename a saved piece: the new name must be free (a piece is never overwritten); the file's own name field changes with it. */
     async renamePiece(from, to) {
+      // the recipe goes with the piece: called once the new file is in place (both paths below)
+      const moveRecipe = async () => {
+        if (typeof storage.openRecipe !== 'function' || typeof storage.saveRecipe !== 'function' || typeof storage.deleteRecipe !== 'function') return '';
+        try { const r = await storage.openRecipe(from); if (r === null || r === undefined) return ''; await storage.saveRecipe(to, r); await storage.deleteRecipe(from); return ''; }
+        catch (e) { return `; its saved numbers were not moved: ${e && e.message || e}`; }
+      };
       if (!storage || typeof storage.openPiece !== 'function' || typeof storage.savePiece !== 'function' || typeof storage.deletePiece !== 'function') return set({ message: 'saved pieces are not available here' });
       let text, orig;
       try { orig = await storage.openPiece(from); text = PC.serialize({ ...PC.parse(orig), name: to }); } catch (e) { return set({ message: `could not rename the piece "${from}": ${e && e.message || e}` }); }
@@ -1287,16 +1356,17 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
           catch (e2) { return set({ libraryStamp: st.libraryStamp + 1, message: `the rename failed (${e && e.message || e}) and the piece is kept as "${tmp}"` }); }
         }
         try { await storage.deletePiece(tmp); } catch (e) { return set({ libraryStamp: st.libraryStamp + 1, message: `renamed the piece "${from}" to "${to}", but its temporary copy "${tmp}" could not be removed: ${e && e.message || e}` }); }
-        return set({ libraryStamp: st.libraryStamp + 1, ...ok(`renamed the piece "${from}" to "${to}"`) });
+        return set({ libraryStamp: st.libraryStamp + 1, ...ok(`renamed the piece "${from}" to "${to}"${await moveRecipe()}`) });
       }
       try { await storage.savePiece(to, text); } catch (e) { return set({ message: `not renamed: ${e && e.message || e}` }); }
       try { await storage.deletePiece(from); } catch (e) { return set({ libraryStamp: st.libraryStamp + 1, message: `the piece was copied to "${to}" but the old one "${from}" could not be removed: ${e && e.message || e}` }); }
-      return set({ libraryStamp: st.libraryStamp + 1, ...ok(`renamed the piece "${from}" to "${to}"`) });
+      return set({ libraryStamp: st.libraryStamp + 1, ...ok(`renamed the piece "${from}" to "${to}"${await moveRecipe()}`) });
     },
     /** Delete a saved piece FILE (the library entry), not pieces of the track. */
     async deletePieceFile(name) {
       if (!storage || typeof storage.deletePiece !== 'function') return set({ message: 'saved pieces are not available here' });
       try { await storage.deletePiece(name); } catch (e) { return set({ message: `the piece was not deleted: ${e && e.message || e}` }); }
+      if (typeof storage.deleteRecipe === 'function') { try { await storage.deleteRecipe(name); } catch (e) { /* a sidecar left behind is harmless: the next piece of this name is checked against its hash */ } }
       return set({ libraryStamp: st.libraryStamp + 1, ...ok(`deleted the saved piece "${name}"`) });
     },
 

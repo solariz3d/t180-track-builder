@@ -624,10 +624,11 @@ function mount(root, shell, mountOpts = {}) {
   let releasing = false;   // true while a drag's LAST position is typed in, just before end(): its ghost(RELEASE) builds the exact ghost, so the cheap one between is not built
   let ghostN = 0, exCache = null;   // L140: the extra handles' cache (extraHandles), declared before ghost() can first run
   let ghostSaid = null;   // the refusal the ghost last wrote into the message line, so the next ghost that is built takes it away
+  let pgSeen = null, pieceShown = null;   // the saved piece's ghost on screen now (the shell's st.pieceGhost, L238): pieceShown is it while untouched; a typed or dragged field hands the picture to the next piece's ghost, and Place then lays THAT
   let ugSeen = null, undoShown = null;   // the undo ghost on screen now (the shell's st.undoGhost): typing, dragging or hovering hands the picture back to the next piece's ghost
   const ghost = () => {
-    if (undoShown) { roBox.children[0].textContent = 'next'; roRead.style.display = 'none'; }
-    undoShown = null;
+    if (undoShown || pieceShown) { roBox.children[0].textContent = 'next'; roRead.style.display = 'none'; }
+    undoShown = null; pieceShown = null;
     ghostN++;   // L140: what the extra handles were worked out from may have changed (extraHandles' cache)
     if (releasing) return;
     showSecond();   // the later changes' rows follow their fields (on with a target) and the length (a dragged mark keeps its share)
@@ -678,6 +679,15 @@ function mount(root, shell, mountOpts = {}) {
     if (e && e.detail && typeof e.detail.handled === 'function') e.detail.handled();
   };
   doc.addEventListener('t180-undo-guard', onUndoGuard);
+  // A SAVED PIECE'S GHOST (L238, the user 2026-11-25 07:02: "click a saved piece, it doesnt auto place it, it places the ghost that you then have to press place, it allows you to tweak the piece"). Place
+  // lays the piece as shown (the library's own step, the saved bytes); with a field typed since, the ghost is this panel's own next piece, and Place lays THAT as an Extend. Cancel, Esc, a new document or a pick on the
+  // track drops it
+  const pieceNote = el('p', { class: 'message', 'aria-label': 'saved piece shown', style: 'display:none;font-size:12px;margin:2px 0' });
+  const placeBtn = el('button', { text: 'Place piece', title: 'lay the piece shown as a ghost at the open end (one undo step); change a number first to place your own version', style: 'display:none',
+    onclick: () => { if (!pgSeen) return; if (pieceShown) { void shell.placePiece(); } else { send('t180-ghost-clear'); shell.dropPieceGhost(); extendHere(); } } });
+  const dropPieceBtn = el('button', { text: 'Cancel piece', title: 'drop the ghost of the saved piece: nothing is placed (Esc does the same)', style: 'display:none', onclick: () => shell.dropPieceGhost() });
+  const onPieceKey = (e) => { if (e && e.key === 'Escape' && shell.getState().pieceGhost) shell.dropPieceGhost(); };
+  doc.addEventListener('keydown', onPieceKey);
   const extendBtn = el('button', { text: 'Extend', title: 'add a piece at the open end; fields left as shown keep going the way the track goes',
     onclick: () => { send('t180-ghost-clear'); extendHere(); }, onmouseenter: () => { if (!shell.getState().sculpt) ghost(); }, onmouseleave: () => { if (!handlesOn.checked || shell.getState().sculpt) send('t180-ghost-clear'); } });   // with the drag handles on, the ghost stays up: its handles are what you drag
   // STRAIGHT IN ONE CLICK (the user: "impossible to create a perfect straight"): Extend at turn 0 eases to it over the WHOLE piece unless the turn's
@@ -1249,7 +1259,7 @@ function mount(root, shell, mountOpts = {}) {
   const showSel = (st) => { const d = st.history.present; selBox.style.display = shell.selectionInfo() || (st.deleteProposal && st.deleteProposal.base === d) ? '' : 'none'; };
   root.replaceChildren(
     info,   // the track line first, directly under the bar (no heading above it)
-    el('div', { class: 'actions' }, extendBtn, straightBtn, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
+    pieceNote, el('div', { class: 'actions' }, placeBtn, dropPieceBtn), el('div', { class: 'actions' }, extendBtn, straightBtn, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
     sculptStrip,
     el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), turnField, SEC.turn.box, climbField, SEC.climb.box, (() => { const r = fieldAt('bank °', bank, 'bank', flowBox); r.append(bankAtBox); return r; })(), SEC.bank.box, ...shapeFields),
     roBox, roRead,
@@ -1318,6 +1328,20 @@ function mount(root, shell, mountOpts = {}) {
     // THE UNDO GHOST: the road an undo took off the end stays up, see-through, with its own readout, until a redo, an edit, or the fields are touched (ghost() above)
     { const ug = st.undoGhost && st.undoGhost.base === d && !st.sculpt ? st.undoGhost : null; if (ug !== ugSeen) { ugSeen = ug; undoShown = undoneNow ? null : ug; if (ug && undoneNow) ghost(); else if (ug) {
         roBox.children[0].textContent = 'undone'; roRead.textContent = ug.shapeWords(); roRead.style.display = ''; let why = null; try { send('t180-ghost', { candidate: ug.candidate, reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e.message; } if (why) { undoShown = null; send('t180-ghost-clear'); } } else { send('t180-ghost-clear'); roBox.children[0].textContent = 'next'; roRead.style.display = 'none'; } } }
+    // THE SAVED PIECE'S GHOST (L238): shown over the document it would be added to, with the numbers that made it put in the boxes (the recipe beside the piece), or its shape read off and said so
+    { const pg = st.pieceGhost && st.pieceGhost.base === d && !st.sculpt ? st.pieceGhost : null;
+      if (pg !== pgSeen) {
+        pgSeen = pg; pieceShown = pg;
+        const on = pg ? '' : 'none'; placeBtn.style.display = dropPieceBtn.style.display = pieceNote.style.display = on;
+        if (pg) {
+          if (pg.numbers) { putBack(pg.numbers); for (const k of Object.keys(HEAD)) applied[k] = HEAD[k][0].value; ghostN++; }   // the boxes now are what the panel put there, so Ctrl+Z does not read them as typed
+          const what = `${pg.name}${pg.mirror ? ' (mirrored)' : ''}: ${pg.count} piece${pg.count === 1 ? '' : 's'}`;
+          pieceNote.textContent = pg.numbers ? `Ghost of the saved piece ${what}. The boxes hold the numbers that made it: change any to make your own, then Place piece.`
+            : `Ghost of the saved piece ${what}. ${pg.mirror ? 'It is mirrored, so its saved numbers do not apply.' : 'No numbers were kept for it; what its shape does is read off below.'}${pg.note ? ` (${pg.note})` : ''} Place piece lays it as saved.`;
+          roBox.children[0].textContent = 'piece'; roRead.textContent = pg.numbers ? '' : (() => { try { return pg.words(); } catch (e) { return ''; } })(); roRead.style.display = pg.numbers ? 'none' : '';
+          let why = null; try { send('t180-ghost', { candidate: pg.candidate, reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e.message; } if (why) { pieceNote.textContent = `No preview of this piece: ${why}`; send('t180-ghost-clear'); }
+        } else { send('t180-ghost-clear'); roBox.children[0].textContent = 'next'; roRead.style.display = 'none'; pieceNote.textContent = ''; }
+      } }
     readout();   // the track changed, so the piece the fields would add changed
     hintNow(); fillLanding();
     if (d !== jumpNoteFor) { jumpNoteFor = d; sayJump(); }   // a new document: the note is empty again (it shows only a refusal's words; the standing hint is the button's tooltip)
@@ -1588,7 +1612,7 @@ function mount(root, shell, mountOpts = {}) {
   const offSettings = Object.entries(SETTINGS).map(([k, apply]) => { apply(S.get(k, undefined)); return S.on(k, apply); });
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, flights, secondTick, marksAt, offersAt, secondDrag, secondOffer, secondExtra, secondSlide, heldWhy, extraHandles, secondAdd: (f, y) => { const x = secAdd(f, y); ghost(); return x; }, pieces, gripLayer, spawnsLayer, spawnDrag, levelTail, values, sculptStrip, lend, options: opts, unmount() { unsub(); if (secondTick) secondTick.unmount(); doc.removeEventListener('t180:build-request', onBuildRequest); doc.removeEventListener('t180-sculpt-key', onSculptKey); doc.removeEventListener('t180:sculpt-hover', onSculptHover); doc.removeEventListener('keydown', onAltKey); doc.removeEventListener('keyup', onAltKey); if (winEvents) win.removeEventListener('blur', onBlur); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (levelTail) levelTail.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); stage.removeEventListener('pointerleave', leave); stage.removeEventListener('wheel', wheel, { capture: true }); } root.replaceChildren(); } };
+  return { labels, handles, flights, secondTick, marksAt, offersAt, secondDrag, secondOffer, secondExtra, secondSlide, heldWhy, extraHandles, secondAdd: (f, y) => { const x = secAdd(f, y); ghost(); return x; }, pieces, gripLayer, spawnsLayer, spawnDrag, levelTail, values, sculptStrip, lend, options: opts, unmount() { unsub(); doc.removeEventListener('keydown', onPieceKey); if (secondTick) secondTick.unmount(); doc.removeEventListener('t180:build-request', onBuildRequest); doc.removeEventListener('t180-sculpt-key', onSculptKey); doc.removeEventListener('t180:sculpt-hover', onSculptHover); doc.removeEventListener('keydown', onAltKey); doc.removeEventListener('keyup', onAltKey); if (winEvents) win.removeEventListener('blur', onBlur); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (levelTail) levelTail.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); stage.removeEventListener('pointerleave', leave); stage.removeEventListener('wheel', wheel, { capture: true }); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };

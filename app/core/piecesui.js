@@ -6,7 +6,7 @@
 //   DELETE: at the open end the pieces simply go (one undo step). In the MIDDLE it is PREVIEWED first (the two sides are joined again by moving everything
 //          after the gap along, C measured it 357 of 357 times): the track as it would be is the see-through ghost, the list says how far each piece moves, an overlap check
 //          of the result is shown, and Apply (which writes the track to its backups first) or Cancel decides.
-//   THE LIBRARY: every saved piece with its name, length, turn, climb and a plan thumbnail; Add at head (optionally mirrored left/right), Rename, Delete. A file that cannot
+//   THE LIBRARY: every saved piece with its name, length, turn, climb and a plan thumbnail; Preview at head (optionally mirrored left/right; L238: a ghost, the panel's Place piece lays it), Rename, Delete. A file that cannot
 //          be read is listed with the reason.
 'use strict';
 
@@ -128,7 +128,8 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null, 
     }
     return c;
   };
-  const addAtHead = (name, mirrored) => { void shell.insertPiece(name, { mirror: !!mirrored }); };
+  // L238 (the user, 2026-11-25 07:02): a click on a saved piece SHOWS it as a ghost at the head (the panel's Place piece lays it); it no longer lays it. The bin closes so the ghost is in view.
+  const addAtHead = (name, mirrored) => { void shell.showPiece(name, { mirror: !!mirrored }); if (menu) menu.open = false; };
   const row = (it) => {
     const body = [el('div', { style: 'font-weight:700', text: it.name }), el('div', { style: 'font-size:12px;color:var(--dim)', 'aria-label': `${it.name} details`, text: describe(it) })];
     const buttons = [];
@@ -138,13 +139,13 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null, 
     } else if (confirming === it.name) {
       buttons.push(el('span', { text: 'Delete this saved piece for good?' }), el('button', { text: 'Yes, delete', onclick: () => { confirming = null; void shell.deletePieceFile(it.name); } }), el('button', { text: 'No', onclick: () => { confirming = null; redrawList(); } }));
     } else {
-      if (!it.error) buttons.push(el('button', { text: 'Add at head', title: `put ${it.name} where the track ends${mirror.checked ? ', mirrored' : ''} (one undo step)`, 'aria-label': `add ${it.name} at the head`, onclick: () => addAtHead(it.name, mirror.checked) }),
-        el('button', { text: 'Add mirrored', title: `put ${it.name} where the track ends as its left/right mirror image (one undo step)`, 'aria-label': `add ${it.name} at the head, mirrored`, onclick: () => addAtHead(it.name, true) }));
+      if (!it.error) buttons.push(el('button', { text: 'Preview at head', title: `show ${it.name} as a ghost where the track ends${mirror.checked ? ', mirrored' : ''}; Place piece (in the panel) lays it, and you can change its numbers first`, 'aria-label': `add ${it.name} at the head`, onclick: () => addAtHead(it.name, mirror.checked) }),
+        el('button', { text: 'Preview mirrored', title: `show ${it.name} as a ghost where the track ends as its left/right mirror image; Place piece (in the panel) lays it`, 'aria-label': `add ${it.name} at the head, mirrored`, onclick: () => addAtHead(it.name, true) }));
       buttons.push(el('button', { text: 'Rename', 'aria-label': `rename ${it.name}`, onclick: () => { renaming = it.name; confirming = null; redrawList(); } }), el('button', { text: 'Delete', 'aria-label': `delete the saved piece ${it.name}`, onclick: () => { confirming = it.name; renaming = null; redrawList(); } }));
     }
-    // a click on the row (not on one of its buttons or boxes) adds the piece at the head, as Add at head does (the Pieces menu is a bin: click what you want)
+    // a click on the row (not on one of its buttons or boxes) shows the piece at the head, as Preview at head does (the Pieces menu is a bin: click what you want)
     const rowClick = (e) => { if (it.error || renaming === it.name || confirming === it.name) return; if (e && e.target && /^(BUTTON|INPUT|SELECT|TEXTAREA|A)$/.test(e.target.tagName)) return; addAtHead(it.name, mirror.checked); };
-    return el('div', { class: 'piece-row', 'data-piece': it.name, title: it.error ? '' : `click to add ${it.name} at the head`, onclick: rowClick, style: `display:flex;gap:8px;align-items:center;margin:6px 0;${it.error ? '' : 'cursor:pointer;'}` }, thumb(it), el('div', { style: 'min-width:0' }, ...body, el('div', { class: 'actions' }, ...buttons)));
+    return el('div', { class: 'piece-row', 'data-piece': it.name, title: it.error ? '' : `click to see ${it.name} as a ghost at the head, then press Place piece`, onclick: rowClick, style: `display:flex;gap:8px;align-items:center;margin:6px 0;${it.error ? '' : 'cursor:pointer;'}` }, thumb(it), el('div', { style: 'min-width:0' }, ...body, el('div', { class: 'actions' }, ...buttons)));
   };
   const redrawList = () => {
     listBox.replaceChildren(...items.map(row));

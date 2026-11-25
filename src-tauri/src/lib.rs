@@ -31,6 +31,7 @@ const TRACK_EXT: &str = "t180track";
 const LIBRARY_FILE: &str = "library.t180lib";
 const PIECE_EXT: &str = "t180piece";
 const UNDO_EXT: &str = "t180undo";
+const RECIPE_EXT: &str = "t180recipe";
 
 /// 1 to 64 characters: ASCII letters, digits, space, '_' or '-', starting with a letter or digit.
 pub fn valid_name(name: &str) -> bool {
@@ -152,6 +153,46 @@ fn save_piece(app: tauri::AppHandle, name: String, text: String, replace: Option
 #[tauri::command]
 fn delete_piece(app: tauri::AppHandle, name: String) -> Result<(), String> {
     delete_piece_file(&pieces_dir(&app)?, &name)
+}
+
+// A SAVED PIECE'S RECIPE: `<name>.t180recipe` beside `<name>.t180piece` in the pieces folder (L238; the user, 2026-11-25 07:02: a saved piece should show the numbers that made it). The page's JSON, kept and
+// returned as text; the piece file is not changed (it refuses unknown fields, src/core/piece.js), so an older build reads the piece as ever and never lists a recipe (names_with_ext asks for
+// the piece's extension). Replaced on a new save (it is a note about the piece, not the piece), absent is None, and deleting an absent one is quiet.
+pub fn recipe_file(dir: &Path, name: &str) -> Result<PathBuf, String> {
+    if !valid_name(name) {
+        return Err(format!("{name:?} is not a piece name: 1 to 64 letters, digits, spaces, _ or -"));
+    }
+    Ok(dir.join(format!("{name}.{RECIPE_EXT}")))
+}
+pub fn save_recipe_file(dir: &Path, name: &str, text: &str) -> Result<(), String> {
+    write_atomic(&recipe_file(dir, name)?, text)
+}
+pub fn open_recipe_file(dir: &Path, name: &str) -> Result<Option<String>, String> {
+    let path = recipe_file(dir, name)?;
+    match fs::read_to_string(&path) {
+        Ok(t) => Ok(Some(t)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("could not read the recipe of {name:?}: {e}")),
+    }
+}
+pub fn delete_recipe_file(dir: &Path, name: &str) -> Result<(), String> {
+    match fs::remove_file(recipe_file(dir, name)?) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!("could not delete the recipe of {name:?}: {e}")),
+    }
+}
+#[tauri::command]
+fn save_recipe(app: tauri::AppHandle, name: String, text: String) -> Result<(), String> {
+    save_recipe_file(&pieces_dir(&app)?, &name, &text)
+}
+#[tauri::command]
+fn open_recipe(app: tauri::AppHandle, name: String) -> Result<Option<String>, String> {
+    open_recipe_file(&pieces_dir(&app)?, &name)
+}
+#[tauri::command]
+fn delete_recipe(app: tauri::AppHandle, name: String) -> Result<(), String> {
+    delete_recipe_file(&pieces_dir(&app)?, &name)
 }
 
 fn backups_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -904,7 +945,7 @@ pub fn run() {
             list_tracks, save_track, open_track, backup_track, list_track_backups, open_track_backup, save_library, open_library,
             save_autosave, open_autosave, clear_autosave, write_export, write_layouts_export, stage_files, folder_is_empty, remove_empty_folder,
             get_ac_root, find_ac_root, set_ac_root, install_track, installed_state, track_saved_at, get_see_it_setting, set_see_it_setting, see_it_in_assetto,
-            test_export_folder, find_blender, set_blender_path, write_blender_export, list_pieces, open_piece, save_piece, delete_piece, save_undo, open_undo, append_input_log
+            test_export_folder, find_blender, set_blender_path, write_blender_export, list_pieces, open_piece, save_piece, delete_piece, save_recipe, open_recipe, delete_recipe, save_undo, open_undo, append_input_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running the T-180 Track Builder");
@@ -1211,6 +1252,25 @@ mod tests {
             assert!(piece_file(&d, bad).is_err() && save_piece_file(&d, bad, "x", true).is_err(), "{bad:?} is not a piece name");
         }
         assert!(!d.join("tmp-write").exists() && fs::read_dir(&d).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().ends_with(".tmp-write")), "no temporary file is left");
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn a_piece_recipe_is_kept_beside_its_piece_replaced_read_back_absent_as_none_deleted_quietly_and_never_listed_as_a_piece() {
+        let d = scratch("recipes");
+        save_piece_file(&d, "bend", "piece", false).unwrap();
+        assert_eq!(open_recipe_file(&d, "bend").unwrap(), None, "no sidecar yet: nothing, not an error");
+        save_recipe_file(&d, "bend", "one").unwrap();
+        save_recipe_file(&d, "bend", "two").unwrap();
+        assert_eq!(open_recipe_file(&d, "bend").unwrap(), Some("two".to_string()), "a sidecar is replaced, a piece never is");
+        assert!(d.join("bend.t180recipe").is_file() && d.join("bend.t180piece").is_file());
+        assert_eq!(names_with_ext(&d, PIECE_EXT).unwrap(), vec!["bend".to_string()], "the sidecar is not a piece");
+        delete_recipe_file(&d, "bend").unwrap();
+        delete_recipe_file(&d, "bend").unwrap();
+        assert_eq!(open_recipe_file(&d, "bend").unwrap(), None, "gone, and deleting it again is quiet");
+        for bad in ["", "../x", "a/b", ".."] {
+            assert!(save_recipe_file(&d, bad, "x").is_err() && open_recipe_file(&d, bad).is_err(), "{bad:?} is not a piece name");
+        }
         fs::remove_dir_all(&d).unwrap();
     }
 

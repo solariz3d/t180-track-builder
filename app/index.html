@@ -434,6 +434,10 @@
     openPiece: (name) => call('open_piece', { name }),
     savePiece: (name, text) => call('save_piece', { name, text }),
     deletePiece: (name) => call('delete_piece', { name }),
+    // L238: a saved piece's recipe, the numbers that made it, beside it (<name>.t180recipe; src-tauri/src/lib.rs). Absent is null.
+    saveRecipe: (name, text) => (tauri ? call('save_recipe', { name, text }) : Promise.resolve()),
+    openRecipe: (name) => (tauri ? call('open_recipe', { name }) : Promise.resolve(null)),
+    deleteRecipe: (name) => (tauri ? call('delete_recipe', { name }) : Promise.resolve()),
     saveLibrary: (text) => call('save_library', { text }),
     openLibrary: () => (tauri ? call('open_library') : Promise.resolve(null)),
     saveAutosave: (text) => (tauri ? call('save_autosave', { text }) : Promise.resolve()),
