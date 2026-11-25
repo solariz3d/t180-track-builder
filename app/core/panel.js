@@ -563,7 +563,8 @@ function mount(root, shell, mountOpts = {}) {
     for (const [k, f] of [['turn', turn], ['climb', climb]]) { const v = made.values[k]; if (v === '' || !Number.isFinite(Number(v)) || Number(v) === 0) continue; f.value = applied[k] = v; any = true; }
     if (any) { readout(); hintNow(); }
   };
-  const extendHere = () => { const before = shell.getState().history.present, made = fieldsNow(); shell.extend(opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) { madeWith.set(after, { before, made }); carryCorner(made); } };
+  // op rides INSIDE made (packHistory writes made, not the record): only an Extend's undo shows the panel's own next-piece ghost
+  const extendHere = () => { const before = shell.getState().history.present, made = { ...fieldsNow(), op: 'extend' }; shell.extend(opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) { madeWith.set(after, { before, made }); carryCorner(made); } };
   //: the mode Undo gives back is saved through S too, or the hidden box and the Settings menu would read two different modes
   const putBack = (m) => { if (m.turnAs && m.turnAs !== turnAs.value) { turnAs.value = m.turnAs; showTurnHead(shell.headState()); S.set('turnClimbAs', m.turnAs); } len.value = appliedLen = m.len; for (const k of Object.keys(HEAD)) HEAD[k][0].value = m.values[k]; for (const [k, b] of Object.entries(atStart)) b.checked = !!m.ticks[k]; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube);
     if (m.flow !== undefined) { bankFlow.checked = !!m.flow; bankAtF.value = m.bankAt; showFlow(); }
@@ -1283,7 +1284,7 @@ function mount(root, shell, mountOpts = {}) {
       const keep = st.lastStep && st.lastStep.op === 'landing' && !undone ? FIELDS.filter(unapplied).map((fl) => [fl, fl.value]) : [];
       showGrip(); showHead(); if (undone) putBack(m.made); for (const k of Object.keys(HEAD)) applied[k] = HEAD[k][0].value;
       if (keep.length) { for (const [fl, v] of keep) fl.value = v; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube); }
-      shownFor = d; lentFrom = null; undoneNow = undone;
+      shownFor = d; lentFrom = null; undoneNow = undone && m.made.op === 'extend';   // Level, Turn by, Turn to grid, Sharp and Jump give the boxes back too, but their ghost is the road removed (pane C, L230)
     }
     // A SELECTED PIECE LENDS ITS VALUES (2026-10-15, the user: "when clicking a previous placed part of the track, while its highlighted, make the values
     // change to it, so you can mimic certain values within a new piece"): one selected road piece puts its end values and its length in the Extend fields.
