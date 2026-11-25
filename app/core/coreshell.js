@@ -237,7 +237,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     mode: 'core', history: D.createHistory(D.createDoc('untitled')), resolved: { segments: [], closed: false }, resolveError: null,
     message: startMessage, messageKind: startMessage ? 'error' : null, name: null, dirty: false, lastEdited: null, lastStep: null, keptBend: null, brush: null, landingDrag: null, spawnsDrag: null, levelTail: null, levelTailDrag: null, exportReds: null,
     localBrush: !!brushFn, recovery: recovery && !recovery.blocked ? recovery : null,
-    selection: null, deleteProposal: null, libraryStamp: 0, proposalCheck: null,   // the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
+    selection: null, deleteProposal: null, undoGhost: null, libraryStamp: 0, proposalCheck: null,   // the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
     cutProposal: null,   // a pending cut (cutSelection's preview), dropped with the document it was made on
     bankProposal: null,   // a pending Bank the bend (proposeBankSwing's preview), dropped with the document it was made on
     sculpt: false,   // the Sculpt switch: the brush and the handles on a placed piece change its shape only, never the route
@@ -294,6 +294,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     if (patch.history && st.closeProposal && !('closeProposal' in patch) && patch.history.present !== st.closeProposal.base) patch = { ...patch, closeProposal: null };
     // a SELECTION of pieces and a delete PREVIEW likewise belong to the document they were made on (piece numbers mean nothing on another)
     if (patch.history && st.selection && !('selection' in patch) && patch.history.present !== st.selection.base) patch = { ...patch, selection: null };
+    // THE UNDO GHOST (2026-11-25) likewise: the road an undo took off the end, shown over the document the undo left; any other change of document (a redo, an edit, an open) drops it
+    if (patch.history && st.undoGhost && !('undoGhost' in patch) && patch.history.present !== st.undoGhost.base) patch = { ...patch, undoGhost: null };
     if (patch.history && st.deleteProposal && !('deleteProposal' in patch) && patch.history.present !== st.deleteProposal.base) patch = { ...patch, deleteProposal: null };
     if (patch.history && st.cutProposal && !('cutProposal' in patch) && patch.history.present !== st.cutProposal.base) patch = { ...patch, cutProposal: null };
     if (patch.history && st.bankProposal && !('bankProposal' in patch) && patch.history.present !== st.bankProposal.base) patch = { ...patch, bankProposal: null };
@@ -389,6 +391,13 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   };
   // THE START POSE travels with the segments (found by test 1): the geometry's shape depends on the start PITCH, so a path
   // grown from the origin at pitch 0 is not the document's lap. A real track opened as an example starts where its first station is.
+  // THE UNDO GHOST (the user, 2026-11-25 01:33: "you should see the ghost of the piece you undo every time you undo"): an undo that took pieces off the END leaves the road it took as the
+  // see-through ghost over the document it left, from the redo state the shell already holds (its pieces are the very objects the placed ones are, so the segment cache answers every
+  // one but the removed: nothing is rebuilt). The preview draws a ghost only as an EXTENSION of the placed road, so an undo that changed a piece and removed none has none.
+  const undoGhostOf = (was, now) => {
+    if (was.closed || now.closed || was.pieces.length <= now.pieces.length || !now.pieces.every((P, i) => P.id === was.pieces[i].id)) return null;
+    try { return Object.freeze({ base: now, candidate: { segments: segmentsOf(was), closed: false, start: startOf(was) }, readout: RD.pieceReadout(was, was.pieces.length - 1), removed: was.pieces.length - now.pieces.length }); } catch (e) { return null; }
+  };
   const startOf = (d) => ({ pos: d.start.pos.slice(), theta: d.start.heading, p: d.start.pitch });
   const resolvedOf = (d) => { const segments = segmentsOf(d); return { resolved: Object.freeze({ segments, closed: !!d.closed, start: startOf(d), lift: offsetPath && segments.length ? (p) => offsetPath(d, segments, p) : undefined }), resolveError: null }; };
   /** Run an edit; a core error becomes the message, and nothing else changes. */
@@ -1447,7 +1456,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
 
     // undo and redo SAY what they changed (2026-10-13: on ELYSIUM the last steps were start-line moves, invisible in the preview, so undo looked broken)
-    undo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); if (!st.history.past.length) return set({ message: 'nothing to undo' }); const h = D.undo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, message: `undid: ${stepWords(st.history.present, h.present)}` }); }),
+    undo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); if (!st.history.past.length) return set({ message: 'nothing to undo' }); const h = D.undo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, undoGhost: undoGhostOf(st.history.present, h.present), message: `undid: ${stepWords(st.history.present, h.present)}` }); }),
     redo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); if (!st.history.future.length) return set({ message: 'nothing to redo' }); const h = D.redo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, message: `redid: ${stepWords(h.present, st.history.present)}` }); }),
     /** Put a prepared core document in front of the user, as opening one does: fresh history, nothing to undo. */
     adopt: (d) => attempt(() => { D.checkDoc(d); return set({ history: D.createHistory(d), ...resolvedOf(d), name: null, dirty: false, lastEdited: null, message: null, exportReds: null }); }),

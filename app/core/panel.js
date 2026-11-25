@@ -596,10 +596,10 @@ function mount(root, shell, mountOpts = {}) {
     try {
       if (shell.getState().sculpt) why = 'in Sculpt';
       else if (shell.getState().history.present.closed) why = 'the loop is closed';
-      else { const r = shell.candidateReadout(opts()); f = { ...LB.formatReadout(r), cup: `${fmtCup(r.cupFromDeg)} → ${fmtCup(r.cupToDeg)}`,
+      else { const r = undoShown ? undoShown.readout : shell.candidateReadout(opts()); f = { ...LB.formatReadout(r), cup: `${fmtCup(r.cupFromDeg)} → ${fmtCup(r.cupToDeg)}`,
         // the cross-section cells read the DOCUMENT (the core's readout), never the typed field
         edge: pairOf(r, XS.READOUT.edge, fmtCup), start: pairOf(r, XS.READOUT.start, fmtShare), tube: pairOf(r, XS.READOUT.tube, fmtCup),
-        climbCorner: fmtClimbCorner(r), corner: fmtCorner(r, 'corner' in r && r.corner && r.corner.endsTurningDegPer100m !== null ? shell.candidateCorner(opts()) : null), gravity: pairOf(r, ['gravityBankFromDeg', 'gravityBankToDeg'], LB.fmtDeg) }; }
+        climbCorner: fmtClimbCorner(r), corner: fmtCorner(r, !undoShown && 'corner' in r && r.corner && r.corner.endsTurningDegPer100m !== null ? shell.candidateCorner(opts()) : null), gravity: pairOf(r, ['gravityBankFromDeg', 'gravityBankToDeg'], LB.fmtDeg) }; }
     } catch (e) { why = e.message; }
     // each cell and chip is written only when its text changes: a drag sets the same words on most frames, and every write was style and layout work in that frame
     for (const k of RO) { const v = f ? f[k] : '—'; if (roShown[k] === v) continue; roShown[k] = v; roCells[k].textContent = v; const same = !!f && sameOf(k, f[k]); roChips[k].setAttribute('class', same ? 'chip same' : 'chip'); roChips[k].children[2].textContent = same ? shortOf(k, f[k]) : ''; roChips[k].title = f ? `${chipName(k)}: ${f[k]}` : ''; }
@@ -616,7 +616,9 @@ function mount(root, shell, mountOpts = {}) {
   let releasing = false;   // true while a drag's LAST position is typed in, just before end(): its ghost(RELEASE) builds the exact ghost, so the cheap one between is not built
   let ghostN = 0, exCache = null;   // L140: the extra handles' cache (extraHandles), declared before ghost() can first run
   let ghostSaid = null;   // the refusal the ghost last wrote into the message line, so the next ghost that is built takes it away
+  let ugSeen = null, undoShown = null;   // the undo ghost on screen now (the shell's st.undoGhost): typing, dragging or hovering hands the picture back to the next piece's ghost
   const ghost = () => {
+    undoShown = null;
     ghostN++;   // L140: what the extra handles were worked out from may have changed (extraHandles' cache)
     if (releasing) return;
     showSecond();   // the later changes' rows follow their fields (on with a target) and the length (a dragged mark keeps its share)
@@ -913,7 +915,7 @@ function mount(root, shell, mountOpts = {}) {
   const fieldNum = (f) => { const v = Number(f.value); return f.value !== '' && Number.isFinite(v) ? v : null; };
   const ghostModel = () => {
     const st = shell.getState(), d = st.history.present;
-    if (!handlesOn.checked || st.sculpt || d.closed) return null;
+    if (!handlesOn.checked || st.sculpt || d.closed || undoShown) return null;   // (no handles on an undo ghost: it is the road just taken away, not the next piece)
     let info = askOf('t180:ghost-request');
     if (info && info.jump) return null;   // the ghost on screen is a JUMP's (the Add-jump control): not Extend's, so no Extend handles on it
     // no ghost: ask for it once per document, and again about every half second (the preview mounts AFTER this panel, so the first ask can go to nobody; a ghost that cannot be built is not rebuilt every frame)
@@ -1303,6 +1305,8 @@ function mount(root, shell, mountOpts = {}) {
     // command looked like nothing happened (the user, 2026-11-09: "throw a turn or climb into it, and it just disappears")
     if (st.message && st.message !== shownMsg && st.messageKind !== 'ok' && typeof msg.scrollIntoView === 'function') msg.scrollIntoView({ block: 'nearest' });
     shownMsg = st.message;
+    // THE UNDO GHOST: the road an undo took off the end stays up, see-through, with its own readout, until a redo, an edit, or the fields are touched (ghost() above)
+    { const ug = st.undoGhost && st.undoGhost.base === d && !st.sculpt ? st.undoGhost : null; if (ug !== ugSeen) { ugSeen = undoShown = ug; if (ug) { let why = null; try { send('t180-ghost', { candidate: ug.candidate, reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e.message; } if (why) { undoShown = null; send('t180-ghost-clear'); } } else send('t180-ghost-clear'); } }
     readout();   // the track changed, so the piece the fields would add changed
     hintNow(); fillLanding();
     if (d !== jumpNoteFor) { jumpNoteFor = d; sayJump(); }   // a new document: the note is empty again (it shows only a refusal's words; the standing hint is the button's tooltip)
