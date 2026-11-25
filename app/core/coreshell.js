@@ -1336,10 +1336,11 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     dropPieceGhost() { if (st.pieceGhost) set({ pieceGhost: null }); },
     /** Rename a saved piece: the new name must be free (a piece is never overwritten); the file's own name field changes with it. */
     async renamePiece(from, to) {
-      // the recipe goes with the piece: called once the new file is in place (both paths below)
-      const moveRecipe = async () => {
+      // the recipe goes with the piece: called once the new file is in place (both paths below). The renamed piece's text differs (its name field), so the recipe is rewritten with the hash of THAT text (L238, pane C's read:
+      // a recipe moved as it was no longer matched its piece, and the click showed no numbers). A case-only rename is one file on a case-blind store: the recipe is rewritten IN PLACE, no save-then-delete (that deleted it)
+      const moveRecipe = async (inPlace) => {
         if (typeof storage.openRecipe !== 'function' || typeof storage.saveRecipe !== 'function' || typeof storage.deleteRecipe !== 'function') return '';
-        try { const r = await storage.openRecipe(from); if (r === null || r === undefined) return ''; await storage.saveRecipe(to, r); await storage.deleteRecipe(from); return ''; }
+        try { const r = await storage.openRecipe(from); if (r === null || r === undefined) return ''; const rec = JSON.parse(r); rec.piece = textHash(text); await storage.saveRecipe(to, JSON.stringify(rec)); if (!inPlace) await storage.deleteRecipe(from); return ''; }
         catch (e) { return `; its saved numbers were not moved: ${e && e.message || e}`; }
       };
       if (!storage || typeof storage.openPiece !== 'function' || typeof storage.savePiece !== 'function' || typeof storage.deletePiece !== 'function') return set({ message: 'saved pieces are not available here' });
@@ -1356,7 +1357,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
           catch (e2) { return set({ libraryStamp: st.libraryStamp + 1, message: `the rename failed (${e && e.message || e}) and the piece is kept as "${tmp}"` }); }
         }
         try { await storage.deletePiece(tmp); } catch (e) { return set({ libraryStamp: st.libraryStamp + 1, message: `renamed the piece "${from}" to "${to}", but its temporary copy "${tmp}" could not be removed: ${e && e.message || e}` }); }
-        return set({ libraryStamp: st.libraryStamp + 1, ...ok(`renamed the piece "${from}" to "${to}"${await moveRecipe()}`) });
+        return set({ libraryStamp: st.libraryStamp + 1, ...ok(`renamed the piece "${from}" to "${to}"${await moveRecipe(true)}`) });
       }
       try { await storage.savePiece(to, text); } catch (e) { return set({ message: `not renamed: ${e && e.message || e}` }); }
       try { await storage.deletePiece(from); } catch (e) { return set({ libraryStamp: st.libraryStamp + 1, message: `the piece was copied to "${to}" but the old one "${from}" could not be removed: ${e && e.message || e}` }); }

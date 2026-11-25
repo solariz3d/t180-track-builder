@@ -187,3 +187,24 @@ test('Q4: Esc drops the ghost and the boxes stay as they are', async () => {
   p.doc.dispatchEvent({ type: 'keydown', key: 'Escape', target: { matches: () => false }, preventDefault() {} }); p.tick();
   assert.equal(p.shell.getState().pieceGhost, null); assert.equal(shown(p.button('Place piece')), false);
 });
+
+// L238, pane C's read: Rename moved the recipe as it was, but the renamed piece's text differs (its name field), so its hash no longer matched and the click showed no numbers; a case-only rename
+// (one file on Windows) saved then deleted the same recipe.
+test('R1: Rename rewrites the recipe for the renamed text: a click on the new name still shows the numbers', async () => {
+  const st = await saved(), s = await emptyTrack(st);
+  await s.renamePiece('bend', 'bend two'); assert.equal(st.recipes.has('bend'), false); 
+  await s.showPiece('bend two'); const g = s.getState().pieceGhost; assert.ok(g && g.numbers, `no numbers after the rename: ${g && g.note}`);
+});
+test('R2: a case-only Rename on a case-blind store keeps the recipe, rewritten, and the click still shows the numbers', async () => {
+  const st = await saved(); const k = (n) => n.toLowerCase();
+  const pieces = new Map([...st.pieces].map(([n, t]) => [k(n), [n, t]])), recipes = new Map([...st.recipes].map(([n, t]) => [k(n), t]));
+  const blind = { ...st,
+    openPiece: async (n) => { if (!pieces.has(k(n))) throw new Error('not found'); return pieces.get(k(n))[1]; },
+    savePiece: async (n, t) => { if (pieces.has(k(n))) throw new Error(`a piece named "${n}" already exists`); pieces.set(k(n), [n, t]); },
+    deletePiece: async (n) => { if (!pieces.has(k(n))) throw new Error('not found'); pieces.delete(k(n)); },
+    listPieces: async () => [...pieces.values()].map((x) => x[0]),
+    saveRecipe: async (n, t) => { recipes.set(k(n), t); }, openRecipe: async (n) => (recipes.has(k(n)) ? recipes.get(k(n)) : null), deleteRecipe: async (n) => { recipes.delete(k(n)); } };
+  const s = await emptyTrack(blind); await s.renamePiece('bend', 'Bend');
+  assert.ok(pieces.has('bend'), `the piece survives: ${s.getState().message}`); assert.ok(recipes.has('bend'), 'the recipe survives a case-only rename');
+  await s.showPiece('Bend'); const g = s.getState().pieceGhost; assert.ok(g && g.numbers, `no numbers after the case-only rename: ${g && g.note}`);
+});
