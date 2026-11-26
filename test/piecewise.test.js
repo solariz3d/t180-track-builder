@@ -164,6 +164,35 @@ test('the re-read does not take a road 5 m above, and leaves a read with no widt
   assert.strictEqual(bare.reread, 0);
 });
 
+// Banked cupped road wider than a fixed height window (pane C's read of dab271b, 2026-11-26, its cases A): the band was cast from 8 m over the station to 3 m
+// under it, so on a banked road it stopped where the surface left that window (about window / sin(bank) along it) and its centre moved uphill. The window now
+// moves with the band, and its step across is refined at steep sides and edges. A cupped road (a floor, 4 m sides rising to 50°, or 30° at
+// the 52° bank, where 50° sides would turn past vertical: rays from above cannot read an overhang) of width W, banked, the read's station on a 2 m strip 1.5 m under the top.
+const rotB = (b) => ([x, y]) => [x * Math.cos(b) - y * Math.sin(b), x * Math.sin(b) + y * Math.cos(b)];
+const cupW = (W, psiDeg) => (u) => { const half = W / 2 - 4, k = (psiDeg * Math.PI / 180) / 4, a = Math.abs(u), sg = Math.sign(u) || 1; if (a <= half) return [u, 0];
+  const t = Math.min(4, a - half); return [sg * (half + Math.sin(k * t) / k), (1 - Math.cos(k * t)) / k]; };
+for (const [bankDeg, W, psiDeg] of [[20, 27, 50], [20, 49, 50], [40, 38, 50], [52, 49, 30]]) {
+  test(`banked ${bankDeg}°, ${W} m wide, sides rising to ${psiDeg}°: the re-read band follows the surface past a fixed height window, the full width, the centre on the top's centre`, () => {
+    const R = rotB(bankDeg * Math.PI / 180), prof = (u) => R(cupW(W, psiDeg)(u)), c0 = R([0.2, -1.5]), n0 = R([0, 1]);
+    const T = [...swept(prof, -W / 2, W / 2, 0.5, 0, 100, 2), ...swept((u) => R([u, -1.5]), -1, 1, 0.5, 0, 100, 2)], st = [];
+    for (let z = 8; z <= 92; z += 4) st.push({ d: z, c: [c0[0], c0[1], z], f: [0, 0, 1], n: [n0[0], n0[1], 0], k: 0, width: W });
+    const mc = PW.meshCentreline({ end: 'limit', stations: st }, PW.rayIndex(T));
+    assert.strictEqual(mc.reread, mc.st.length);
+    for (const x of mc.st) {
+      assert.ok(Math.abs(x.w - W) <= 0.5, `width ${x.w.toFixed(2)} at d ${x.d}`);
+      assert.ok(Math.hypot(x.p[0], x.p[1]) <= 0.3, `centre ${x.p[0].toFixed(2)}, ${x.p[1].toFixed(2)} off the top's centre at d ${x.d}`);
+    }
+  });
+}
+test('the band stops at its edge where the next layer is a step of more than 1 m (a lower road beside it), and does not walk onto it', () => {
+  // flat road 20 m wide at y 0, the station on a strip 1.5 m under it; beside its right edge a second road 2.5 m lower, 20 m wide, inside the height window
+  const T = [...swept(flat, -10, 10, 0.5, 0, 100, 2), ...swept((u) => [u, -1.5], -1, 1, 0.5, 0, 100, 2), ...swept((u) => [u, -2.5], 10, 30, 0.5, 0, 100, 2)], st = [];
+  for (let z = 8; z <= 92; z += 4) st.push({ d: z, c: [0.2, -1.5, z], f: [0, 0, 1], n: [0, 1, 0], k: 0, width: 20 });
+  const mc = PW.meshCentreline({ end: 'limit', stations: st }, PW.rayIndex(T));
+  assert.strictEqual(mc.reread, mc.st.length);
+  for (const x of mc.st) assert.ok(Math.abs(x.w - 20) <= 0.5 && Math.abs(x.p[0]) <= 0.3 && Math.abs(x.p[1]) < 1e-6, `width ${x.w.toFixed(2)}, centre ${x.p[0].toFixed(2)}, ${x.p[1].toFixed(2)} at d ${x.d}`);
+});
+
 // ── the landing guard (a jump that lands on road already driven) ──
 test('a jump whose landing lies on road the read already took ends the line at the take-off, and says where it landed', () => {
   // a straight out along +z with a flat road the whole way; the read jumps at z 200 and "lands" back at z 120, on road it drove

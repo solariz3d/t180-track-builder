@@ -115,21 +115,27 @@ function crossSection(ix, c, f, n, step = 0.5) {
  * the band starts at the HIGHEST layer within `above` m over c (the drivable top, not the layer the station sat on)
  * and is followed outwards to the layer nearest in height to the last point, ending where no layer lies within `stepMax`
  * m (an edge, or a step onto another road): a road over the band is never taken, being metres from the band in height.
+ * The step across is `du`, halved down to du/64 where the next layer is missing or more than `stepMax` away, so a side steeper than
+ * acos(du / stepMax) (75.5°) is followed and an edge is found to du/64; a surface past vertical (an overhang) cannot be seen from above and ends the band.
+ * The rays' height window (from `top` m over to `depth` − `top` m under) is centred on the station for the first layer and then on the band's
+ * last point, so it follows a banked road past any fixed window (pane C's read of dab271b, 2026-11-26: a window fixed at the station cut a banked
+ * road short at about window / sin(bank) along it, 13.4 m of 49 at 52°, and moved the centre 2–3 m uphill).
  * Width is the 3-D length along the band, the centre its arc midpoint, the normal the surface's there. null where there
  * is no layer under c, or the surface at c is steeper than `maxTilt` degrees (rays straight down cannot read a wall).
  */
 function downBand(ix, c, f, { du = 0.25, reach = 25, above = 2.5, stepMax = 1.0, maxTilt = 60 } = {}) {
   const f0 = unit(f), across = unit(cross(f0, [0, 1, 0])); if (len(cross(f0, [0, 1, 0])) < 1e-6) return null;
   const down = unit(cross(f0, across)), D = down[1] < 0 ? down : scale(down, -1), top = 8, depth = 11;
-  const layers = (u) => { const o = add(add(c, across, u), D, -top), out = []; let t0 = 0;
+  const layers = (u, ref = c) => { const o = add(add(c, across, u), D, dot(sub(ref, c), D) - top), out = []; let t0 = 0;
     for (let k = 0; k < 8 && t0 < depth; k++) { const h = ix.ray(add(o, D, t0), D, depth - t0); if (!h) break; out.push({ p: h.p, n: dot(h.n, D) > 0 ? scale(h.n, -1) : h.n }); t0 += h.t + 0.01; }
     return out; };
   const here = (u) => layers(u).filter((h) => dot(sub(h.p, c), scale(D, -1)) <= above && dot(sub(h.p, c), scale(D, -1)) >= -1);
   const h0 = here(0)[0]; if (!h0 || Math.acos(Math.min(1, dot(h0.n, scale(D, -1)))) > maxTilt * DEG) return null;
-  const side = (sgn) => { const pts = [h0]; let arc = 0;
-    for (let k = 1; k * du <= reach; k++) {
-      const prev = pts[pts.length - 1], next = layers(sgn * k * du).map((h) => ({ h, d: len(sub(h.p, prev.p)) })).sort((a, b) => a.d - b.d)[0];
-      if (!next || next.d > stepMax) break; arc += next.d; pts.push(next.h);
+  const side = (sgn) => { const pts = [h0]; let arc = 0, u = 0, h = du;
+    while (u + h <= reach && h >= du / 64) {
+      const prev = pts[pts.length - 1], next = layers(sgn * (u + h), prev.p).map((x) => ({ h: x, d: len(sub(x.p, prev.p)) })).sort((a, b) => a.d - b.d)[0];
+      if (!next || next.d > stepMax) { h /= 2; continue; }
+      arc += next.d; pts.push(next.h); u += h; h = du;
     }
     return { pts, arc }; };
   const L = side(1), R = side(-1), poly = [...R.pts.slice().reverse(), ...L.pts.slice(1)], width = L.arc + R.arc;
@@ -155,6 +161,9 @@ function meshCentreline(read, ix, { drivenM = 20 } = {}) {
     if (!x.c || !x.f || !x.n) continue;
     if (pending) {   // the landing: the first road station after a jump
       const j = pending; pending = null; let on = null;
+      // drivenM (20 m) must stay under the reader's shortest jump: the skill's read_track.cjs looks for landings from 25 m out only (its landing search,
+      // `for (let dist = 25; …`), and a landing is always within its gap of the take-off station, so a radius at or past 25 m would end every jump
+      // (pane C's read of dab271b, 2026-11-26, case B1). Raise one only with the other.
       for (const y of out) { const g = len(sub(y.reader, x.c)); if (g < drivenM && (!on || g < on.g)) on = { g, d: y.d }; }
       if (on) { falseLandings.push({ d: j.d, landingD: x.d, onD: on.d, distM: +on.g.toFixed(1) }); break; }
     }

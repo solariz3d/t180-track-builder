@@ -11,6 +11,9 @@ All notable changes to this project are recorded here. The format follows
   the topmost layer across from ray to ray by height, so a road above is not taken. A ramp's read had "landed" 1 m off its own earlier line, heading
   the other way, and re-walked it; `meshCentreline` now stops at that take-off and lists it in `falseLandings` (the command line prints it, and
   `rereadByDownRays`). A read without a width of its own is walked as before.
+  On banked road the band's height window now moves with it, and its step across is refined at steep sides and edges: a window fixed at
+  the station had cut a banked road short (13.4 m of 49 at a 52° bank) and moved its centre 2–3 m uphill (pane C's read). A surface past vertical
+  (an overhang) cannot be read from above and still ends the band.
 - **The left column clears away when the pointer leaves it, to give the preview more room.** He asked for it, so the preview has more room; it was
   read as see-through from that purpose, and he was told. About 0.4 s after the pointer leaves the column it fades out over 0.2 s (no fade, only the switch, under reduced motion), and clicks there reach the preview.
   It comes back when the pointer reaches the strip along the window's left edge (24 px wide), or when Tab moves into it. It stays shown while a field in it is
