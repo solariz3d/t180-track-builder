@@ -17,7 +17,7 @@
 // track (running over another part of it) is the validator's to show, as for any piece.
 'use strict';
 const D = require('./document.js');
-const { extend } = require('./extend.js');
+const { extend, landingStart } = require('./extend.js');
 const { toPath, toSegments } = require('./adapter.js');
 const { turnWeights } = require('./turnby.js');
 
@@ -89,7 +89,8 @@ function corner(doc, opts, { angle, R, ramp = RAMP_DEFAULT }) {
 
 /** The probe for the minimum radius: a straight with the head's width and cross-section, the corner, a straight after it. */
 function probe(doc, opts, sharp) {
-  const last = [...doc.pieces].reverse().find((P) => P.type === 'road'), from = D.endState(doc);
+  // from: where the corner itself starts (extend.js landingStart: after a bare flight, the typed cross-section, D677 C1), so the probe's width is the corner's
+  const last = [...doc.pieces].reverse().find((P) => P.type === 'road'), from = landingStart(doc, opts.first);
   let start = D.createDoc('sharp probe');
   if (from) {
     const kind = D.endKind(doc), first = { kh: 0, kv: 0, phi: from.phi.v, w: from.w.v, r: from.r.v, e: from.e.v, s: from.s.v };

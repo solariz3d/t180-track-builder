@@ -75,6 +75,10 @@ const SECOND_NAME = Object.freeze({ turn: 'turn', climb: 'climb', bank: 'bank', 
 // core's units when the ramp runs the whole piece (no early transition); null otherwise (a ramp done early has stopped before any change), and null with no step. `from` is
 // where the ramp starts, read as the core reads it (extend.js changeLists startV): on an empty track the first piece starts AT its typed values (out.first), so it has no
 // ramp; else the head's value, 0 when no head is given (as extendOptions' fromDeg reads it)
+// D677 C1, THE LANDING'S CROSS-SECTION: after a bare flight (`afterFlight`) the typed width, cup, edges and edge start are the landing's START, as every typed value is on
+// an empty track; the turn, climb and bank are not (the landing starts level at its flight's bank, src/core/extend.js landingStart, which reads only these channels)
+const LANDING_FIRST = Object.freeze(['w', 'c', 'e', 'er', 's']);
+const landingFirst = (targets) => Object.fromEntries(LANDING_FIRST.filter((ch) => targets[ch] !== undefined).map((ch) => [ch, targets[ch]]));
 const rampStart = (first, head, ch) => (first && Number.isFinite(first[ch]) ? first[ch] : head && Number.isFinite(head[ch]) ? head[ch] : 0);
 const baseOfRamp = (tr, target, from, L) => { if (tr !== undefined || !Number.isFinite(target) || !Number.isFinite(from) || !(L > 0) || target === from) return null; return { step: target - from, length: L }; };
 const secondMinOf = (minM, ch, a, b) => { if (typeof minM !== 'function' || !Number.isFinite(a) || !Number.isFinite(b)) return 0; const m = minM(ch, a, b); return Number.isFinite(m) && m > 0 ? m : 0; };
@@ -202,7 +206,7 @@ const EARLY_TITLE = Object.freeze({
 // with today's bank on one layout, 2026-11-24, it was the better). Ticked, with a bank target, the bank PASSES THROUGH its marks as one curve (src/core/extend.js
 // bankShape 'flow'): the bank field's target at `bankAt` (transition.phi; blank: the early ramp's end when "early" is ticked, else laid by flowAts), then each
 // extra bank row's then at its from (through.phi). Left out or false, nothing here changes, to the byte
-function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null, changes = null, secondMinM = null, cornerChangeMinM = null, secondFloorM = null, bankFloorM = null, bankRefusal = null, bankFlow = false, bankAt = null, dragging = false }) {
+function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, afterFlight = false, atStart = {}, turnAs = 'rate', head = null, changes = null, secondMinM = null, cornerChangeMinM = null, secondFloorM = null, bankFloorM = null, bankRefusal = null, bankFlow = false, bankAt = null, dragging = false }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
   // a corner of 0 with extra turn rows is still a first corner (the S he drove: turn 0, then +92 from 80 and -91 from 200; pane O, 2026-11-24): it sends turnDeg 0 so the rows have one to follow
   const turnRows = turnAs === 'corner' && ((changes && changes.turn) || []).some((x) => num(x.then) !== null && Number.isFinite(num(x.then)));
@@ -263,7 +267,7 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
     const ch = FIELD_CHANNEL[f]; if (targets[ch] === undefined || (flow && ch === 'phi')) continue;
     const per = f === 'turn' || f === 'climb' ? DEG / 100 : f === 'bank' ? DEG : 1, list = items.map((x) => ({ from: x.from, target: x.then * per }));
     // D642 (pane B's additive model): a first ramp over the whole piece (no early transition) is still moving under the change, so the change's shortest is asked with it
-    const base = baseOfRamp(transition[ch], targets[ch], rampStart(empty ? targets : null, head, ch), out.length), minM = base && typeof secondMinM === 'function' ? (c, a, b) => secondMinM(c, a, b, base) : secondMinM;
+    const base = baseOfRamp(transition[ch], targets[ch], rampStart(empty ? targets : afterFlight ? landingFirst(targets) : null, head, ch), out.length), minM = base && typeof secondMinM === 'function' ? (c, a, b) => secondMinM(c, a, b, base) : secondMinM;
     // Way 1: the extra bank behind the piece's first extra turn (its list was laid above: turn comes before bank in SECOND_FIELDS)
     const turnList = f === 'bank' ? later.turnDeg : null, lead = turnList && turnList.length ? { firstAt: turnList[0].from - EXTRA_BANK_LEAD_SHARE * out.length, floor: Number.isFinite(secondFloorM) && secondFloorM > 0 ? secondFloorM : DEFAULT_FLOOR_M } : {};
     // (2026-11-10) A BANK CHANGE IS LAID WHERE THE ROAD AS BUILT CARRIES IT (src/core/extend.js bankAsBuilt): its default mark is first clamped only by the bank's fit floor
@@ -293,6 +297,7 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
   if (Object.keys(later).length) out.changes = later;
   if (Object.keys(transition).length) out.transition = transition;
   if (empty && Object.keys(targets).length) out.first = { ...targets };   // on an empty track the typed values are the first piece's start
+  else if (afterFlight && Object.keys(landingFirst(targets)).length) out.first = landingFirst(targets);   // D677 C1: after a bare flight, the typed cross-section is the landing's start
   if (bankComfort && typeof bankRefusal === 'function' && items0.bank.some((x) => x.from === null) && bankRefusal(out)) {
     const froms = bankComfort(); out.changes = { ...out.changes, phi: out.changes.phi.map((x, k) => ({ ...x, from: froms[k] })) };
   }
@@ -540,9 +545,10 @@ function mount(root, shell, mountOpts = {}) {
   const colourOn = el('input', { type: 'checkbox', 'aria-label': 'colour by grip', title: 'colour the track by grip: blue below 100%, white at 100%, orange above; the hover label says each piece\'s grip' });
   // typing ONE side changes only that side: the left typed alone sends the right as the head has it (the core would otherwise set both from e)
   const rightTarget = () => { const r = asTyped('edgeR'); return r !== '' || asTyped('edge') === '' ? r : String(HEAD.edgeR[1](shell.headState())); };
+  const endsInFlight = (ps) => ps.length > 0 && ps[ps.length - 1].type === 'flight';   // D677 C1: Extend lays the landing
   const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), edgeR: rightTarget(), start: asTyped('start'), tube: asTyped('tube'),
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
-    empty: !shell.getState().history.present.pieces.length, turnAs: turnAs.value, head: shell.headState(),
+    empty: !shell.getState().history.present.pieces.length, afterFlight: endsInFlight(shell.getState().history.present.pieces), turnAs: turnAs.value, head: shell.headState(),
     changes: secChanges(), secondMinM: shellMinM, cornerChangeMinM: shellCornerMin, secondFloorM: secondFloor(),
     bankFloorM: typeof shell.bankFitFloorM === 'function' ? shell.bankFitFloorM() : null, bankRefusal: (o) => (typeof shell.changeRefusal === 'function' ? !!shell.changeRefusal(o, 'phi', null) : false),
     bankFlow: flowOn(), bankAt: bankAtF.value, dragging: scrubbing });   // a drag asks a flowing bank only whether it lays (extendOptions dragging)
