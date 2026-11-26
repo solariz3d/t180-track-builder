@@ -16,6 +16,9 @@ All notable changes to this project are recorded here. The format follows
 - **A saved piece keeps the numbers that made it, in a `.t180recipe` file beside it.** Written by Save as piece when one Extend laid exactly the selected pieces; the piece file itself is unchanged, so older builds open the piece as before and ignore the recipe. Rename carries it, Delete removes it, and a recipe left beside a different file of the same name is not used (it names the piece file by a hash).
 
 ### Fixed
+- The File and Edit menus now open rightwards from their titles at every window width, as the leftmost menus of a bar usually do. They opened leftwards above
+  1000 px, so a long saved track name in File ▸ Open… (the longest the app takes, 61 characters) pushed File up to 72 px off the window's left edge between
+  1000 and 1130 px, its words cut. Every other menu still opens leftwards.
 - Extend, Straight, Undo, Redo are the panel's first row again, with or without a saved piece's ghost up. Place piece and Cancel piece (and the note about the ghost) now sit directly under that row instead of above it, so a ghost going up or away no longer moves the buttons you press, and all of them stay in view without scrolling at 1400 x 860. With no ghost, their empty row no longer adds a gap at the top of the panel.
 - Renaming a saved piece now keeps its numbers: the recipe is rewritten for the renamed piece text (it is hashed, and the rename changes the name field), and a case-only rename (Run to run, one file on Windows) rewrites it in place instead of saving then deleting it. Found by pane C reading L238.
 

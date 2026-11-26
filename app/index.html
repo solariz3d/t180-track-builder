@@ -196,10 +196,11 @@
   @media (width < 1320px) { header h1 .wm-rest { display: none; } header #name { flex: 0 1 121px; min-width: 64px; } }
   @media (width < 1100px) { header { gap: 4px; } header h1 { margin-right: 6px; } header .more > summary { padding: 5px 7px; } }
   @media (width < 1000px) { header h1 .wm-name { display: none; } header #name { min-width: 48px; } }
-  /* L255: AT THE NARROWEST FOLD THE FIRST TWO MENUS OPEN RIGHTWARDS. Every menu opens leftwards from its title (.more-menu, right: 0); under 1000 px File's title
-     ends 205 to 255 px in, so its 260 px menu ran up to 55 px off the window's left edge (P's read of L249), and Edit's 2 px at 900. Hung from their titles'
-     left edges they lie inside at every width (texture-page row 17); from 1000 up they fit leftwards, as before (960 is the first width File did, so 40 px spare) */
-  @media (width < 1000px) { header :is(#m-file, #m-edit) > .more-menu { right: auto; left: 0; } }
+  /* L255: THE FIRST TWO MENUS OPEN RIGHTWARDS, AT EVERY WIDTH, as the leftmost menus of a bar do. Every other menu opens leftwards from its title (.more-menu,
+     right: 0). File's title ends 205 to 255 px in under 1000 px, so its 260 px menu ran up to 55 px off the window's left edge (P's read of L249), and Edit's 2 px
+     at 900. A fold for under 1000 px only fixed that for a menu of its minimum width: a long saved name in File ▸ Open… widens the menu, and it still ran off
+     the left at 1000 to 1130 px, by up to 72 px (E's read of L255). Hung from their titles' left edges they lie inside at every width (texture-page row 17) */
+  header :is(#m-file, #m-edit) > .more-menu { right: auto; left: 0; }
   /* D355: THE BRUSH STRIP under the bar (C's panel builds it as .brush-strip; D421 part 3: it is the Sculpt strip now, shown only in Sculpt; the page moves it into the banner row): its
      fields run along one row, in the page's raised panel colour with a hairline under it, as the recovery bar is laid out */
   #banner .brush-strip { padding: 6px 12px; background: var(--raise); border-bottom: 1px solid var(--line); }
