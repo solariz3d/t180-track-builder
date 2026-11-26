@@ -154,6 +154,8 @@ test('C8: in the panel, the extra bank\'s tick is lit while its handle is hovere
 
 // ── R1/R2 (found in review). The marks' layer's own mount, a fake stage and a
 // stub 2D context that records what one draw puts on the canvas: the label's box (its veil, a fillRect 42 px high: two lines) and its text.
+// AMENDED BY NAME (L251, the rule changed: a label's window is an element over the stage, app/core/markwindow.js layer, so its box and its words are read off the
+// shown window elements, not the canvas; every promise below is kept as it was: the words, the boxes, no overlap, what shows when)
 //   R1: while the tick itself is dragged, the label, tint and arrows follow the drag (they stayed at the old mark until release, and the label read the old number).
 //   R2: a label is nudged off any handle's screen box, and kept below the HUD's bottom edge (the top readout, [aria-label="piece values"]).
 function stubCtx() {
@@ -184,9 +186,12 @@ function marksLayer({ from = 380, avoid = null, hudBottom = null, lit = false, m
   const layer = ST.mount(stage, win, () => ({ marks: marks ? marks(state) : [item()], offers: [] }), { onMarkDrag: (m, f) => { state.from = f; }, ...(avoid ? { avoid } : {}) });
   layer.drawNow();
   const VP = M.viewProj(pose, 900 / 600), scr = (p) => { const c = M.apply(VP, p); return { x: (c[0] / c[3] * 0.5 + 0.5) * 900, y: (1 - (c[1] / c[3] * 0.5 + 0.5)) * 600 }; };
-  const box = () => ctx.rec.rects.filter((r) => r.h === 42).at(-1) || null;
-  const text = () => (ctx.rec.texts.find((t) => t.s.startsWith('Extra bank')) || { s: '' }).s;
-  return { stage, layer, state, ctx, scr, box, text };
+  // the windows shown now (made by the layer, displayed), a box read off one, the first line of a label
+  const windows = () => stage.all().filter((e) => e.attrs && e.attrs['data-mark-window'] !== undefined && e.style.display === 'block');
+  const boxOf = (e) => ({ x: parseFloat(e.style.left), y: parseFloat(e.style.top), w: parseFloat(e.style.width), h: parseFloat(e.style.height) });
+  const box = () => { const e = windows().filter((w) => boxOf(w).h === 42).at(-1); return e ? boxOf(e) : null; };
+  const text = () => { const e = windows().find((w) => w.textContent.startsWith('Extra bank')); return e ? e.textContent.split('\n')[0] : ''; };
+  return { doc, stage, layer, state, ctx, scr, box, text, windows, boxOf };
 }
 const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
@@ -238,10 +243,10 @@ test('R2c: the panel hands the marks\' layer each handle\'s screen box (and its 
 // ── L241 (the user, 2026-11-26, his screenshot "it is way too cluttered the UI representing the turns"): at rest one dot per mark and no label; hover, lit, drag or a mark just
 // added show its arrows and label
 const twoMarks = (st) => [st.from, 700].map((f, k) => ({ field: 'bank', index: k, from: f, to: k ? 1000 : 700, half: 15, halfTo: 15, label: ST.markText('bank', k, f, k ? 1000 : 700, 1000), lit: false, ...ST.styleOf('bank') }));
-const labels = (A) => A.ctx.rec.texts.filter((t) => t.s.startsWith('Extra bank')).map((t) => t.s.slice(0, 13));
+const labels = (A) => A.windows().filter((e) => e.textContent.startsWith('Extra bank')).map((e) => e.textContent.slice(0, 13));
 test('D1: at rest, no label box and no label text, and one dot per mark, on the mark', () => {
   const A = marksLayer({ marks: twoMarks });
-  assert.equal(A.box(), null, 'no label box'); assert.equal(A.ctx.rec.texts.length, 0, 'no label text');
+  assert.equal(A.box(), null, 'no label box'); assert.equal(A.windows().length, 0, 'no label shown');
   assert.equal(A.ctx.rec.arcs.length, 2, 'one dot for each of the two marks');
   const st = A.layer.marks()[1].strokes[0], dot = A.ctx.rec.arcs[1];
   assert.ok(Math.hypot(dot.x - (st.a.x + st.b.x) / 2, dot.y - (st.a.y + st.b.y) / 2) < 1e-6, 'the dot is at the centre of the mark\'s stroke, where it is grabbed');
@@ -253,7 +258,7 @@ test('D2: the pointer over one dot shows that mark\'s label (and no dot for it);
   assert.deepEqual(labels(A), ['Extra bank 2 '], 'only the hovered mark is labelled');
   assert.equal(A.ctx.rec.arcs.length, 1, 'the other mark stays a dot');
   A.stage.fire('pointermove', { clientX: 5, clientY: 5, pointerId: 1 }); A.layer.drawNow();
-  assert.equal(A.ctx.rec.texts.length, 0, 'off it, no label'); assert.equal(A.ctx.rec.arcs.length, 2);
+  assert.equal(A.windows().length, 0, 'off it, no label'); assert.equal(A.ctx.rec.arcs.length, 2);
   A.layer.unmount();
 });
 test('D3: a lit mark (its extra handle hovered or dragged) shows its label and no dot', () => {
@@ -263,11 +268,11 @@ test('D4: a mark just added shows its label for about 2 s, then is a dot; marks 
   const now0 = Date.now; let t = 1e12; Date.now = () => t;
   try {
     const n = { v: 1 }, A = marksLayer({ marks: (s) => twoMarks(s).slice(0, n.v) });
-    assert.equal(A.ctx.rec.texts.length, 0, 'the first draw shows none');
+    assert.equal(A.windows().length, 0, 'the first draw shows none');
     n.v = 2; A.layer.drawNow();
     assert.deepEqual(labels(A), ['Extra bank 2 '], 'the added one is labelled');
     t += 1900; A.layer.drawNow(); assert.equal(labels(A).length, 1, 'still at 1.9 s');
-    t += 200; A.layer.drawNow(); assert.equal(A.ctx.rec.texts.length, 0, 'gone after 2 s'); assert.equal(A.ctx.rec.arcs.length, 2);
+    t += 200; A.layer.drawNow(); assert.equal(A.windows().length, 0, 'gone after 2 s'); assert.equal(A.ctx.rec.arcs.length, 2);
     A.layer.unmount();
   } finally { Date.now = now0; }
 });
@@ -282,9 +287,44 @@ test('D6 (pane C\'s V4, L241 read): the ghost goes for a draw and comes back wit
   // off, an Extend press, a refused value): C's read of 77ffe18
   const marks = (st) => [twoMarks(st)[0], { ...twoMarks(st)[0], field: 'turn', index: 0, from: 300, to: 600, label: ST.markText('turn', 0, 300, 600, 1000), ...ST.styleOf('turn') }, { ...twoMarks(st)[0], field: 'turn', index: 1, from: 600, to: 1000, label: ST.markText('turn', 1, 600, 1000, 1000), ...ST.styleOf('turn') }];
   const A = marksLayer({ marks });
-  assert.equal(A.ctx.rec.texts.length, 0, 'at rest');
+  assert.equal(A.windows().length, 0, 'at rest');
   A.state.ghost = false; A.layer.drawNow(); A.state.ghost = true; A.layer.drawNow();
-  assert.deepEqual(A.ctx.rec.texts.map((t) => t.s.slice(0, 12)), [], 'the ghost came back with the same three marks; none was added');
+  assert.deepEqual(A.windows().map((e) => e.textContent.slice(0, 12)), [], 'the ghost came back with the same three marks; none was added');
   assert.equal(A.ctx.rec.arcs.length, 3, 'three dots');
+  A.layer.unmount();
+});
+
+// ── L251 (the user, 2026-11-26 04:49, on the blur mock: "I like the blur i think..."): a label's window is an element over the stage, so the look's blur is real
+// (app/core/markwindow.js layer; the blur itself, per look, is markwindow.test.js W8 and the real page's app/test/markwindow-page.test.js)
+test('E1 (L251): a shown label is a window element over the stage, after the marks\' canvas (so over it), taking no pointer events: its words are the label\'s two lines, its box the one placed, and no word is written on the canvas', () => {
+  const A = marksLayer({ from: 380, lit: true }), shown = A.windows();
+  assert.equal(shown.length, 1, 'one window shown');
+  const w = shown[0], layer = w.parent, kids = A.stage.children;
+  assert.equal(w.textContent, 'Extra bank · 380.00 m → end · rolls over 620.00 m\ndrag to start earlier or later');
+  assert.deepEqual(A.boxOf(w), A.box(), 'its box is the label\'s');
+  assert.ok(kids.indexOf(layer) > kids.findIndex((c) => c.tagName === 'CANVAS'), 'the windows come after the marks\' canvas in the stage');
+  assert.match(layer.style.cssText, /pointer-events:none/); assert.match(w.style.cssText, /pointer-events:none/, 'neither the layer nor the window takes a pointer event');
+  assert.match(layer.style.cssText, /z-index:4/, 'at the marks\' canvas\'s own z-index');
+  assert.equal(A.ctx.rec.texts.length, 0, 'no word on the canvas');
+  A.layer.unmount(); assert.equal(layer.parent, null, 'unmounted, the windows go with the canvas');
+});
+test('E2 (L251): a 60-step drag of the tick makes and removes no element: the one window is moved and its words follow, and the count of window nodes is the same at every step', () => {
+  const A = marksLayer({ from: 380 }), st = A.layer.marks()[0].strokes[0], p0 = { x: (st.a.x + st.b.x) / 2, y: (st.a.y + st.b.y) / 2 };
+  A.stage.fire('pointermove', { clientX: p0.x, clientY: p0.y, pointerId: 1 }); A.layer.drawNow();
+  const all = () => A.stage.all().filter((e) => e.attrs && e.attrs['data-mark-window'] !== undefined), before = all();
+  assert.equal(A.windows().length, 1, 'hovered: one window shown');
+  const made = [], create = A.doc.createElement; A.doc.createElement = (t) => { made.push(t); return create(t); };
+  A.stage.fire('pointerdown', { clientX: p0.x, clientY: p0.y, pointerId: 1 });
+  const counts = [], froms = [], tops = new Set();
+  for (let k = 1; k <= 60; k++) {
+    const to = A.scr([15 * HD.KINDS.bank.lat, 0, 380 + 4 * k]);
+    A.stage.fire('pointermove', { clientX: to.x, clientY: to.y, pointerId: 1 });
+    counts.push(all().length); froms.push(A.text().slice(13, 19)); tops.add(A.box() && A.box().y);
+  }
+  A.stage.fire('pointerup', { clientX: p0.x, clientY: p0.y, pointerId: 1 });
+  assert.deepEqual([...new Set(counts)], [before.length], `the window nodes: ${before.length} before, at every step ${JSON.stringify([...new Set(counts)])}`);
+  assert.deepEqual(all(), before, 'the very same nodes'); assert.deepEqual(made, [], 'no element made during the drag');
+  assert.equal(A.state.from, 620, 'the drag went 240 m'); assert.equal(froms.at(-1), '620.00', 'the words followed it');
+  assert.ok(tops.size > 10, `the window moved with the tick (${tops.size} places)`);
   A.layer.unmount();
 });

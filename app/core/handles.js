@@ -383,6 +383,7 @@ function mount(stage, win, host) {
   canvas.setAttribute('aria-label', 'drag handles');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6';
   stage.append(canvas);
+  const wins = MW.layer(stage, win, T, { z: 6, name: 'drag handles' });   // L251: the readout's and the brush box's windows, elements over this canvas
   let tipBoxes = [];   // the words boxes the last draw put up ({ x, y, w, h }, css px of the stage), for the road labels to keep clear of
   let raf = 0, sized = '', drawn = [], model = null, hover = null, drag = null, waiting = null, frameReq = 0, pre = null, onKeyDown = null, lastClick = null;   // lastClick: { id, t } the last press-and-release on a handle that changed nothing (the first half of a double-click)   // pre: { kind, from, to } the last drag that moved a value (the double-click's "before the drag")
   const rel = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
@@ -400,7 +401,7 @@ function mount(stage, win, host) {
     const W = stage.clientWidth, H = stage.clientHeight, dpr = win.devicePixelRatio || 1, key = `${W}x${H}@${dpr}`;
     if (key !== sized) { canvas.width = Math.max(1, Math.round(W * dpr)); canvas.height = Math.max(1, Math.round(H * dpr)); sized = key; }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
-    const boxed = new Set(); tipBoxes = [];
+    const boxed = new Set(); tipBoxes = []; wins.begin();
     for (const h of drawn) {
       const s = h.screen; if (!s) continue;
       if (h.brush) { drawBrush(ctx, h, W, H, boxed); continue; }
@@ -425,9 +426,10 @@ function mount(stage, win, host) {
         const lines = [text].concat(K.extra && !drag ? [slideWords(h.kind, from, h.slideAxis)].filter(Boolean) : why ? [why] : []), hgt = 4 + 18 * lines.length;
         const w = Math.max(...lines.map((t) => ctx.measureText(t).width)) + 12, bx = clamp(s.x + 14, 4, W - w - 4), by = clamp(s.y - 12 - hgt, 4, H - hgt - 2);
         if (lines.length > 1) tipBoxes.push({ x: bx, y: by, w, h: hgt });
-        MW.drawWindow(ctx, T, { x: bx, y: by, w, h: hgt }, lines, paint, { edge: 1.5, firstY: 11 });   // L242: the theme's window (markwindow.js)
+        wins.put({ x: bx, y: by, w, h: hgt }, lines, paint, { edge: 1.5, firstY: 11 });   // L242: the theme's window; L251: an element (markwindow.js layer)
       }
     }
+    wins.end();
   };
   // a dot, a hollow ring; a rim's inner half green when that side has an edge or a cup to lift
   const drawDot = (ctx, h) => {
@@ -456,7 +458,7 @@ function mount(stage, win, host) {
     const shown = lines.filter(Boolean); if (!shown.length) return;
     ctx.font = MW.font(T);
     const w = Math.max(...shown.map((t) => ctx.measureText(t).width)) + 12, hgt = 6 + 18 * shown.length, bx = clamp(s.x + 30, 4, W - w - 4), by = clamp(s.y - 12 - hgt, 4, H - hgt - 4);
-    tipBoxes.push({ x: bx, y: by, w, h: hgt }); MW.drawWindow(ctx, T, { x: bx, y: by, w, h: hgt }, shown, colour, { edge: 1.5, firstY: 12 });   // L242: the theme's window
+    tipBoxes.push({ x: bx, y: by, w, h: hgt }); wins.put({ x: bx, y: by, w, h: hgt }, shown, colour, { edge: 1.5, firstY: 12 });   // L242: the theme's window; L251: an element
   };
   // THE LAYOUT IS DONE WHEN SOMETHING IT READS CHANGED, not every frame (it ran on every frame, the model, every handle placed and drawn: about a third of an idle frame's script, the measurement of
   // 2026-10-19). What a frame draws follows from the model's numbers (the ghost's stations, the fields' values and widths, the mode), the camera, the stage's size, and the hover and drag; when all of
@@ -627,7 +629,7 @@ function mount(stage, win, host) {
     handles: () => drawn.filter((h) => !h.dot), dots: () => drawn.filter((h) => h.dot), tips: () => tipBoxes.slice(), hovered: () => hover, dragging: () => !!drag, active: () => (drag ? drag.h : hover) || null,   // active: the handle dragged now, else the one hovered (the panel lights its tick)   // the dots are listed apart from the handles
     /** the dot under (x, y), css px of the stage, or null: { s, u, side, axes } for the zone grab to open at. */
     dotAt: (x, y) => { const h = dotHit(drawn, x, y); return h ? { s: h.s, u: h.u, side: h.side, axes: h.axes, at: h.pos ? h.pos.slice() : null } : null; },   // `at`, the dot's world point, where the grab plane passes
-    unmount() { win.cancelAnimationFrame(raf); if (frameReq) win.cancelAnimationFrame(frameReq); stage.removeEventListener('pointerdown', onDown, true); stage.removeEventListener('wheel', onWheel, true); stage.removeEventListener('dblclick', onDouble, true); if (doc.removeEventListener) doc.removeEventListener('keydown', onKeyDown); stage.removeEventListener('pointermove', onMove); stage.removeEventListener('pointerup', onUp); stage.removeEventListener('pointercancel', onUp); canvas.remove(); stage.style.cursor = ''; },
+    unmount() { win.cancelAnimationFrame(raf); if (frameReq) win.cancelAnimationFrame(frameReq); stage.removeEventListener('pointerdown', onDown, true); stage.removeEventListener('wheel', onWheel, true); stage.removeEventListener('dblclick', onDouble, true); if (doc.removeEventListener) doc.removeEventListener('keydown', onKeyDown); stage.removeEventListener('pointermove', onMove); stage.removeEventListener('pointerup', onUp); stage.removeEventListener('pointercancel', onUp); canvas.remove(); wins.remove(); stage.style.cursor = ''; },
   };
 }
 

@@ -115,6 +115,7 @@
      markwindow.js reads a plain number here (parseFloat), so this is the value, not a calc() */
   --mark-win-font: var(--body); --mark-win-weight: 600; --mark-win-radius: 2; --mark-win-edge: 1.5; --mark-win-glow: 0;
   --mark-win-bg: rgba(255, 255, 255, .92); --mark-win-text: #0b2747; --mark-win-sheen: rgba(255, 255, 255, .95); --mark-win-shade: rgba(28, 92, 168, .30);
+  --mark-win-blur: blur(18px) saturate(1.3);   /* L251: behind the window, the look's own panel blur (its #left's backdrop-filter, written whole; markwindow.test.js W8) */
   /* L244 (the user, 2026-11-26 02:23: "yes handle colors per theme"): the marks' and handles' colours, by day, on a light sky: deep inks that read on it, bank a vivid royal blue (a sky blue would vanish into the sky, an indigo read as the slate length at handle size), length a slate, and a white rim under every mark in place of the dark one. Each field keeps one colour everywhere in this
      look; bank and turn at least 60 apart, every pair of fields and each against the road's edge, the grid, the fog and the sky (app/test/markwindow.test.js W5) */
   --mark-bank: #0a4fff; --mark-turn: #8a2be2; --mark-climb: #d99400; --mark-width: #e0303c; --mark-cup: #11a34a; --mark-length: #2a2f3a; --mark-edge: #0a9a9a; --mark-rim: #ffffff;
