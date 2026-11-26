@@ -65,8 +65,10 @@ function mount(stage, win) {
   // THE VIEW TAG'S HEIGHT (D581; the user, 2026-10-31: it "sits too low"): its top level with the column card's (#left) wherever it clears this strip by
   // HUD_CLEAR_PX, otherwise HUD_UNDER_PX under the strip. The strip is centred and its width follows its values, so the test is made here, after layout, whenever
   // the strip or the tag changes size (the tag's words change with the view) and when the window is resized (the strip moves without changing size).
-  // It sets --hud-top on the stage; the tag's rule (app/index.html .preview-hud) falls back to D409's placement under the strip where it is not set
-  const HUD_CLEAR_PX = 12, HUD_UNDER_PX = 6;
+  // It sets --hud-top on the stage; the tag's rule (app/index.html .preview-hud) falls back to D409's placement under the strip where it is not set.
+  // L254: the column is docked now, its top on the bar's bottom, so "level with the card" is HUD_TOP_PX under its top, where the floating card's top was:
+  // level with it, the tag sat on the bar
+  const HUD_CLEAR_PX = 12, HUD_UNDER_PX = 6, HUD_TOP_PX = 12;
   let hudSeen = null, hudTries = 0;
   const placeHud = () => {
     if (!stage.style || typeof stage.style.setProperty !== 'function' || !stage.querySelector) return;
@@ -77,7 +79,7 @@ function mount(stage, win) {
     hudTries = 0;
     if (RO && hud !== hudSeen) { if (hudSeen) RO.unobserve(hudSeen); RO.observe(hud); hudSeen = hud; }
     const box = hud.offsetParent.getBoundingClientRect(), t = hud.getBoundingClientRect(), b = shown ? layer.getBoundingClientRect() : null, c = col ? col.getBoundingClientRect() : null;
-    const top = !b || t.right + HUD_CLEAR_PX <= b.left ? (c ? c.top - box.top : null) : b.bottom - box.top + HUD_UNDER_PX;
+    const top = !b || t.right + HUD_CLEAR_PX <= b.left ? (c ? c.top - box.top + HUD_TOP_PX : null) : b.bottom - box.top + HUD_UNDER_PX;
     if (top === null) stage.style.removeProperty('--hud-top'); else stage.style.setProperty('--hud-top', `${Math.round(top)}px`);
   };
   const RO = win && typeof win.ResizeObserver === 'function' ? new win.ResizeObserver(() => { put(shown ? `${layer.offsetTop + layer.offsetHeight}px` : '0px'); placeHud(); }) : null;
