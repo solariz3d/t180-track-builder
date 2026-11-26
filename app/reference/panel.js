@@ -24,7 +24,7 @@ const ZERO = Object.freeze({ dx: 0, dz: 0, dy: 0, yawDeg: 0 });
 
 function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView && doc.defaultView.performance ? doc.defaultView.performance.now() : Date.now()) }) {
   const win = doc.defaultView, el = (tag, css, text) => { const e = doc.createElement(tag); if (css) e.style.cssText = css; if (text !== undefined) e.textContent = text; return e; };
-  const box = el('div', 'position:absolute;top:10px;right:10px;z-index:6;width:300px;display:none;padding:8px 10px;border-radius:6px;font:12px/1.4 var(--body, system-ui);color:var(--fg, #e8e6e3);background:color-mix(in srgb, var(--veil, rgb(10,12,16)) 88%, transparent);border:1px solid color-mix(in srgb, var(--fg, #e8e6e3) 18%, transparent)');
+  const box = el('div', 'position:absolute;top:44px;right:10px;z-index:6;width:300px;display:none;padding:8px 10px;border-radius:6px;font:12px/1.4 var(--body, system-ui);color:var(--on-ink, #eef1f6);background:color-mix(in srgb, var(--veil, #0b0d11) 88%, transparent);border:1px solid var(--veil-rule, rgba(255, 255, 255, .14))');
   box.className = 'reference-panel'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'reference track');
   const head = el('div', 'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-weight:600'), title = el('span', '', 'Reference track');
   const shut = el('button', 'background:none;border:0;color:inherit;cursor:pointer;font:inherit', '✕'); shut.title = 'close the panel (the reference stays as it is: Show hides it, Clear takes it away)';
@@ -41,9 +41,11 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
     i.onchange = () => { nudge[k] = Number(i.value) || 0; send(); };
     inputs[k] = i; rows.append(el('span', '', `${label} (${unit})`), i);
   }
-  const readout = el('div', 'color:var(--dim, #9a9a9a);min-height:2.8em'), notesEl = el('div', 'color:var(--fg, #e8e6e3);font-size:11px;margin-top:4px');
+  // (L250) on the veil, so the words are the page's on-ink colour in every skin (--dim and --text are for the page's own ground: dark on dark in Skyline)
+  const dim = 'color-mix(in srgb, var(--on-ink, #eef1f6) 72%, transparent)';
+  const readout = el('div', `color:${dim};min-height:2.8em`), notesEl = el('div', 'color:var(--on-ink, #eef1f6);font-size:11px;margin-top:4px');
   notesEl.setAttribute('role', 'status');
-  const note = el('div', 'color:var(--dim, #9a9a9a);font-size:11px;margin-top:4px',
+  const note = el('div', `color:${dim};font-size:11px;margin-top:4px`,
     'Drawn from its AI line: the width the AI may use, along the line it drives (a racing line, not the centre). Its start sits on your start, at your start\'s height; your road is drawn over it. Read only: nothing is saved, undone or exported.');
   box.append(head, pickEl, ctl, rows, readout, notesEl, note); root.append(box);
 
