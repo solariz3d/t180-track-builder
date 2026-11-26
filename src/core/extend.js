@@ -373,7 +373,7 @@ const BUILT_TOL = (0.5 * Math.PI) / 180;
  * there is at most the angle, ∂z/∂angle ≤ 8.4 m), so its vertical curvature changes at up to 60·8.4·|Δ rad|/L³, under ROUTE_BAR from L = (60·8.4·|Δ rad|/ROUTE_BAR)^⅓
  * (44.2 m × ∛(Δ in degrees): 138 m for 30°). Never under SECOND_FLOOR_M. Measured on the built road (scratch smooth.js, the hand-back).
  */
-function secondMinM(ch, a, b, base = null) {
+function secondMinM(ch, a, b, base = null, end = base ? base.length : 0) {
   if (!CHANGE_CHANNELS.includes(ch)) throw new D.CoreError('BAD_TARGET', `a change moves ${CHANGE_CHANNELS.join(', ')}, got "${ch}"`);
   if (!Number.isFinite(a) || !Number.isFinite(b)) throw new D.CoreError('BAD_TARGET', `a change's minimum needs two finite values, got ${a} and ${b}`);
   if (CHANGE_FLOOR_M[ch] !== undefined) return floorOf(ch, a, b);   // the width, cup and edges: their measured floor (or the comfort length, where shorter), whatever the first ramp under it
@@ -385,7 +385,9 @@ function secondMinM(ch, a, b, base = null) {
   // O1, THE TURN AND THE CLIMB TOO (pane E's plan_t180_faster_turn_rows_2026-11-26.md, O1; the chair's D677 BUILD 3): the capped share asked up to twice the change's own
   // shortest (10.3 m per °/100m), while the built road read 0.48-0.73 of the bar at the change's own (the plan, 2d). So under a moving first ramp the shortest is read off
   // the built road as the bank's is: the shortest span from the change's own (never under SECOND_FLOOR_M) up to the ceiling whose built rate changes no faster than the bar
-  if ((ch === 'kh' || ch === 'kv') && share > 0) return routeMin(ch, a, b, base, own, Math.max(SECOND_FLOOR_M, m));
+  // `end`: where the change ends in the piece, the next change's mark or the piece's end (pane C's F1 on bfa6732: a change followed by another sits earlier on the first
+  // ramp, where the ramp moves fastest, and the probe laid at the piece's end passed it at 1.287 × the bar). The bank does not take it yet (C's question, answered in E's repair)
+  if ((ch === 'kh' || ch === 'kv') && share > 0) return routeMin(ch, a, b, base, own, Math.max(SECOND_FLOOR_M, m), end);
   return ch === 'phi' ? m : Math.max(SECOND_FLOOR_M, m);   // the bank has no floor (L135), the rest SECOND_FLOOR_M
 }
 /** The change's own shortest, the first ramp's share and the CEILING they make (secondMinM's closed form; for the bank, the most builtMin may ask). */
@@ -404,7 +406,7 @@ function ceilOf(ch, a, b, base) {
 }
 /** Whether a change of `span` metres holds, as secondMinM would say, without searching for the shortest: at or past the ceiling it does; for the bank under a moving
  *  first ramp, between its own minimum and the ceiling, ONE probe of the built road at that span decides (changeLists asks this on every extend, a drag's included). */
-function spanHolds(ch, a, b, base, span) {
+function spanHolds(ch, a, b, base, span, end = base ? base.length : 0) {
   if (CHANGE_FLOOR_M[ch] !== undefined) return span >= floorOf(ch, a, b) - 1e-9;
   const { own, share, m } = ceilOf(ch, a, b, base), ceil = ch === 'phi' ? m : Math.max(SECOND_FLOOR_M, m);
   // the bank under a moving first ramp is probed at EVERY span past its own minimum, the ceiling's and past it included (pane E's review 72b9faf4 §2: on the rounded ramp
@@ -412,7 +414,7 @@ function spanHolds(ch, a, b, base, span) {
   if (ch === 'phi' && share > 0) return span >= own - 1e-9 && probePeak(0, gridded(a, b), base, span) <= PROBE_BAR;
   // O1: the turn and the climb under a moving first ramp: at or past the ceiling as before (the document is the road as built for these, L139 registration (A), so no
   // spike past it); between the change's own shortest and the ceiling, ONE probe of the built road decides
-  if ((ch === 'kh' || ch === 'kv') && share > 0) return span >= ceil - 1e-9 || (span >= Math.max(SECOND_FLOOR_M, own) - 1e-9 && routePeak(ch, b - a, base, span) <= PROBE_BAR);
+  if ((ch === 'kh' || ch === 'kv') && share > 0) return span >= ceil - 1e-9 || (span >= Math.max(SECOND_FLOOR_M, own) - 1e-9 && routePeak(ch, b - a, base, span, end) <= PROBE_BAR);
   return span >= ceil - 1e-9;
 }
 /**
@@ -488,10 +490,10 @@ function probePeak(a, b, base, L2) {
 }
 /**
  * O1: THE TURN'S AND THE CLIMB'S PROBE (pane E's plan_t180_faster_turn_rows_2026-11-26.md, O1). A probe track is laid as the bank's is (probePeak): a held straight, the piece
- * with its first ramp alone (the field from 0 to base.step over base.length, the quintic, as extend lays a whole-piece ramp), and the change ADDED from L − L2 to the piece's
- * end exactly as extend adds it (channelFn from 0 by the step, the C2 quintic, SECOND_SUB knots), then a straight. The turn and the climb are built as the document lays them
+ * with its first ramp alone (the field from 0 to base.step over base.length, the quintic, as extend lays a whole-piece ramp), and the change ADDED from end − L2 to `end`,
+ * where it sits (the next change's mark, or the piece's end; pane C's F1 on bfa6732), exactly as extend adds it (channelFn from 0 by the step, the C2 quintic, SECOND_SUB knots), then a straight. The turn and the climb are built as the document lays them
  * (pane E's L139 registration fc21dcdd, (A)), so the built rate is the channel's value; its change over a metre, read every 0.5 m from 20 m before the mark to 20 m past
- * the piece's end, peak ÷ ROUTE_BAR. The window holds the first ramp's own peak where it reaches it: a first ramp sharper than the bar there leaves the change at its ceiling.
+ * the change's end, peak ÷ ROUTE_BAR. The window holds the first ramp's own peak where it reaches it: a first ramp sharper than the bar there leaves the change at its ceiling.
  */
 const ROUTE_BASES = new Map();
 function routeBase(ch, step, L, HOLD) {
@@ -502,27 +504,27 @@ function routeBase(ch, step, L, HOLD) {
   ROUTE_BASES.set(key, { hold, piece });
   return ROUTE_BASES.get(key);
 }
-function routePeak(ch, dG, base, L2) {
+function routePeak(ch, dG, base, L2, end = base.length) {
   const L = base.length;
-  if (L2 >= L) return 0;
-  const key = memoKey(0, dG, base, [L2, ch === 'kh' ? -3 : -4]);
+  if (L2 >= end) return 0;
+  const key = memoKey(0, dG, base, [L2, end, ch === 'kh' ? -3 : -4]);
   if (PROBE_MEMO.has(key)) return PROBE_MEMO.get(key);
-  const HOLD = 400, AFTER = 200, pb = routeBase(ch, base.step, L, HOLD), F = L - L2, f = channelFn({ v: 0, m: 0 }, dG, L2, C2_CHANNELS.has(ch) ? ch : 'c', null), turns = [];
+  const HOLD = 400, AFTER = 200, pb = routeBase(ch, base.step, L, HOLD), F = end - L2, f = channelFn({ v: 0, m: 0 }, dG, L2, C2_CHANNELS.has(ch) ? ch : 'c', null), turns = [];
   for (let j = 0; j < SECOND_SUB; j++) turns.push(F + (L2 * j) / SECOND_SUB);
   const P0 = pb.piece, copy = { ...P0, knots: P0.knots.slice(), channels: Object.fromEntries(Object.entries(P0.channels).map(([k, v]) => [k, v.slice()])) };
-  let d = D.appendPiece(pb.hold, secondRamp(copy, { [ch]: { g: (x) => (x > F ? f(x - F) : 0), from: F, step: dG, turns } }));
+  let d = D.appendPiece(pb.hold, secondRamp(copy, { [ch]: { g: (x) => (x > F ? (x < end ? f(x - F) : dG) : 0), from: F, step: dG, turns } }));
   d = extend(d, { length: AFTER });
   const ends = [0, HOLD, HOLD + L, HOLD + L + AFTER];
   const r = (s) => { const i = s < ends[1] ? 0 : s < ends[2] ? 1 : 2; return D.channelValue(d.pieces[i], ch, Math.min(d.pieces[i].length, Math.max(0, s - ends[i]))); };
-  let m = 0; for (let s = HOLD + F - 20; s <= HOLD + L + 20; s += 0.5) m = Math.max(m, Math.abs(r(s + 0.5) - r(s - 0.5)));
+  let m = 0; for (let s = HOLD + F - 20; s <= HOLD + end + 20; s += 0.5) m = Math.max(m, Math.abs(r(s + 0.5) - r(s - 0.5)));
   return remember(key, m / ROUTE_BAR);
 }
 /** O1: the turn's or climb's shortest under a moving first ramp: from the change's own (never under SECOND_FLOOR_M, rounded up to 0.1 m) up in PROBE_STEP_M to the first
  *  span the built road holds, then back down by the metre; the ceiling, which always holds, when none below it does. */
-function routeMin(ch, a, b, base, own, cap) {
-  const key = memoKey(a, b, base, [-5, ch === 'kh' ? -3 : -4]);
+function routeMin(ch, a, b, base, own, cap, end = base.length) {
+  const key = memoKey(a, b, base, [-5, end, ch === 'kh' ? -3 : -4]);
   if (PROBE_MEMO.has(key)) return PROBE_MEMO.get(key);
-  const floor = Math.max(SECOND_FLOOR_M, Math.ceil(own * 10) / 10), ok = (L2) => routePeak(ch, b - a, base, L2) <= PROBE_BAR;
+  const floor = Math.max(SECOND_FLOOR_M, Math.ceil(own * 10) / 10), ok = (L2) => routePeak(ch, b - a, base, L2, end) <= PROBE_BAR;
   let L2 = floor;
   while (L2 < cap && !ok(L2)) L2 = Math.min(cap, L2 + PROBE_STEP_M);
   if (L2 < cap) while (L2 - 1 >= floor && ok(L2 - 1)) L2 -= 1;
@@ -616,14 +618,14 @@ function changeLists(changes, second, targets, typed, length, Lof0, startV = () 
         // (a change the same way on a straight road is rounded back there), so the mark it names is the comfort length's, which is always laid
         throw Object.assign(new D.CoreError('BAD_SECOND', `${name} ${changeName(ch, k)}, from ${+prev.toPrecision(6)} to ${+T.toPrecision(6)}, needs at least ${need.toFixed(1)} m before ${what} (the built road rounds a shorter one back over the hold${X > need + 1e-9 ? `; ${X.toFixed(1)} m holds` : ''}): from at most ${(end - X).toFixed(1)}, got ${F}`), { channel: ch, change: k, needM: need });
       }
-      if (!spanHolds(ch, prev, T, base, end - F)) {
-        minM = secondMinM(ch, prev, T, base);
+      if (!spanHolds(ch, prev, T, base, end - F, end)) {
+        minM = secondMinM(ch, prev, T, base, end);
         if (minM <= end - F + 1e-9) {
           // The span asked is OVER the bar though a shorter one holds, so the built road is not monotone in the span (measured on +34.78 to -34.78 on a
           // rounded 1,000 m bank: holds 264 to about 440 m, over the bar from about 450 m). The ceiling named here as "from at most" allowed the very mark it refused (628.5, got 500).
           // The refusal stands, and names the limit that is true: the longest span below the asked one that holds, read by the metre, so the mark must start at or after end minus it.
-          let S = Math.floor(end - F); while (S > minM && !spanHolds(ch, prev, T, base, S)) S--;
-          if (spanHolds(ch, prev, T, base, S)) throw new D.CoreError('BAD_SECOND', `${name} ${changeName(ch, k)}, from ${+prev.toPrecision(6)} to ${+T.toPrecision(6)}, is laid over the bar by ${+(end - F).toFixed(1)} m before ${what} (the built road rounds a longer one back over the hold; ${S} m still holds): from at least ${(end - S).toFixed(1)}, got ${F}`);
+          let S = Math.floor(end - F); while (S > minM && !spanHolds(ch, prev, T, base, S, end)) S--;
+          if (spanHolds(ch, prev, T, base, S, end)) throw new D.CoreError('BAD_SECOND', `${name} ${changeName(ch, k)}, from ${+prev.toPrecision(6)} to ${+T.toPrecision(6)}, is laid over the bar by ${+(end - F).toFixed(1)} m before ${what} (the built road rounds a longer one back over the hold; ${S} m still holds): from at least ${(end - S).toFixed(1)}, got ${F}`);
           const c = ceilOf(ch, prev, T, base); minM = ch === 'phi' ? c.m : Math.max(SECOND_FLOOR_M, c.m);
         }
       }

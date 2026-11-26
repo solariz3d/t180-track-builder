@@ -796,7 +796,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     secondMinM: (ch, a, b, base) => (typeof EXT.secondMinM === 'function' ? EXT.secondMinM(ch, a, b, base) : null),
     // D642 (E's review of d87ba99: the panel's fit check ran secondMinM's full search, a dozen probe roads, on every drag move): whether a change of `span` metres holds, as
     // secondMinM would say, at most ONE probe (extend.js spanHolds, what changeLists asks). null where this core does not export it: the panel then compares with secondMinM
-    spanHolds: (ch, a, b, base, span) => (typeof EXT.spanHolds === 'function' ? EXT.spanHolds(ch, a, b, base, span) : null),
+    // `end`, where the change ends in the piece (the next mark, or the piece's end), so the probe lays it where it sits (pane C's F1 on bfa6732)
+    spanHolds: (ch, a, b, base, span, end) => (typeof EXT.spanHolds === 'function' ? EXT.spanHolds(ch, a, b, base, span, end) : null),
     // (2026-11-10) a bank change its comfort length does not pass is decided on the road as built, which only laying it can tell (extend.js bankAsBuilt): the refusal
     // of change k of field ch when these options are laid now, { needM, built (the built road refused it, not its floor), message }, or null when that change is laid
     // k null: any change of that field. The answers are kept for the document and the options (the panel asks the same options from its readout, ghost and handles)

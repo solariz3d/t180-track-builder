@@ -1409,7 +1409,7 @@ function mount(root, shell, mountOpts = {}) {
     const memo = new Array(arr.length), min = (k) => (memo[k] === undefined ? (memo[k] = corner ? cornerMin(o, Number(arr[k].deg), first) : secondMinOf(mm, key, prevOf(k), arr[k].target)) : memo[k]);
     const holds = (k) => {
       if (!corner && typeof shell.spanHolds === 'function') {
-        const b = shell.spanHolds(key, prevOf(k), arr[k].target, baseFor(o, key), spanOf(k));
+        const b = shell.spanHolds(key, prevOf(k), arr[k].target, baseFor(o, key), spanOf(k), arr[k].from + spanOf(k));   // its end, where it sits (pane C's F1)
         // (2026-11-10) a bank change under its comfort length is laid where the road AS BUILT holds and reaches it (where the road turns, or where the change turns the bank back), so the core is asked
         if (b === false && key === 'phi' && typeof shell.changeRefusal === 'function') return !shell.changeRefusal(o, key, k);
         if (typeof b === 'boolean') return b;

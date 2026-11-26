@@ -10,7 +10,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
 const D = require('../src/core/document.js');
-const { extend } = require('../src/core/extend.js');
+const { extend, secondMinM } = require('../src/core/extend.js');
 const A = require('../src/core/adapter.js');
 
 const DEG = Math.PI / 180, BAR = 29.4 / (10 * 170 * 170), R = (x) => (x * DEG) / 100;   // °/100m → rad/m
@@ -86,3 +86,42 @@ test('O1 R1e: a change at or past the closed-form ceiling over a moving first ra
   assert.equal(sha(lay('kh', 0, -80, -75, 240)), TODAY.e1);
   assert.equal(sha(lay('kv', 0, -20, -10, 150)), TODAY.e2);
 });
+
+// F1 (pane C's read of bfa6732, 2026-11-26): a change FOLLOWED BY ANOTHER ends at the next mark, earlier on the first ramp, where the ramp's own rate moves fastest; the probe
+// laid it out to the ramp's end instead, so it passed spans the built road carries over the bar (C's worst: −80 → −95 from 120 to 200 m, then −90 from 200 m, 1.287 × the
+// bar, turn and climb alike). The probe now lays the change where it sits, from its mark to the next mark (or the piece's end).
+const lay2 = (ch, first, to1, from1, to2, from2, L = 300) => {
+  const d = extend(D.createDoc('g'), { length: 200, targets: { [ch]: 0 } });
+  return extend(d, { length: L, targets: { [ch]: R(first) }, changes: { [ch]: [{ from: from1, target: R(to1) }, { from: from2, target: R(to2) }] } });
+};
+/** The built climb as the unwrapped angle in the road's vertical plane (a climb ramp this steep passes vertical, where asin of the tangent's height folds), its change over
+ *  1 m, peak over [a, b] ÷ the bar. The road holds one heading (no turn), so the plane is the first sample's. */
+function builtClimbPeak(d, a, b) {
+  const S = A.toPath(d).path.samples, h = Math.hypot(S[0].T[0], S[0].T[2]), hx = S[0].T[0] / h, hz = S[0].T[2] / h; let prev = null, off = 0;
+  const H = S.map((x) => { const v = Math.atan2(x.T[1], x.T[0] * hx + x.T[2] * hz); if (prev !== null) { while (v + off - prev > Math.PI) off -= 2 * Math.PI; while (v + off - prev < -Math.PI) off += 2 * Math.PI; } prev = v + off; return { s: x.s, v: v + off }; });
+  const atS = (s) => { let lo = 0, hi = H.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (H[m].s <= s) lo = m; else hi = m; } const f = (s - H[lo].s) / (H[hi].s - H[lo].s); return H[lo].v + f * (H[hi].v - H[lo].v); };
+  let m = 0; for (let s = a; s <= b; s += 0.5) m = Math.max(m, Math.abs(atS(s + 1) - 2 * atS(s) + atS(s - 1))); return m / BAR;
+}
+for (const [ch, peak] of [['kh', (d, a, b) => builtPeak(d, a, b)], ['kv', builtClimbPeak]]) {
+  test(`O1 F1 ${ch}: a change −80 → −95 from 120 m to the next mark at 200 m (then −90), on a 0 → −80 ramp over 300 m, is refused, and laid at the mark it names its built rate changes under the bar (× 1.05)`, () => {
+    let err = null;
+    try { lay2(ch, -80, -95, 120, -90, 200); } catch (e) { err = e; }
+    assert.ok(err && err.code === 'BAD_SECOND' && /change 1 .*needs at least .* before change 2's mark/.test(err.message), `refused by name: ${err ? err.message : 'laid'}`);
+    const from = +(200 - err.needM).toFixed(1), d = lay2(ch, -80, -95, from, -90, 200), p = peak(d, 200 + from - 20, 200 + 300 + 20);
+    assert.ok(p <= 1.05, `laid at the named mark ${from}, built peak ${p.toFixed(3)} × the bar`);
+  });
+}
+
+// F2 (pane C's read of bfa6732): no row pinned the probe's bar or the shortest it names, so the bar raised to 1.3 (C's N9), the search with no step back by the metre (N3)
+// or stepping by 50 m (N8) all survived. This change's shortest lies strictly between its own (77.3 m) and the ceiling (154.4 m), where the bar binds: 148.3 m, searched
+// from its own in 5 m steps and back by the metre (measured on the repair's tip, 2026-11-26). At that mark it lays under the bar; a metre shorter it is refused.
+for (const [ch, peak] of [['kh', (d, a, b) => builtPeak(d, a, b)], ['kv', builtClimbPeak]]) {
+  test(`O1 F2 ${ch}: the probe's bar and the shortest it names: −80 → −95 ending at the next mark (200 m) on a 0 → −80 ramp needs 148.3 m; laid there it is under the bar, a metre shorter it is refused`, () => {
+    const M = secondMinM(ch, R(-80), R(-95), { step: R(-80), length: 300 }, 200);
+    assert.ok(Math.abs(M - 148.3) < 0.05, `secondMinM names ${M}`);
+    assert.equal(secondMinM(ch, R(-80), R(-95), { step: R(-80), length: 300 }), secondMinM(ch, R(-80), R(-95), { step: R(-80), length: 300 }, 300), 'no end is the piece\'s end');
+    const d = lay2(ch, -80, -95, 51.7, -90, 200), p = peak(d, 200 + 51.7 - 20, 520);
+    assert.ok(p <= 1.05, `laid at 51.7 (148.3 m), built peak ${p.toFixed(3)} × the bar`);
+    assert.throws(() => lay2(ch, -80, -95, 52.7, -90, 200), (e) => e.code === 'BAD_SECOND' && /needs at least 148\.3 m before change 2's mark/.test(e.message));
+  });
+}
