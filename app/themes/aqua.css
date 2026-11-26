@@ -24,13 +24,19 @@
      Snell's window overhead (--sky-a, the sky above the surface), the lit water under it (--sky-b), and the water at the horizon (--sky-c, the same
      colour as --fog, so the far road fogs into the water it meets) */
   --sky-style: caustics; --sky-a: color(srgb 0.72 0.95 0.98); --sky-b: color(srgb 0.05 0.38 0.42); --sky-c: color(srgb 0.02 0.22 0.24);
+  /* L249 (the user, 2026-11-26 04:49: "the refactor looks good enough"; the spec, exo_memory/briefs/t180_ui_refactor_spec.md): ONE radius scale for every look,
+     index.html's --r1..--r4 (2 / 4 / 8 / 12 px at factor 1), times this look's factor. Aqua is 1, the most the scale allows: 2 / 4 / 8 / 12, with Export the one
+     capsule. Every corner below is one of the four steps, 0 where a surface meets the window's edge, or a circle. And the two colour steps the spec adds
+     (Radix's roles, §6): step 4, a hovered surface (--raise mixed 6% toward --text), and step 10, the accent's own hover (--accent 10% toward --text). */
+  --radius-factor: 1; --hover: #135060; --accent-hover: #51e3f6;
 }
 
 /* the window: deep water */
 [data-theme="aqua"] body { background: radial-gradient(130% 110% at 30% 0%, #0a6f86 0%, #034152 40%, #011820 100%); }
 
 /* THE BAR: a glossy aqua band, a wet highlight across its upper edge, deep teal below where the words sit */
-/* the glow budget: a blurred shadow only on a hovered, focused, open or pressed control and on Export; static chrome (the bar, the column, menus, the camera bars, the band, the guide card) has hard edges */
+/* the glow budget (L249, the spec §5): no coloured glow anywhere on the chrome. A hovered, open or pressed control changes its fill or its rim, focus is
+   index.html's solid ring, and what floats casts a small neutral shadow; the wet highlights are inset lines, not glows */
 [data-theme="aqua"] header {
   background: var(--tex),
     linear-gradient(180deg, rgba(255, 255, 255, .30) 0%, rgba(255, 255, 255, .10) 18%, transparent 24%),
@@ -42,53 +48,57 @@
 [data-theme="aqua"] header h1::before {
   border-color: rgba(200, 250, 255, .9);
   background: radial-gradient(circle at 35% 30%, #ffffff 0 14%, rgba(255, 255, 255, .25) 26%, transparent 40%), radial-gradient(circle at 50% 60%, #3fe0f5 0%, #0a8fa8 55%, #034152 100%);
-  box-shadow: 0 0 10px rgba(63, 224, 245, .8), inset 0 -2px 3px rgba(0, 40, 60, .5);
+  box-shadow: inset 0 -2px 3px rgba(0, 40, 60, .5);   /* the bubble's own shading; its aqua glow is gone (L249) */
 }
-[data-theme="aqua"] header h1 { color: #ffffff; text-shadow: 0 1px 2px rgba(0, 30, 40, .8), 0 0 14px rgba(63, 224, 245, .5); }
+[data-theme="aqua"] header h1 { color: #ffffff; text-shadow: 0 1px 2px rgba(0, 30, 40, .8); }   /* a dark drop under the white name, for the bright bar; its aqua glow is gone (L249) */
 [data-theme="aqua"] header label, [data-theme="aqua"] header #status { color: #d6f8fd; }
 
-/* BUTTONS AND MENU NAMES: aqua gel pills: a wet white highlight on the upper half, a bright aqua lower half, a dark rim; dark ink for the words */
+/* BUTTONS AND MENU NAMES: aqua gel buttons: a wet white highlight on the upper half, a bright aqua lower half, a dark rim; dark ink for the words.
+   L249: a control's corner is r2 (4 px here), no longer a pill; a hover or an open menu lightens the gel and whitens the rim, and keeps the resting shadow */
 [data-theme="aqua"] button, [data-theme="aqua"] .more > summary {
   background: linear-gradient(180deg, #f1feff 0%, #b9f4fc 46%, #4fd7ed 50%, #7fe8f7 82%, #b4f6ff 100%);
-  border-color: #0a7d95; border-radius: 999px; color: var(--gel-text);
+  border-color: #0a7d95; border-radius: var(--r2); color: var(--gel-text);
   box-shadow: inset 0 1px 0 #ffffff, inset 0 -2px 0 rgba(0, 120, 150, .35), 0 1px 0 rgba(0, 30, 40, .5);
 }
 [data-theme="aqua"] button:hover:not([disabled]), [data-theme="aqua"] .more > summary:hover {
   border-color: #ffffff; color: #00252f; background: linear-gradient(180deg, #ffffff 0%, #d2f9ff 46%, #6ae4f5 50%, #9ef0fb 82%, #d0faff 100%);
-  box-shadow: inset 0 1px 0 #ffffff, 0 0 10px rgba(63, 224, 245, .8);
+  box-shadow: inset 0 1px 0 #ffffff, inset 0 -2px 0 rgba(0, 120, 150, .35), 0 1px 0 rgba(0, 30, 40, .5);
 }
 [data-theme="aqua"] button:active:not([disabled]) { background: linear-gradient(180deg, #7fe8f7 0%, #3fd0e8 50%, #9ef0fb 100%); }
-[data-theme="aqua"] .more[open] > summary { border-color: #ffffff; color: #00252f; box-shadow: inset 0 1px 0 #ffffff, 0 0 8px rgba(63, 224, 245, .85); }
+[data-theme="aqua"] .more[open] > summary { border-color: #ffffff; color: #00252f; box-shadow: inset 0 1px 0 #ffffff, inset 0 -2px 0 rgba(0, 120, 150, .35), 0 1px 0 rgba(0, 30, 40, .5); }
+/* Export to Assetto Corsa: the one capsule in the whole page (the spec §3: at most one, the standout action; a capsule only in the factor-1 looks) */
+[data-theme="aqua"] header #install > button { border-radius: 999px; }
 /* the window buttons stay glyphs on the bar, in white */
 [data-theme="aqua"] #winctl button { background: transparent; box-shadow: none; border-color: transparent; border-radius: 0; }
 [data-theme="aqua"] #win-min:hover, [data-theme="aqua"] #win-max:hover { background: rgba(63, 224, 245, .30); box-shadow: none; }
 [data-theme="aqua"] #win-close:hover { background: #b0303a; box-shadow: none; }
 /* the camera dock's buttons are words on the water, not pills */
 [data-theme="aqua"] #camera [role="toolbar"] button { background: transparent; box-shadow: none; border-color: transparent; color: var(--text); }
-[data-theme="aqua"] #camera [role="toolbar"] button:hover:not([disabled]) { background: rgba(63, 224, 245, .18); color: #ffffff; }
+[data-theme="aqua"] #camera [role="toolbar"] button:hover:not([disabled]) { background: var(--hover); color: #ffffff; }   /* step 4 (L249) */
 [data-theme="aqua"] #camera [role="toolbar"] button[aria-pressed="true"], [data-theme="aqua"] #camera [role="toolbar"] button.on {
   color: var(--gel-text); background: linear-gradient(180deg, #e6fdff 0%, #9ff0fb 48%, #3fd0e8 52%, #8ceaf8 100%); box-shadow: inset 0 1px 0 #fff;
 }
 
-/* FIELDS: rounded wells of deep water, a soft wet edge; an aqua glow when focused */
+/* FIELDS: wells of deep water at r1 (L249: under 32 px tall), a soft wet edge; focused, the rim turns aqua and the well deepens (the ring is index.html's) */
 [data-theme="aqua"] input[type="number"], [data-theme="aqua"] input[type="text"], [data-theme="aqua"] input:not([type]), [data-theme="aqua"] textarea,
 [data-theme="aqua"] select, [data-theme="aqua"] .picker select, [data-theme="aqua"] header input, [data-theme="aqua"] header select, [data-theme="aqua"] .save-piece input {
-  background: linear-gradient(180deg, #011d26 0%, #02303c 100%); border-color: rgba(120, 230, 245, .55); border-radius: 10px; color: var(--text);
+  background: linear-gradient(180deg, #011d26 0%, #02303c 100%); border-color: rgba(120, 230, 245, .55); border-radius: var(--r1); color: var(--text);
   box-shadow: inset 0 2px 0 rgba(0, 0, 0, .45), 0 1px 0 rgba(160, 245, 255, .18);
 }
 [data-theme="aqua"] input[type="number"]::-webkit-inner-spin-button { background-color: rgba(166, 236, 247, .85); }   /* the spin chevrons in this skin's colours (their shape is in index.html) */
 [data-theme="aqua"] input[type="number"]::-webkit-inner-spin-button:hover { background-color: var(--accent); }
 [data-theme="aqua"] input[type="number"]::-webkit-inner-spin-button:active { background-color: #ffffff; }
-[data-theme="aqua"] input:focus, [data-theme="aqua"] select:focus, [data-theme="aqua"] textarea:focus { border-color: var(--accent); box-shadow: inset 0 2px 4px rgba(0, 0, 0, .45), 0 0 10px rgba(63, 224, 245, .7); }
+[data-theme="aqua"] input:focus, [data-theme="aqua"] select:focus, [data-theme="aqua"] textarea:focus { border-color: var(--accent); box-shadow: inset 0 2px 4px rgba(0, 0, 0, .45); }
 [data-theme="aqua"] option { background: #022a35; color: var(--text); }
 [data-theme="aqua"] input[type="checkbox"], [data-theme="aqua"] input[type="radio"], [data-theme="aqua"] input[type="range"] { accent-color: #3fe0f5; }
 
-/* THE LEFT PANE: a rounded slab of water-glass: deep teal, a broad wet highlight across its top, an aqua rim, light from below */
+/* THE LEFT PANE: a slab of water-glass: deep teal, a broad wet highlight across its top, an aqua rim, light from below. Docked, it meets the window's edge,
+   so it has no corner (L249, the spec §1: square at the edge) */
 [data-theme="aqua"] #left {
   background: var(--tex),
     radial-gradient(120% 34px at 50% 0%, rgba(255, 255, 255, .26), transparent 100%),
     linear-gradient(180deg, rgba(10, 110, 135, .90) 0%, rgba(4, 64, 80, .93) 26%, rgba(2, 40, 52, .95) 100%);
-  border-color: var(--rim); border-radius: 18px;
+  border-color: var(--rim); border-radius: 0;
   backdrop-filter: blur(14px) saturate(170%); -webkit-backdrop-filter: blur(14px) saturate(170%);
   box-shadow: inset 0 1px 0 var(--wet), 0 0 0 1px rgba(0, 30, 40, .6);
 }
@@ -99,29 +109,33 @@
 [data-theme="aqua"] #validation > label { color: #ffffff; }   /* the CSP switch's words: --text read 4.4 : 1 on the column's lighter teal */
 [data-theme="aqua"] h3::after { background: linear-gradient(90deg, rgba(63, 224, 245, .95), rgba(63, 224, 245, .2) 60%, transparent); }
 
-/* THE MENUS: a rounded water-glass pane dropping from the bar */
+/* THE MENUS: a water-glass pane dropping from the bar, at r3 (8 px here) */
 [data-theme="aqua"] .more-menu {
   background: var(--tex),
     radial-gradient(110% 30px at 50% 0%, rgba(255, 255, 255, .22), transparent 100%),
     linear-gradient(180deg, rgba(8, 96, 118, .96) 0%, rgba(3, 52, 66, .97) 30%, rgba(2, 36, 46, .98) 100%);
-  border-color: var(--rim); border-radius: 18px;
+  border-color: var(--rim); border-radius: var(--r3);
   backdrop-filter: blur(16px) saturate(170%); -webkit-backdrop-filter: blur(16px) saturate(170%);
   box-shadow: inset 0 1px 0 var(--wet);
 }
+/* concentric (the spec §2): what sits in a menu takes the menu's corner less the menu's 8 px padding (index.html .more-menu), never below 0: square rows
+   and buttons in a rounded menu. Written out per selector: a skin's every selector names its own [data-theme] (app/test/theme.test.js) */
+[data-theme="aqua"] .more-menu button, [data-theme="aqua"] .more-menu .menu-row, [data-theme="aqua"] .more-menu .menu-list-head,
+[data-theme="aqua"] .more-menu input, [data-theme="aqua"] .more-menu select { border-radius: max(0px, calc(var(--r3) - 8px)); }
 [data-theme="aqua"] .more-menu hr { border-top-color: rgba(120, 235, 250, .35); }
-[data-theme="aqua"] .pieces-menu .piece-row:hover, [data-theme="aqua"] .more-menu .menu-row:hover, [data-theme="aqua"] .more-menu .menu-row:focus { background: rgba(63, 224, 245, .14); }
+[data-theme="aqua"] .pieces-menu .piece-row:hover, [data-theme="aqua"] .more-menu .menu-row:hover, [data-theme="aqua"] .more-menu .menu-row:focus { background: var(--hover); }   /* step 4 (L249) */
 
 /* the strips under the bar */
 [data-theme="aqua"] .bar, [data-theme="aqua"] #banner .brush-strip { background: linear-gradient(180deg, #0a6f86, #033846); }
 
-/* THE CAMERA DOCK: a long rounded water-glass bar */
+/* THE CAMERA DOCK: a long water-glass bar at r2 (a capsule no longer: Export is the one); its hint backing at r1 */
 [data-theme="aqua"] #camera [role="toolbar"] {
   background: radial-gradient(100% 18px at 50% 0%, rgba(255, 255, 255, .20), transparent 100%), linear-gradient(180deg, rgba(6, 82, 100, .95), rgba(2, 40, 52, .96));
-  border-color: var(--rim); border-radius: 999px;
+  border-color: var(--rim); border-radius: var(--r2);
   backdrop-filter: blur(12px) saturate(170%); -webkit-backdrop-filter: blur(12px) saturate(170%);
   box-shadow: inset 0 1px 0 var(--wet);
 }
-[data-theme="aqua"] #camera p { color: #e6fbfe; text-shadow: none; background: rgba(2, 40, 52, .92); border-radius: 999px; box-shadow: 0 0 0 5px rgba(2, 40, 52, .92), 0 0 0 6px rgba(120, 235, 250, .35); }
+[data-theme="aqua"] #camera p { color: #e6fbfe; text-shadow: none; background: rgba(2, 40, 52, .92); border-radius: var(--r1); box-shadow: 0 0 0 5px rgba(2, 40, 52, .92), 0 0 0 6px rgba(120, 235, 250, .35); }
 
 /* THE 3D VIEW: water. The sky, the fog, the road's edges and ties and the ground grid are this skin's 3D tokens (above); the WebGL view draws them
    itself, so the earlier stand-in overlays are gone. */
@@ -129,22 +143,24 @@
    the camera turns; its drift stops under prefers-reduced-motion there. the view's vignette is the renderer's own (app/preview/renderer.js THE VIGNETTE). */
 [data-theme="aqua"] .preview-hud { color: #e6fbfe !important; text-shadow: none; }
 
-/* the dialogs and the onboarding card: rounded water-glass */
+/* the dialogs and the onboarding card: water-glass. A dialog at r4 (12 px here, the ceiling) with a small neutral shadow, no halo (the spec §5: black, blur
+   12 px at most, alpha .12 at most); the buttons in it are square by the concentric rule (r4 less the card's 22 px padding is below 0) */
 [data-theme="aqua"] .ask-veil { background: rgba(1, 30, 40, .60); backdrop-filter: blur(6px) saturate(150%); }
 [data-theme="aqua"] .ask-card {
   background: radial-gradient(110% 40px at 50% 0%, rgba(255, 255, 255, .22), transparent 100%), linear-gradient(180deg, #06566a, #022a35 40%);
-  border-color: var(--rim); border-top-color: var(--accent); border-radius: 18px;
-  box-shadow: inset 0 1px 0 var(--wet), 0 24px 70px rgba(0, 20, 30, .8), 0 0 40px rgba(63, 224, 245, .25);
+  border-color: var(--rim); border-top-color: var(--accent); border-radius: var(--r4);
+  box-shadow: inset 0 1px 0 var(--wet), 0 2px 3px rgba(0, 0, 0, .12), 0 8px 12px rgba(0, 0, 0, .12);
 }
+[data-theme="aqua"] .ask-card button { border-radius: max(0px, calc(var(--r4) - 22px)); }
 /* D575 (the user, 0.4.31: "Don't save" and "Save" nearly invisible): index.html colours a dialog's main button --accent and its quiet one --dim, which suit
-   a dark button; on this skin's pale gel pill they read 1.06 and 1.20 : 1. The main choice stays a gel pill in the pill's dark ink, marked by the white rim and
-   glow a hovered pill wears; the quiet one is words on the water, as the camera dock's buttons are */
-[data-theme="aqua"] .ask-row .ask-main { color: var(--gel-text); border-color: #ffffff; box-shadow: inset 0 1px 0 #ffffff, 0 0 10px rgba(63, 224, 245, .8); }
+   a dark button; on this skin's pale gel pill they read 1.06 and 1.20 : 1. The main choice stays a gel button in its dark ink, marked by the white rim a
+   hovered one wears (L249: its glow is gone, the rim stays); the quiet one is words on the water, as the camera dock's buttons are */
+[data-theme="aqua"] .ask-row .ask-main { color: var(--gel-text); border-color: #ffffff; box-shadow: inset 0 1px 0 #ffffff, inset 0 -2px 0 rgba(0, 120, 150, .35), 0 1px 0 rgba(0, 30, 40, .5); }
 [data-theme="aqua"] .ask-row .ask-quiet { background: transparent; box-shadow: none; border-color: transparent; color: var(--dim); }
-[data-theme="aqua"] .ask-row button.ask-quiet:hover:not([disabled]) { background: rgba(63, 224, 245, .18); border-color: transparent; box-shadow: none; color: #ffffff; }
+[data-theme="aqua"] .ask-row button.ask-quiet:hover:not([disabled]) { background: var(--hover); border-color: transparent; box-shadow: none; color: #ffffff; }   /* step 4 (L249) */
 [data-theme="aqua"] .guide-card {
   background: radial-gradient(110% 22px at 50% 0%, rgba(255, 255, 255, .16), transparent 100%), linear-gradient(180deg, rgba(5, 70, 88, .97) 0%, rgba(3, 48, 62, .97) 30%, rgba(2, 36, 46, .98) 100%) !important;
-  border-radius: 18px !important; color: var(--text) !important;
+  border-radius: var(--r3) !important; color: var(--text) !important;   /* the guide card is a popover: r3 (its !important is this rule's own, against app/onboarding's) */
   box-shadow: inset 0 0 0 1px var(--rim), inset 0 2px 0 var(--wet) !important;
 }
 [data-theme="aqua"] .guide-card .guide-count { opacity: .85 !important; }   /* its own CSS dims it to .6; on the water it needs .85 to read */
@@ -152,18 +168,20 @@
 [data-theme="aqua"] .guide-target { outline-color: var(--accent) !important; }
 
 /* lists, selection, scrollbars */
-[data-theme="aqua"] .track li.selected { background: linear-gradient(90deg, rgba(63, 224, 245, .40), rgba(63, 224, 245, .08)); color: #ffffff; border-radius: 999px; }
+[data-theme="aqua"] .track li.selected { background: linear-gradient(90deg, rgba(63, 224, 245, .40), rgba(63, 224, 245, .08)); color: #ffffff; border-radius: var(--r1); }   /* a list row: r1 (L249) */
 [data-theme="aqua"] ::-webkit-scrollbar-thumb { background: linear-gradient(90deg, #b9f4fc, #3fd0e8); border-radius: 8px; }
 [data-theme="aqua"] ::selection { background: rgba(63, 224, 245, .45); color: #ffffff; }
 @supports (appearance: base-select) {
-  [data-theme="aqua"] header select::picker(select) { background: linear-gradient(180deg, #06566a, #022a35 40%); border-color: var(--rim); border-top-color: var(--accent); border-radius: 14px; }
+  [data-theme="aqua"] header select::picker(select) { background: linear-gradient(180deg, #06566a, #022a35 40%); border-color: var(--rim); border-top-color: var(--accent); border-radius: var(--r3); }   /* a dropdown: r3, as a menu (L249) */
 }
 
 /* L242 (the user, 2026-11-26 00:58: "we should also incorporate the themes for those windows for each theme"): the small windows on the view, a mark's label and a
    handle's readout, drawn on a canvas, so set here as tokens that app/core/markwindow.js reads. A gel drop: deep teal, rounded, a wet highlight on its top edge and a cyan glow in the mark's colour. The font is one of the page's own (its --display or --body); these are
-   canvas tokens and move no box. --mark-<field> sets a mark's and handle's colour (bank, turn, climb, width, cup, length, edge), --mark-rim the dark rim under them. */
+   canvas tokens and move no box. --mark-<field> sets a mark's and handle's colour (bank, turn, climb, width, cup, length, edge), --mark-rim the dark rim under them.
+   L249 (the user, 02:3x: he liked these windows and disliked only the round ones): the radius is on the scale, r1 times this look's factor (2 x 1 = 2; a
+   number, because the canvas reads it as one); the fill, the sheen and the glow stay as they were. */
 [data-theme="aqua"] {
-  --mark-win-font: var(--body); --mark-win-weight: 600; --mark-win-radius: 10; --mark-win-edge: 1.5; --mark-win-glow: 9;
+  --mark-win-font: var(--body); --mark-win-weight: 600; --mark-win-radius: 2; --mark-win-edge: 1.5; --mark-win-glow: 9;
   --mark-win-bg: rgba(3, 56, 70, .90); --mark-win-text: #f2fdff; --mark-win-sheen: rgba(255, 255, 255, .62);
   /* L244 (the user, 2026-11-26 02:23: "yes handle colors per theme"): the marks' and handles' colours, a reef under the water: azure, coral pink, sun yellow, coral red, sea-glass green, sand, and a pearl lilac for the edges (teal would sink into the teal grid). Each field keeps one colour everywhere in this
      look; bank and turn at least 60 apart, every pair of fields and each against the road's edge, the grid, the fog and the sky (app/test/markwindow.test.js W5) */
