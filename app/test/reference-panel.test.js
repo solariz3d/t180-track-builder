@@ -1,7 +1,8 @@
 // reference-panel.test.js (L250): node --test app/test/reference-panel.test.js
 // The shadow tracks, finished: View ▸ Reference track…'s panel (app/reference/panel.js) over the real core shell and the headless preview.
 // The installed tracks are stood in for by lines built here with the builder's own encodeAiLine (no other author's track is in the repository);
-// the native side is a stand-in that only answers list_reference_tracks and read_reference_line, as src-tauri/src/reference.rs does.
+// the native side is a stand-in that only answers list_reference_tracks, read_reference_line and read_reference_road, as src-tauri/src/reference.rs and
+// kn5road.rs do (the road's bytes in src/reference/road.js's layout, written by its encodeRoad).
 //   P1  every layout is listed; one with no AI line says so and cannot be picked
 //   P2  pick draws it with its start on his start; Show off hides it and keeps the pick and the nudge; Show on draws it again; Clear drops both
 //   P3  the two kinds of line that do not read on L (a 12-byte stub, a file 8 bytes short) are refused in words, the one shown before is taken
@@ -9,7 +10,10 @@
 //   P4  a layout carrying another layout's line is said so (the same line; the same points with widths of its own), and so is a line far off
 //       its stated length; a layout with a line of its own says nothing
 //   P5  a later pick wins over an earlier one still being read
-//   READ ONLY, each through the real core shell and preview: R1 the document, R2 a save (the track and its undo file), R3 an undo step, R4 an export
+//   RD1 Road: the kn5's road, placed by the layout's AI line, so Line and Road lie on each other under one nudge; RD2 a road that does not read is
+//       refused in words, and the same layout's Line still draws
+//   READ ONLY, each through the real core shell and preview, for Line and for Road: R1 the document, R2 a save (the track and its undo file),
+//   R3 an undo step, R4 an export
 //   D1  the draw: the reference goes down before his road and writes no depth, so his road is drawn over it; D2 its colour is the --reference token
 'use strict';
 const test = require('node:test');
@@ -17,6 +21,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const { encodeAiLine, EXTRA } = require('../../src/export/ailine.js');
+const { encodeRoad } = require('../../src/reference/road.js');
 const { createReferencePanel } = require('../reference/panel.js');
 const { createCoreShell } = require('../core/coreshell.js');
 const P = require('../preview/preview.js');
@@ -47,8 +52,13 @@ function nativeOf(entries) {
   const call = async (cmd, args) => {
     calls.push(cmd);
     if (cmd === 'list_reference_tracks') return entries.map(({ track, layout, bytes, uiLength = null }) => ({ track, layout, hasAi: bytes !== null, uiLength }));
-    if (cmd !== 'read_reference_line') throw new Error(`the stand-in has no ${cmd}`);
     const e = entries.find((x) => x.track === args.track && x.layout === args.layout);
+    if (cmd === 'read_reference_road') {
+      if (!e || e.road === undefined) throw 'no kn5 in that folder';   // eslint-disable-line no-throw-literal
+      if (typeof e.road === 'string') throw e.road;   // eslint-disable-line no-throw-literal
+      return e.road.buffer.slice(e.road.byteOffset, e.road.byteOffset + e.road.byteLength);
+    }
+    if (cmd !== 'read_reference_line') throw new Error(`the stand-in has no ${cmd}`);
     if (!e || e.bytes === null) throw 'no AI line there';   // eslint-disable-line no-throw-literal
     if (gate.has(args.layout)) await gate.get(args.layout);
     if (typeof e.bytes === 'string') throw e.bytes;   // eslint-disable-line no-throw-literal
@@ -57,11 +67,19 @@ function nativeOf(entries) {
   return { call, calls, gate };
 }
 const LAP = aiLine(200, 400), WIDE = aiLine(200, 400, { sideLeft: 9 });
+/** A ring of road of radius r, w wide, n quads, in road.js's bytes: what read_reference_road sends. */
+function ringRoad(r, w, n) {
+  const pos = [], idx = [];
+  for (let k = 0; k <= n; k++) { const ph = (2 * Math.PI * k) / n; pos.push((r + w / 2) * Math.cos(ph), 0, (r + w / 2) * Math.sin(ph), (r - w / 2) * Math.cos(ph), 0, (r - w / 2) * Math.sin(ph)); }
+  for (let k = 0; k < n; k++) { const a = 2 * k; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  return Buffer.from(encodeRoad([{ positions: new Float32Array(pos), indices: new Uint16Array(idx) }]));
+}
+const RING = ringRoad(200, 12, 300);
 const TRACKS = [
-  { track: 'reference track 1', layout: '', bytes: LAP, uiLength: '1257' },
-  { track: 'reference track 1', layout: 'one', bytes: LAP, uiLength: '200' },      // the same file as the main layout's
-  { track: 'reference track 1', layout: 'two', bytes: WIDE, uiLength: '1257m' },   // the same points, its own widths
-  { track: 'reference track 2', layout: '', bytes: aiLine(150, 300), uiLength: '0.95km' },
+  { track: 'reference track 1', layout: '', bytes: LAP, uiLength: '1257', road: RING },
+  { track: 'reference track 1', layout: 'one', bytes: LAP, uiLength: '200', road: 'the kn5 is shorter than its header' },   // the same file as the main layout's; its road does not read
+  { track: 'reference track 1', layout: 'two', bytes: WIDE, uiLength: '1257m', road: RING },   // the same points, its own widths
+  { track: 'reference track 2', layout: '', bytes: aiLine(150, 300), uiLength: '0.95km', road: ringRoad(150, 10, 200) },
   { track: 'reference track 3', layout: '', bytes: stub() },
   { track: 'reference track 4', layout: '', bytes: shortOf(aiLine(100, 80)) },
   { track: 'reference track 5', layout: '', bytes: null },
@@ -180,10 +198,39 @@ test('P5: a later pick wins over an earlier one still being read', async () => {
   assert.equal(panel.state().picked, 'reference track 2\u0000'); assert.ok(Math.abs(p.reference().lengthM - 300 * 2 * 150 * Math.sin(Math.PI / 300)) < 0.01, 'reference track 2 is the one drawn');
 });
 
+test('RD1: Road draws the kn5\'s road placed by the layout\'s AI line: Line and Road lie on each other under one nudge', async () => {
+  const { s, p, panel } = await setup();
+  s.extend({ length: 120 }); p.step();
+  await panel.pick('reference track 2', ''); await panel.setNudge({ dx: 7, dz: -3, yawDeg: 40 });
+  const line = p.reference();
+  await panel.setMode('road');
+  const road = p.reference(), st = panel.state();
+  assert.equal(st.mode, 'road'); assert.equal(st.kind, 'road'); assert.equal(st.triangles, 400); assert.equal(st.picked, 'reference track 2\u0000', 'the same layout, read again');
+  assert.deepEqual(road.start, line.start, 'the same start'); assert.deepEqual(road.forward, line.forward, 'the same way');
+  assert.deepEqual(st.nudge, { dx: 7, dz: -3, dy: 0, yawDeg: 40 }, 'the same nudge');
+  assert.match(st.readout, /^400 triangles of road from its kn5, placed by its 942 m AI line · read \d+ ms, built \d+ ms$/);
+  await panel.setMode('line'); assert.equal(panel.state().kind, 'line'); assert.deepEqual(p.reference().start, line.start);
+  await assert.rejects(panel.setMode('mesh'), /the mode is line or road/);
+});
+
+test('RD2: a road that does not read is refused in words and the one shown before is taken down; the same layout\'s Line still draws', async () => {
+  const { p, panel, root } = await setup();
+  await panel.setMode('road');
+  await panel.pick('reference track 1', ''); assert.ok(p.reference(), 'a road is shown first');
+  await panel.pick('reference track 1', 'one');
+  assert.equal(p.reference(), null, 'taken down: nothing drawn in its place');
+  assert.match(panel.state().readout, /^reference track 1 · one: Not drawn: the kn5 is shorter than its header\. What does not read whole is never drawn in part\.$/);
+  assert.equal(optionsOf(panel, root).find((x) => x.text.startsWith('reference track 1 · one')).text, 'reference track 1 · one (cannot be read)');
+  await panel.setMode('line');
+  assert.equal(optionsOf(panel, root).find((x) => x.text.startsWith('reference track 1 · one')).disabled, false, 'its line is still there to pick');
+  await panel.pick('reference track 1', 'one'); assert.ok(p.reference(), 'and it draws');
+});
+
 // ── read only: the document, a save, an undo step and an export ──
 
 /** Every reference action the panel has, in a row: pick, nudge, hide, show, a refused pick, pick again, clear and pick once more (left shown). */
-async function everything(panel, p) {
+async function everything(panel, p, mode) {
+  await panel.setMode(mode);
   await panel.pick('reference track 2', ''); p.step();
   await panel.setNudge({ dx: 30, dz: -4, dy: 2, yawDeg: -45 }); p.step();
   await panel.show(false); p.step(); await panel.show(true); p.step();
@@ -202,26 +249,26 @@ function memStorage() {
   });
 }
 
-test('R1: the document: nothing of the reference enters it, and the shell is not told of any of it', async () => {
+for (const mode of ['line', 'road']) test(`R1 (${mode}): the document: nothing of the reference enters it, and the shell is not told of any of it`, async () => {
   const { s, p, panel, native } = await setup();
   s.extend({ length: 150 }); s.extend({ length: 80, targets: { kh: 1 / 200 } }); p.step();
   const before = s.getState().history.present, text = D.serialize(before);
   let told = 0; const off = s.subscribe(() => { told++; });
-  await everything(panel, p);
+  await everything(panel, p, mode);
   if (typeof off === 'function') off();
   assert.equal(s.getState().history.present, before, 'the very same document object');
   assert.equal(D.serialize(s.getState().history.present), text);
   assert.doesNotMatch(text, /reference/i);
   assert.equal(told, 0, 'the shell emitted no change');
-  assert.deepEqual([...new Set(native.calls)].sort(), ['list_reference_tracks', 'read_reference_line'], 'the panel only lists and reads');
+  assert.deepEqual([...new Set(native.calls)].sort(), ['list_reference_tracks', 'read_reference_line', ...(mode === 'road' ? ['read_reference_road'] : [])], 'the panel only lists and reads');
 });
 
-test('R2: a save: the track file and its undo file are byte for byte the same with a reference shown', async () => {
+for (const mode of ['line', 'road']) test(`R2 (${mode}): a save: the track file and its undo file are byte for byte the same with a reference shown`, async () => {
   const storage = memStorage(), { s, p, panel } = await setup({ storage });
   s.extend({ length: 150 }); s.extend({ length: 80, targets: { kh: 1 / 200 } }); p.step();
   await s.save('Plain'); assert.equal(s.getState().message, null); assert.equal(s.getState().name, 'Plain');
   const calls = storage.calls.length;
-  await everything(panel, p);
+  await everything(panel, p, mode);
   assert.equal(storage.calls.length, calls, 'the reference wrote nothing');
   await s.save('Shown'); assert.equal(s.getState().message, null); assert.equal(s.getState().name, 'Shown');
   const [a, b] = ['Plain', 'Shown'].map((n) => [...storage.docs.keys()].find((k) => k.endsWith(n)));
@@ -229,12 +276,12 @@ test('R2: a save: the track file and its undo file are byte for byte the same wi
   assert.ok(storage.undo.get(a), 'an undo file was written'); assert.equal(storage.undo.get(b), storage.undo.get(a), 'the undo file');
 });
 
-test('R3: an undo step: the reference is none; Ctrl+Z undoes his last edit, and the reference stays shown through it', async () => {
+for (const mode of ['line', 'road']) test(`R3 (${mode}): an undo step: the reference is none; Ctrl+Z undoes his last edit, and the reference stays shown through it`, async () => {
   const { s, p, panel } = await setup();
   s.extend({ length: 150 }); const mid = s.getState().history.present;
   s.extend({ length: 80, targets: { kh: 1 / 200 } }); p.step();
   const h = s.getState().history, past = h.past.length, future = h.future.length;
-  await everything(panel, p);
+  await everything(panel, p, mode);
   assert.equal(s.getState().history.past.length, past); assert.equal(s.getState().history.future.length, future);
   s.undo(); p.step();
   assert.equal(s.getState().history.present, mid, 'the undo took back his last extend');
@@ -242,7 +289,7 @@ test('R3: an undo step: the reference is none; Ctrl+Z undoes his last edit, and 
   s.redo(); p.step(); assert.equal(s.getState().history.past.length, past);
 });
 
-test('R4: an export: every file is byte for byte the same with a reference shown', async () => {
+for (const mode of ['line', 'road']) test(`R4 (${mode}): an export: every file is byte for byte the same with a reference shown`, async () => {
   const { makeExporter } = require('../export/export.js');
   const get = async (f) => fs.readFileSync(path.join(REPO, f), 'utf8');
   const { s, p, panel } = await setup({ exporter: await makeExporter(get) });
@@ -252,7 +299,7 @@ test('R4: an export: every file is byte for byte the same with a reference shown
   s.commitDoc(TB.extendCorner(d, { length: 60, transition: 40, targets: { kh: 0 } })); s.close(); p.step();
   const files = (out) => out.folders.flatMap((f) => f.files.filter((x) => x.path !== '.t180b-builder.json').map((x) => [`${f.folder}/${x.path}`, Buffer.from(x.bytes)]));   // the stamp carries the time it was made
   const plain = files(s.buildExport());
-  await everything(panel, p);
+  await everything(panel, p, mode);
   const shown = files(s.buildExport());
   assert.ok(plain.length >= 5, `files: ${plain.length}`);
   assert.deepEqual(shown.map(([n]) => n), plain.map(([n]) => n), 'the same files');

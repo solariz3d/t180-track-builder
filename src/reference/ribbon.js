@@ -167,13 +167,14 @@ const REFUSED = Object.freeze({
   TRUNCATED: 'its AI line is cut short', BAD_VERSION: 'its AI line is in a format this does not read', TOO_FEW_POINTS: 'its AI line holds no road',
   BAD_EXTRA: 'its AI line does not hold one record for each point', BAD_GRID_FLAG: 'its AI line is damaged after its points', TRAILING: 'its AI line has bytes after its end',
   NON_FINITE: 'its AI line has a point that is not a number', NOT_BYTES: 'nothing came back to read', BAD_SHAPE: 'its AI line has too few points to make a road',
+  BAD_ROAD: 'its road from the kn5 did not come back whole', NO_START: 'its road is placed by its AI line, and it has none',
 });
 /** Why a line is not drawn: a RefTrackError's code in words with its detail, or the native side's own words (a string). */
 function refusalWords(err) {
   const code = err && err.code, msg = err && err.message !== undefined ? String(err.message) : String(err);
   const detail = code && msg.startsWith(`${code}: `) ? msg.slice(code.length + 2) : msg;
   const why = code && REFUSED[code] ? `${REFUSED[code]} (${detail})` : detail;
-  return `Not drawn: ${why}. A line that does not read whole is never drawn in part.`;
+  return `Not drawn: ${why}. What does not read whole is never drawn in part.`;
 }
 
 /**

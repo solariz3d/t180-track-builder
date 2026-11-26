@@ -134,7 +134,7 @@ test('L250: the two kinds of line that do not read on L are refused in words, ne
     assert.match(w, /^Not drawn: its AI line is cut short/); assert.match(w, why); assert.match(w, /never drawn in part\.$/);
     assert.doesNotMatch(w, /TRUNCATED/, 'the code is not shown, its words are');
   }
-  assert.strictEqual(refusalWords('the AI line says it has 0 points'), 'Not drawn: the AI line says it has 0 points. A line that does not read whole is never drawn in part.', 'the native side\'s own words pass through');
+  assert.strictEqual(refusalWords('the AI line says it has 0 points'), 'Not drawn: the AI line says it has 0 points. What does not read whole is never drawn in part.', 'the native side\'s own words pass through');
 });
 
 test('L250: an open line draws open: no span and no edge joins its last point to its first; a lap whose ends are 2 spacings apart is closed', () => {
@@ -167,4 +167,47 @@ test('L250: a layout\'s stated length is read in metres, and a line more than 5 
   const n = lineNotes({ lengthM: 2469, uiM: 200, same: ['“a”', '“b”', '“c”'], samePath: ['“d”'] });
   assert.strictEqual(n.length, 3);
   assert.match(n[0], /the same AI line as “a”, “b” and “c”/); assert.match(n[1], /the same points as “d”, with widths of its own/); assert.match(n[2], /\+1134\.5 %/);
+});
+
+// ── L250: the road from the kn5, as the native side sends it (src/reference/road.js) ──
+const { decodeRoad, encodeRoad, roadReference } = require('../src/reference/road.js');
+/** A ring of road of radius r, w wide, n quads, as one batch (the winding left mixed on purpose: a kn5's is not ours to trust). */
+function ringRoad(r, w, n) {
+  const pos = [], idx = [];
+  for (let k = 0; k <= n; k++) { const ph = (2 * Math.PI * k) / n; pos.push((r + w / 2) * Math.cos(ph), 0, (r + w / 2) * Math.sin(ph), (r - w / 2) * Math.cos(ph), 0, (r - w / 2) * Math.sin(ph)); }
+  for (let k = 0; k < n; k++) { const a = 2 * k; if (k % 2) idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); else idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+  return { positions: new Float32Array(pos), indices: new Uint16Array(idx) };
+}
+
+test('L250: a road from the kn5 reads back exactly, its normals face up, and its triangles are counted', () => {
+  const a = ringRoad(200, 10, 300), b = { positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]), indices: new Uint16Array([0, 1, 2]) };   // an odd index count: padded
+  const road = decodeRoad(encodeRoad([a, b], { files: 3, missing: 1, surfaces: 'layout' }).buffer);
+  assert.strictEqual(road.batches.length, 2); assert.strictEqual(road.triangles, 601); assert.strictEqual(road.vertices, 605);
+  assert.deepStrictEqual([road.meta.files, road.meta.missing, road.meta.surfaces, road.meta.triangles], [3, 1, 'layout', 601], 'the header (kn5road.rs encode) reads back');
+  assert.deepStrictEqual(Array.from(road.batches[0].positions), Array.from(a.positions)); assert.deepStrictEqual(Array.from(road.batches[1].indices), [0, 1, 2]);
+  for (const bt of road.batches) for (let k = 1; k < bt.normals.length; k += 3) near(bt.normals[k], 1, 1e-6, 'a flat road\'s normal is straight up, whatever its winding');
+});
+
+test('L250: road bytes that do not read whole are refused by name, in words, and never drawn in part', () => {
+  const good = Buffer.from(encodeRoad([ringRoad(200, 10, 30)]));
+  const code = (b) => { try { decodeRoad(b); return 'read'; } catch (e) { assert.ok(e instanceof RefTrackError, e.message); return `${e.code}: ${refusalWords(e)}`; } };
+  assert.strictEqual(code(good), 'read');
+  assert.match(code(good.subarray(0, good.length - 1)), /^BAD_ROAD: Not drawn: its road from the kn5 did not come back whole \(it ends at \d+ bytes; batch 0 needs \d+\)\. What does not read whole is never drawn in part\.$/);
+  assert.match(code(Buffer.concat([good, Buffer.alloc(4)])), /^BAD_ROAD: .*\(4 bytes after the last batch\)/);
+  const past = Buffer.from(good); past.writeUInt16LE(62, past.length - 2); assert.match(code(past), /^BAD_ROAD: .*index \d+ is 62, past its 62 vertices/, 'an index past its vertices');
+  const h = 20 + good.readUInt32LE(12);   // batch 0 starts after "T180ROAD", the format, J, the JSON and the batch count
+  const odd = Buffer.from(good); odd.writeUInt32LE(179, h + 4); assert.match(code(odd), /^BAD_ROAD: .*179 indices/, 'an index count that is not three a triangle');
+  const nan = Buffer.from(good); nan.writeFloatLE(NaN, h + 8); assert.match(code(nan), /^BAD_ROAD: .*not a number/);
+  const foreign = Buffer.from(good); foreign.write('sc6969', 0, 'latin1'); assert.match(code(foreign), /^BAD_ROAD: .*does not start with T180ROAD/, 'a kn5 itself, or anything else');
+  const fmt = Buffer.from(good); fmt.writeUInt32LE(2, 8); assert.match(code(fmt), /^BAD_ROAD: .*format 2, not 1/);
+  assert.match(code(Buffer.from(encodeRoad([ringRoad(200, 10, 30)], { triangles: 61 }))), /^BAD_ROAD: .*header says 61 triangles, its batches hold 60/);
+  assert.doesNotMatch(code(good.subarray(0, 10)), /AI line/, 'a road is never called an AI line');
+  assert.throws(() => roadReference(decodeRoad(good), null), (e) => e.code === 'NO_START' && /placed by its AI line/.test(refusalWords(e)));
+});
+
+test('L250: the road is placed by its layout\'s AI line: the same start and way, so Line and Road lie on each other under one nudge', () => {
+  const line = ribbonOf(readAiShape(encodeAiLine(circleLine(200, 400)))), road = roadReference(decodeRoad(encodeRoad([ringRoad(200, 10, 300)])), line);
+  assert.strictEqual(road.kind, 'road'); assert.strictEqual(road.start, line.start); assert.strictEqual(road.edges.length, 0);
+  const anchor = { pos: [5, 2, -9], T: [0.6, 0, 0.8] }, nudge = { dx: 4, yawDeg: 25 };
+  assert.deepStrictEqual(placeAt(road, anchor, nudge), placeAt(line, anchor, nudge));
 });
