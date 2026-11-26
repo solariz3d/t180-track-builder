@@ -34,6 +34,7 @@ file in both places.
 | **the 3D preview** | `app/preview/preview.js` `createPreview`, `app/preview/index.js` `mount`; the hover pick is `pickAcross` (boxes of stations, `cullBlocks`, and `halfBound` skip what is out of reach; the same answer as reading every station) | `trackmodel.js` `createTrackModel` (path and mesh kept in step with the document), `renderer.js` `createRenderer` (far from the eye the placed road is drawn from thinner index lists: `coarseIndices`, `LOD_NEAR`; the export, the checker and the readouts never see it), `batches.js`, `look.js`, `aclook.js`, `coarse.js`, `guides.js`; cameras in `app/camera/cameras.js` `createRig` |
 | **keys** | `app/core/keys.js` `keyAction`, `sculptKey`, `bindKeys` | the camera's keys: `app/camera/cameras.js` |
 | **installing into AC and "See it"** | `app/install/install.js` `createInstaller`, `createLauncher` | `src-tauri/src/ac.rs`; before a different road is replaced, `app/core/overwrite.js` `installNeedsAsk` over `src-tauri/src/lib.rs` `installed_state` |
+| **a reference track** (L243 a first look, L250 finished: another installed track's road drawn see-through under the user's, read only) | `app/reference/panel.js` `createReferencePanel` (View ▸ Reference track…: pick, Show, Clear, the nudge; rows `app/test/reference-panel.test.js`, read only through the real shell) | `src/reference/ribbon.js` `readAiShape`, `ribbonOf`, `placeAt`, and the panel's words `refusalWords`, `sameLine`, `lineNotes`; Road mode's `src/reference/road.js` `decodeRoad`, `roadReference`; the preview's `setReference` and `t180:reference` (`app/preview/index.js`), the renderer's `drawReference`; the native side's `list_reference_tracks`, `read_reference_line` (`src-tauri/src/reference.rs`) |
 
 ## Directories
 
@@ -91,6 +92,8 @@ file in both places.
 
 **`src/lookmatch/`, comparing the preview's look with a reference render.** `raster.js` `renderView` (a CPU render), `metric.js` `compareImages`, `kn5scene.js` `readScene`, `dds.js` `decodeDds`, `cameras.js` `resolveView`.
 
+**`src/reference/`, another track as a shadow layer (L243, a first look).** `ribbon.js`: an installed track's `ai/fast_lane.ai` read up to its grid (`readAiShape`; `readAiLine` refuses a grid), its road as a ribbon of triangles at true scale (`ribbonOf`), and where it sits (`placeAt`: its start on the user's start, nudged by hand, never scaled); what the panel says of a line that does not read (`refusalWords`) or that is another layout's (`sameLine`, `lineNotes`, L250). `road.js` (L250): Road mode, the kn5's valid-track meshes as the native side sends them (`decodeRoad`, the bytes of `src-tauri/src/kn5road.rs`), placed by the layout's AI line (`roadReference`), or, for a layout with none, by the start its kn5 names; either start is set down on the highest road at or below it (`groundUnder`; the L250 repair, with `kn5road.rs`'s header start, and its second repair), so Line and Road lie on each other across. *why: see headers*
+
 ## `app/`
 
 - `index.html`: the page and its glue: storage and export through the native side, the panels mounted, the keys, the recovery offer.
@@ -103,6 +106,7 @@ file in both places.
 - `app/export/`: the Export button's logic (`export.js`) and the export in its own process (`exportrunner.js`, `exportjob.js`, `exportworker.js`, `node-shim.js`). *why: see headers*
 - `app/menubar/`: the top bar's menus (`menubar.js`, `items.js`), and Export layouts (`layoutsexport.js`, `layoutsdialog.js`).
 - `app/onboarding/`: the guided first track (`guide.js` `createGuide`, `firstrun.js`). `app/install/`: Install to AC and See it (`install.js`). `app/share/`: copy and paste a track code (`share.js`).
+- `app/reference/`: View ▸ Reference track… (`panel.js` `createReferencePanel`): the installed tracks and layouts listed, one picked and drawn under the user's road as Line (its AI line) or Road (its kn5), Show and Clear, the nudge; read only (L243, L250). Its look is one class, `.reference-panel` (its own `<style>`, `CSS` in panel.js), on the page's pane tokens (`--panel`, `--text`, `--dim`, `--line`, the corner `--r3`), with nothing inline, so a look styles it under `[data-theme]`.
 - `app/markers/`, `app/texture/`, `app/texmaker/`: those panels' logic, each with no DOM (`createMarkersController`, `createTextureController`, `createEditor`).
 - `app/lib/`: `cjs.js` (loads the CommonJS files in the webview, `loadCjs`), `theme.js` (the look per melody), `tokens.js` (the look's colours for canvas and GL).
 - `app/themes/`: one stylesheet per look. `app/sounds/`: the recorded samples. `app/sound.js`: the sounds and melodies (`createSound`).
@@ -119,7 +123,9 @@ texture tile), `test-fast.cjs` (the suite minus the mutation harnesses and the f
 ## `src-tauri/`
 
 - `src/lib.rs`: the native side's commands: track files (`save_track`, `open_track`, `list_tracks`), backups, undo and autosave, saved pieces and the piece library (and each piece's `.t180recipe` sidecar: `save_recipe`, `open_recipe`, `delete_recipe`), finding the AC folder (`find_ac_root`), install and See it (`install_track`, `see_it_in_assetto`). *why: see header*
+- `src/kn5road.rs` (L250): a reference track's ROAD from its kn5 files for the shadow layer's Road mode: only the meshes AC counts as valid track (`read_road`; `is_valid_track` is the name rule), as positions and 16-bit indices in the bytes `encode` lays out for the page, with the layout's start from its AC_START_0 or time-line dummies (`start_of`) for a layout with no AI line; the command is `read_reference_road` in `lib.rs`; read only. *why: see header*
 - `src/ac.rs`: Install to AC and See it. `src/backups.rs`: a save moves the old file aside (`move_aside`). `src/main.rs`: the entry point.
+- `src/reference.rs` (L243): the installed tracks and layouts a reference can be picked from (`list_layouts`), and one AI line read up to its grid (`read_shape`); read only.
 - `build.rs`: copies `app/`, `src/` and `tools/` into `src-tauri/dist` for the bundle (tests are left out).
 - `release.cjs`: builds the installer and checks it holds nothing from the building machine. `tauri.conf.json`, `capabilities/default.json`, `icons/`.
 

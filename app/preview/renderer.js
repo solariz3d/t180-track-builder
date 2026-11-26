@@ -12,6 +12,10 @@
 //                                                         see-through, with their own lines, after the placed track;
 //                                                         overlay = [{ positions (world line pairs), colour, alpha? }] drawn last,
 //                                                         over everything (the mirror ghost)
+//       extras.reference = { batches: [{ positions, normals, indices }], edges, model, colour?, alpha? }   (L243) ANOTHER TRACK'S ROAD
+//                   (src/reference/ribbon.js), drawn see-through BEFORE the placed road (L250), depth-tested and writing no depth, so the
+//                   user's road is drawn over it wherever the two overlap on screen and the reference never hides or tints it; `model` places
+//                   it (row-vector, no scale); its colour is the skin's --reference token (themeFrom), else REFERENCE.colour
 //       extras.look = 'ac' (the default) with extras.materialOf(batch) -> the EXPORTED material ({ name, shader, props,
 //                   samplers, alphaTested }) and extras.textures (a Map, texture file -> { width, height, rgba }): each
 //                   batch is drawn with its AC shader (acshaders.js, the Ms-PL port) and the uniforms aclook.js
@@ -296,6 +300,8 @@ function coarseIndices(c, level) {
 const levelOf = (c, eye) => { if (!eye || chunkModel(c) !== c.model) return 0; const d = boxDistance(c, eye); return d < LOD_NEAR ? 0 : d < LOD_FAR ? 1 : 2; };
 const COLOURS = Object.freeze({ edge: [0.93, 0.93, 0.88], tie: [0.06, 0.07, 0.09], grid: [0.2, 0.23, 0.28], marker: [1.0, 0.62, 0.15], ghost: [0.73, 0.66, 1.0] });   // 2026-10-14, Sigil: the accent violet (#b9a8ff); was sky blue, which tinted the whole view
 const GHOST_ALPHA = 0.42;
+// (L243) the reference track's shadow: a cool teal, apart from the ghost's violet and the road's grey, faint, with brighter edges so its outline reads from overhead
+const REFERENCE = Object.freeze({ colour: [0.42, 0.98, 0.90], alpha: 0.45, edgeAlpha: 1 });
 // From a usability pass: the ties are one near-black line per station; from overhead or far
 // away they outnumber the pixels and hatch the lit road dark (measured: 42–51% of the overhead's drawn pixels near-black),
 // so they fade out between 60 and 250 m (the edges stay). And the canvas is cleared darker than the FOG colour: surfaces
@@ -307,12 +313,13 @@ const CLEAR = Object.freeze([0.024, 0.023, 0.021]);   // 2026-10-14, Sigil: a wa
 const FOG = Object.freeze([0.07, 0.08, 0.1]);
 // a skin's 3D colours, read from the page's tokens (app/lib/tokens.js); each falls back to the literal here, which is SIGIL's token value too
 // and its sky, --sky-style (none when the page has none) with --sky-a, --sky-b and --sky-c, each falling back to the skin's --sky
-const themeFrom = (T) => { const sky = T.floats('--sky', CLEAR); return { sky, fog: T.floats('--fog', FOG), edge: T.floats('--road-edge', COLOURS.edge), tie: T.floats('--road-tie', COLOURS.tie), grid: T.floats('--ground-grid', COLOURS.grid),
+// (L250) and the reference track's shadow, --reference, so each skin can set it (none does yet: the default is REFERENCE.colour)
+const themeFrom = (T) => { const sky = T.floats('--sky', CLEAR); return { sky, fog: T.floats('--fog', FOG), edge: T.floats('--road-edge', COLOURS.edge), tie: T.floats('--road-tie', COLOURS.tie), grid: T.floats('--ground-grid', COLOURS.grid), reference: T.floats('--reference', REFERENCE.colour),
   skyStyle: T.word('--sky-style', 'none'), skyA: T.floats('--sky-a', sky), skyB: T.floats('--sky-b', sky), skyC: T.floats('--sky-c', sky), vignette: T.word('--vignette', 'on') }; };
 
 function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chunkVertices = CHUNK_V } = {}) {
   if (!gl) throw new Error('renderer: no WebGL context');
-  let edge = COLOURS.edge, tie = COLOURS.tie, gridColour = COLOURS.grid;   // setTheme replaces these, the clear colour and the fog
+  let edge = COLOURS.edge, tie = COLOURS.tie, gridColour = COLOURS.grid, referenceColour = REFERENCE.colour;   // setTheme replaces these, the clear colour and the fog
   let skyStyle = 'none', skyProg = null, skyBuf = null, skyA = null, skyB = null, skyC = null;   // the sky; a colour left null is the clear colour
   let vigProg = null;   // while a skin names the vignette (THE VIGNETTE above): { geo, back }, its pass over the drawn road and its backdrop; else null
   if (!(Number.isInteger(chunkVertices) && chunkVertices > 0 && chunkVertices <= CHUNK_V)) throw new Error(`renderer: chunkVertices must be a whole number from 1 to ${CHUNK_V}`);
@@ -449,6 +456,23 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     bufferFor(arr, gl.ARRAY_BUFFER); gl.vertexAttribPointer(line.pos, 3, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.LINES, 0, arr.length / 3); lines++;
   }
+  function drawReference(ref, vp) {
+    const model = new Float32Array(ref.model || IDENTITY), c = ref.colour || referenceColour;
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+    // no fog on the shadow: it is a guide, like the grid, and from an overhead 2-3 km up the fog left about 5 % of its colour (seen in the first pictures, L243)
+    use(surf, vp); gl.uniform1f(surf.fogD, 0); gl.uniform1f(surf.alpha, ref.alpha === undefined ? REFERENCE.alpha : ref.alpha);
+    gl.enableVertexAttribArray(surf.pos); gl.enableVertexAttribArray(surf.nrm);
+    gl.uniformMatrix4fv(surf.model, false, model); gl.uniform3f(surf.colour, c[0], c[1], c[2]);
+    for (const b of ref.batches || []) {
+      bufferFor(b.positions, gl.ARRAY_BUFFER); gl.vertexAttribPointer(surf.pos, 3, gl.FLOAT, false, 0, 0);
+      bufferFor(b.normals, gl.ARRAY_BUFFER); gl.vertexAttribPointer(surf.nrm, 3, gl.FLOAT, false, 0, 0);
+      bufferFor(b.indices, gl.ELEMENT_ARRAY_BUFFER);
+      gl.drawElements(gl.TRIANGLES, b.indices.length, gl.UNSIGNED_SHORT, 0); draws++; tris += b.indices.length / 3;
+    }
+    gl.disableVertexAttribArray(surf.nrm);
+    if (ref.edges && ref.edges.length) { use(line, vp); gl.uniform1f(line.fogD, 0); gl.enableVertexAttribArray(line.pos); drawLines(ref.edges, model, c, REFERENCE.edgeAlpha); }
+    gl.depthMask(true); gl.disable(gl.BLEND);
+  }
   function drawRoadLines(chunks, vp, alpha, blending = false, eye = null) {
     use(line, vp); gl.enableVertexAttribArray(line.pos);
     // the ties fade with distance, which needs blending; the ghost pass has it on already
@@ -497,12 +521,12 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     gl.disable(gl.BLEND); gl.depthFunc(gl.LESS); gl.depthMask(true);
   }
   return {
-    /** A skin's 3D colours, { sky, fog, edge, tie, grid }, each [r, g, b] from 0 to 1 (themeFrom(tokens) reads them); a key left out keeps its colour. */
+    /** A skin's 3D colours, { sky, fog, edge, tie, grid, reference }, each [r, g, b] from 0 to 1 (themeFrom(tokens) reads them); a key left out keeps its colour. */
     setTheme(t) {
       const ok = (v) => Array.isArray(v) && v.length === 3 && v.every((x) => typeof x === 'number' && x >= 0 && x <= 1);
       for (const k of Object.keys(t || {})) {
         if (k === 'skyStyle' || k === 'vignette') continue;
-        if (!['sky', 'fog', 'edge', 'tie', 'grid', 'skyA', 'skyB', 'skyC'].includes(k)) throw new Error(`renderer: setTheme has no colour named ${k}`);
+        if (!['sky', 'fog', 'edge', 'tie', 'grid', 'skyA', 'skyB', 'skyC', 'reference'].includes(k)) throw new Error(`renderer: setTheme has no colour named ${k}`);
         if (!ok(t[k])) throw new Error(`renderer: the ${k} colour is three numbers from 0 to 1, got ${JSON.stringify(t[k])}`);
       }
       // the sky is compiled here, so an unknown style or a pattern that does not compile fails at the skin change, before anything is replaced
@@ -524,7 +548,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
         }
         if (t.vignette === 'none' && vigProg) { gl.deleteProgram(vigProg.geo.p); gl.deleteProgram(vigProg.back.p); vigProg = null; }
       }
-      if (t.sky) clear = t.sky; if (t.fog) fog = t.fog; if (t.edge) edge = t.edge; if (t.tie) tie = t.tie; if (t.grid) gridColour = t.grid;
+      if (t.sky) clear = t.sky; if (t.fog) fog = t.fog; if (t.edge) edge = t.edge; if (t.tie) tie = t.tie; if (t.grid) gridColour = t.grid; if (t.reference) referenceColour = t.reference;
       if (t.skyA) skyA = t.skyA; if (t.skyB) skyB = t.skyB; if (t.skyC) skyC = t.skyC;
     },
     draw(batches, pose, { width, height }, extras = {}) {
@@ -541,6 +565,8 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       if (skyProg) drawSky(skyBasis(pose, width / height), time, width, height); else if (vigProg) drawBackdrop(width, height);
       const vp = new Float32Array(M.viewProj(pose, width / height));
       if (extras.grid) { use(line, vp); gl.enableVertexAttribArray(line.pos); drawLines(extras.grid.positions, IDENTITY, gridColour, 1); }
+      // (L250) another track's road goes down BEFORE the user's: it writes no depth, so the user's road is drawn over it wherever they overlap (his road in front)
+      if (extras.reference && extras.reference.batches && extras.reference.batches.length) drawReference(extras.reference, vp);
       let chunks;
       if (look === 'ac' && typeof extras.materialOf === 'function') {
         const materialOf = extras.materialOf;
@@ -587,4 +613,4 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
   };
 }
 
-module.exports = { VIGNETTE_VS, VIGNETTE_FS, BACKDROP_FS, createRenderer, coarseIndices, levelOf, LOD_NEAR, LOD_FAR, LOD_STEP, themeFrom, skyBasis, VS, FS, LVS, LFS, SKY_VS, skyFS, COLOURS, GHOST_ALPHA, TIE_FADE, CLEAR, FOG };
+module.exports = { VIGNETTE_VS, VIGNETTE_FS, BACKDROP_FS, createRenderer, coarseIndices, levelOf, LOD_NEAR, LOD_FAR, LOD_STEP, themeFrom, skyBasis, VS, FS, LVS, LFS, SKY_VS, skyFS, COLOURS, GHOST_ALPHA, REFERENCE, TIE_FADE, CLEAR, FOG };

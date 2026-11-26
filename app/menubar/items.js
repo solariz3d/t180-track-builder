@@ -4,7 +4,7 @@
 //   fileItems(ctx, { developer })        the slot under File's own controls: Developer ▸ (trackmenu.developerItems: Open example…) when there is any
 //   apronField(doc, shell)               Track ▸ Edge apron, the track's apron width in metres, set through the shell (one undo step), with its help line
 //   editItems(ctx, { selection })        Undo, Redo, then the selection's entries (piecesui.items, which bring their own Selection heading), when there are any
-//   viewItems(ctx)                       Drag handles and Colour by grip (saved settings), Show the guide
+//   viewItems(ctx)                       Drag handles and Colour by grip (saved settings), Show the guide, Reference track… (L243: the page's panel, app/reference/panel.js)
 //   settingsItems(ctx, { soundRow, acFolder, acAllow, blenderItem })   sound, the theme, how the turn and climb are read, the grid step, mirror on insert, the checker's wall
 //                                        raycasting, the Assetto Corsa folder and launch permission, Reset the guide
 //   authorName(settings)                 the saved author name, trimmed, at most 64 characters; '' for none (then the export writes t180-track-builder)
@@ -57,6 +57,7 @@ function viewItems() {
     tick('Colour by grip', 'colourByGrip', 'the track coloured blue below 100% grip, white at 100%, orange above'),
     { separator: true },
     { label: 'Show the guide', title: 'the six-step first track', run: (c) => { const b = c.doc.querySelector('#guide .guide-open'); if (b) b.click(); } },
+    { label: 'Reference track…', title: "show another track installed in Assetto Corsa under yours, see-through and at true scale, to study it by eye (read only: nothing is saved or exported)", run: (c) => { c.doc.dispatchEvent(new c.doc.defaultView.CustomEvent('t180:reference-panel')); } },
   ];
 }
 
