@@ -35,8 +35,8 @@ const DEFAULTS = Object.freeze({ side: 'R', offsetM: 12, width: 8, divergeM: 80,
 // THE SMALLEST GAP THE PANEL LAYS (D677, pane A): a lane whose gap from the road is 0 lies on the road's own edge along its whole run, and the export refuses
 // it on any road (src/export/pitlane.js: its run meets the road, and the downforce ray falls between them; 332 red on a flat 300 m straight). Measured on
 // synthetic roads (flat, a 15° cup, the default font, turning 90°, a 30° cup, a 25° edge; both sides): red at 0, 0.005 and 0.01 m, clean from 0.02 m.
-// 0.1 m stands above both that and the 2-9 cm the road mesh's edge sits from the formula's edge (src/export/pitlane.js infill). The core shell refuses
-// less (app/core/coreshell.js setPitLane). RANGE keeps its 0: a stored lane is not re-judged, so a file holding a smaller gap still opens.
+// 0.1 m stands above both that and the 2-9 cm the road mesh's edge sits from the formula's edge (src/export/pitlane.js infill). It is a margin, not the least gap that
+// exports (pane O measured 0.012 m and up clean). The core shell refuses a gap CHANGED to less (app/core/coreshell.js setPitLane). RANGE keeps its 0: a stored lane is not re-judged, so a file holding a smaller gap still opens.
 const PIT_GAP_MIN_M = 0.1;
 
 const inRange = (v, [a, b]) => Number.isFinite(v) && v >= a && v <= b;
