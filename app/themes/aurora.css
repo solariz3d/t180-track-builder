@@ -55,6 +55,7 @@
 /* Export to Assetto Corsa: the one call to action, lit like the curtain itself: the curtain's gradient is its fill, with no glow; at r2, as every control here
    (index.html makes it a capsule at factor 1 only) */
 [data-theme="aurora"] header #install > button { color: #03130d; border-color: #9dffd9; background: linear-gradient(100deg, #7cf7c6 0%, #6fe3d8 45%, #b9a2ff 100%); box-shadow: none; }
+[data-theme="aurora"] header #install > button:hover:not([disabled]) { background: var(--accent-hover); }   /* L255: step 10, the solid fill hovered (spec §6); the rule above outranked every hover */
 [data-theme="aurora"] #winctl button { background: transparent; border-color: transparent; border-radius: 0; box-shadow: none; }
 [data-theme="aurora"] #win-min:hover, [data-theme="aurora"] #win-max:hover { background: rgba(111, 245, 192, .12); box-shadow: none; }
 [data-theme="aurora"] #win-close:hover { background: #b0303a; box-shadow: none; }
@@ -70,7 +71,7 @@
 [data-theme="aurora"] input[type="number"]::-webkit-inner-spin-button { background-color: var(--dim); }   /* the spin chevrons in this skin's colours (their shape is in index.html) */
 [data-theme="aurora"] input[type="number"]::-webkit-inner-spin-button:hover { background-color: var(--accent); }
 [data-theme="aurora"] input[type="number"]::-webkit-inner-spin-button:active { background-color: #c9a8ff; }
-[data-theme="aurora"] input:focus, [data-theme="aurora"] select:focus, [data-theme="aurora"] textarea:focus { border-color: var(--accent); box-shadow: none; }   /* the rim turns green; the ring is index.html's (L249: no glow) */
+[data-theme="aurora"] input:focus, [data-theme="aurora"] select:focus, [data-theme="aurora"] textarea:focus { box-shadow: none; }   /* L255: the rim keeps its resting colour; the ring is index.html's, the one focus mark (L249: no glow) */
 [data-theme="aurora"] option { background: #080a1a; color: var(--text); }
 [data-theme="aurora"] option:checked { background: rgba(160, 120, 255, .35); color: #fff; }
 @supports (appearance: base-select) {
