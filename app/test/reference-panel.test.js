@@ -15,6 +15,9 @@
 //   READ ONLY, each through the real core shell and preview, for Line and for Road: R1 the document, R2 a save (the track and its undo file),
 //   R3 an undo step, R4 an export
 //   D1  the draw: the reference goes down before his road and writes no depth, so his road is drawn over it; D2 its colour is the --reference token
+//   THE REPAIR (pane E's read of L250, p-l250-read-E_2026-11-26.md :71-86): P6 (E's V3e) and P7 (E's V3f) a mode change while a road is still reading
+//   draws his newest pick, in the mode the panel names; N1 a nudge value that is not a number keeps the nudge it had; L1 the panel's look is a class on
+//   the page's own pane tokens, nothing inline, so a look can style it
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -48,12 +51,13 @@ const shortOf = (b) => b.subarray(0, b.length - 512 - 4 - 8);   // up to its gri
 
 /** The native side, read only: the layouts, and each one's bytes (or the native side's own refusal, a string, as Tauri rejects with). */
 function nativeOf(entries) {
-  const calls = [], gate = new Map();
+  const calls = [], gate = new Map(), roadGate = new Map();   // gate: a line read held, by layout; roadGate: a road read held, by `${track}\0${layout}`
   const call = async (cmd, args) => {
     calls.push(cmd);
     if (cmd === 'list_reference_tracks') return entries.map(({ track, layout, bytes, uiLength = null }) => ({ track, layout, hasAi: bytes !== null, uiLength }));
     const e = entries.find((x) => x.track === args.track && x.layout === args.layout);
     if (cmd === 'read_reference_road') {
+      if (roadGate.has(`${args.track}\u0000${args.layout}`)) await roadGate.get(`${args.track}\u0000${args.layout}`);
       if (!e || e.road === undefined) throw 'no kn5 in that folder';   // eslint-disable-line no-throw-literal
       if (typeof e.road === 'string') throw e.road;   // eslint-disable-line no-throw-literal
       return e.road.buffer.slice(e.road.byteOffset, e.road.byteOffset + e.road.byteLength);
@@ -64,8 +68,12 @@ function nativeOf(entries) {
     if (typeof e.bytes === 'string') throw e.bytes;   // eslint-disable-line no-throw-literal
     return e.bytes.buffer.slice(e.bytes.byteOffset, e.bytes.byteOffset + e.bytes.byteLength);   // an ArrayBuffer, as the page gets it
   };
-  return { call, calls, gate };
+  return { call, calls, gate, roadGate };
 }
+/** A read held open until its gate is opened: [the promise the stand-in waits on, open]. */
+const held = () => { let open; const pr = new Promise((r) => { open = r; }); return [pr, open]; };
+/** The length of a circle of radius r drawn through n points, as ribbonOf measures it. */
+const lapM = (r, n) => n * 2 * r * Math.sin(Math.PI / n);
 const LAP = aiLine(200, 400), WIDE = aiLine(200, 400, { sideLeft: 9 });
 /** A ring of road of radius r, w wide, n quads, in road.js's bytes: what read_reference_road sends. */
 function ringRoad(r, w, n) {
@@ -108,6 +116,9 @@ function fakeDoc() {
   return { doc, root: new El('div') };
 }
 const optionsOf = (panel, root) => root.children[0].children[1].children.map((o) => ({ text: o.textContent, value: o.value, disabled: o.disabled }));
+/** Every element under e (e first), and the first one whose aria-label starts with `label`. */
+const elementsOf = (e) => [e, ...e.children.filter((c) => c.tagName).flatMap(elementsOf)];
+const labelled = (root, label) => elementsOf(root).find((e) => (e.getAttribute('aria-label') || '').startsWith(label));
 
 /** A headless preview of the shell (the recording WebGL is a no-op), stepped a frame at a time. */
 function headless(s) {
@@ -224,6 +235,89 @@ test('RD2: a road that does not read is refused in words and the one shown befor
   await panel.setMode('line');
   assert.equal(optionsOf(panel, root).find((x) => x.text.startsWith('reference track 1 · one')).disabled, false, 'its line is still there to pick');
   await panel.pick('reference track 1', 'one'); assert.ok(p.reference(), 'and it draws');
+});
+
+// ── the repair (pane E's read): a mode change while a road is still reading; a nudge that is not a number; the look ──
+
+test('P6 (E\'s V3e): Road shows one layout; he picks another, its road still reading, and changes to Line: his newest pick is drawn, as Line', async () => {
+  const { p, panel, native, root } = await setup();
+  await panel.setMode('road'); await panel.pick('reference track 2', '');
+  const [pr, open] = held(); native.roadGate.set('reference track 1\u0000', pr);
+  const slow = panel.pick('reference track 1', '');
+  const mode = panel.setMode('line');
+  open(); await slow; await mode;
+  const st = panel.state();
+  assert.equal(st.picked, 'reference track 1\u0000', 'his newest pick, not the one shown before it');
+  assert.equal(st.mode, 'line'); assert.equal(st.kind, 'line', 'in the mode he changed to');
+  assert.ok(Math.abs(p.reference().lengthM - lapM(200, 400)) < 0.01, 'reference track 1 is what is drawn');
+  assert.equal(root.children[0].children[1].value, 'reference track 1\u0000', 'and the select names it');
+});
+
+test('P7 (E\'s V3f): nothing shown, Road; a road still reading when he changes to Line: it is drawn in the mode the panel names', async () => {
+  const { p, panel, native } = await setup();
+  await panel.setMode('road');
+  const [pr, open] = held(); native.roadGate.set('reference track 2\u0000', pr);
+  const slow = panel.pick('reference track 2', '');
+  const mode = panel.setMode('line');
+  open(); await slow; await mode;
+  const st = panel.state();
+  assert.equal(st.mode, 'line'); assert.equal(st.kind, 'line', 'drawn as the panel says'); assert.equal(st.picked, 'reference track 2\u0000');
+  assert.ok(Math.abs(p.reference().lengthM - lapM(150, 300)) < 0.01, 'reference track 2 is what is drawn');
+  assert.match(st.readout, /^942 m along its line/);
+});
+
+test('P8: a pick that ended, cleared while it read or refused, is not drawn by a later mode change', async () => {
+  const { p, panel, native } = await setup();
+  await panel.setMode('road');
+  const [pr, open] = held(); native.roadGate.set('reference track 2\u0000', pr);
+  const slow = panel.pick('reference track 2', '');
+  await panel.clear(); open(); await slow;
+  await panel.setMode('line');
+  assert.equal(p.reference(), null, 'cleared while it read: nothing drawn after the mode change'); assert.equal(panel.state().picked, null);
+  await panel.setMode('road');
+  await panel.pick('reference track 1', 'one');   // its road does not read (RD2)
+  assert.equal(p.reference(), null);
+  await panel.setMode('line');
+  assert.equal(p.reference(), null, 'refused: nothing drawn until he picks it again'); assert.equal(panel.state().picked, null);
+});
+
+test('N1: a nudge value that is not a number, typed or given, keeps the nudge it had (the box shows it again), and nothing moves', async () => {
+  const { s, p, panel, root } = await setup();
+  s.extend({ length: 120 }); p.step();
+  await panel.pick('reference track 2', '');
+  const x = labelled(root, 'move the reference: x ');
+  x.value = '12'; await x.onchange();
+  assert.equal(panel.state().nudge.dx, 12, 'a number is taken');
+  const moved = p.reference().start.slice();
+  // '' is what a browser's number box gives for a value it cannot hold ("1e400", "abc") and for a box emptied
+  for (const bad of ['', 'abc', '1e400', 'Infinity']) {
+    x.value = bad; await x.onchange();
+    assert.equal(panel.state().nudge.dx, 12, `typed ${JSON.stringify(bad)}: the nudge it had`);
+    assert.equal(x.value, '12', `typed ${JSON.stringify(bad)}: the box shows it again`);
+    assert.deepEqual(p.reference().start, moved, `typed ${JSON.stringify(bad)}: drawn where it was`);
+  }
+  for (const bad of [Number.NaN, Infinity, 'abc', null]) {
+    await panel.setNudge({ dx: bad, yawDeg: 15 });
+    assert.equal(panel.state().nudge.dx, 12, `given ${String(bad)}: the nudge it had`); assert.equal(panel.state().nudge.yawDeg, 15, 'the good value beside it is taken');
+  }
+  x.value = '0'; await x.onchange(); assert.equal(panel.state().nudge.dx, 0, 'a typed 0 is 0');
+});
+
+test('L1: the panel\'s look is one class on the page\'s own pane tokens, with nothing inline, so a look can style it', async () => {
+  const { panel, root } = await setup();
+  const box = root.children[0], style = root.children.find((e) => e.tagName === 'STYLE');
+  assert.equal(box.className, 'reference-panel');
+  for (const e of elementsOf(box)) assert.equal(e.style.cssText || '', '', `${e.tagName}.${e.className || ''} carries no inline style`);
+  assert.deepEqual(Object.keys(box.style).filter((k) => box.style[k] !== undefined && k !== 'display'), [], 'the panel itself only says whether it is open');
+  assert.ok(style, 'the panel brings its class rule');
+  const rule = (style.textContent.match(/\.reference-panel\s*\{([^}]*)\}/) || [])[1] || '';
+  assert.match(rule, /background:\s*var\(--panel\b/, 'its ground is the page\'s panel');
+  assert.match(rule, /(^|;)\s*color:\s*var\(--text\b/, 'its words the page\'s text on that panel');
+  assert.match(rule, /border:\s*1px solid var\(--line\b/, 'its edge the page\'s line');
+  assert.match(rule, /border-radius:\s*var\(--r3\b/, 'its corner a step of the page\'s radius scale (a popover\'s, r3)');
+  const literals = style.textContent.replace(/var\(--[\w-]+(,[^()]*(\([^()]*\))?[^()]*)?\)/g, '');
+  assert.doesNotMatch(literals, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(|color-mix\(/i, 'no colour of its own outside a token\'s fallback');
+  assert.equal(panel.isOpen(), true);
 });
 
 // ── read only: the document, a save, an undo step and an export ──

@@ -106,7 +106,7 @@ file in both places.
 - `app/export/`: the Export button's logic (`export.js`) and the export in its own process (`exportrunner.js`, `exportjob.js`, `exportworker.js`, `node-shim.js`). *why: see headers*
 - `app/menubar/`: the top bar's menus (`menubar.js`, `items.js`), and Export layouts (`layoutsexport.js`, `layoutsdialog.js`).
 - `app/onboarding/`: the guided first track (`guide.js` `createGuide`, `firstrun.js`). `app/install/`: Install to AC and See it (`install.js`). `app/share/`: copy and paste a track code (`share.js`).
-- `app/reference/`: View ▸ Reference track… (`panel.js` `createReferencePanel`): the installed tracks and layouts listed, one picked and drawn under the user's road as Line (its AI line) or Road (its kn5), Show and Clear, the nudge; read only (L243, L250).
+- `app/reference/`: View ▸ Reference track… (`panel.js` `createReferencePanel`): the installed tracks and layouts listed, one picked and drawn under the user's road as Line (its AI line) or Road (its kn5), Show and Clear, the nudge; read only (L243, L250). Its look is one class, `.reference-panel` (its own `<style>`, `CSS` in panel.js), on the page's pane tokens (`--panel`, `--text`, `--dim`, `--line`, the corner `--r3`), with nothing inline, so a look styles it under `[data-theme]`.
 - `app/markers/`, `app/texture/`, `app/texmaker/`: those panels' logic, each with no DOM (`createMarkersController`, `createTextureController`, `createEditor`).
 - `app/lib/`: `cjs.js` (loads the CommonJS files in the webview, `loadCjs`), `theme.js` (the look per melody), `tokens.js` (the look's colours for canvas and GL).
 - `app/themes/`: one stylesheet per look. `app/sounds/`: the recorded samples. `app/sound.js`: the sounds and melodies (`createSound`).

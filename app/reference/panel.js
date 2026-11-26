@@ -32,36 +32,59 @@ const NOTE = Object.freeze({
   both: ' Its start sits on your start, at your start\'s height, placed by its AI line; your road is drawn over it. Read only: nothing is saved, undone or exported.',
 });
 
+// THE LOOK (L250 repair, pane E's read): one class, on the page's own pane tokens (index.html :root, each look's [data-theme] block): the ground is
+// --panel, the words --text and --dim (the pair every look checks for 4.5:1 on its own panel), the edge --line, the corner the radius scale's r3 (a
+// popover's, as the guide card's; 4 px, SIGIL's r3, until that scale is on the page). Nothing is inline, so a look's own rule reaches every part of it
+// ([data-theme="<look>"] .reference-panel …). Its fallbacks are SIGIL's own values.
+const CSS = `
+.reference-panel { position: absolute; top: 44px; right: 10px; z-index: 6; width: 300px; padding: 8px 10px; font: 12px/1.4 var(--body, system-ui);
+  background: var(--panel, #0b0b0a); color: var(--text, #ebe6dc); border: 1px solid var(--line, #24221f); border-radius: var(--r3, 4px); }
+.reference-panel .rp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; }
+.reference-panel .rp-shut { background: none; border: 0; color: inherit; cursor: pointer; font: inherit; }
+.reference-panel .rp-pick { width: 100%; margin-bottom: 6px; }
+.reference-panel .rp-ctl { display: flex; gap: 12px; align-items: center; margin-bottom: 6px; }
+.reference-panel .rp-show { display: flex; gap: 4px; align-items: center; cursor: pointer; }
+.reference-panel .rp-nudge { display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; align-items: center; margin-bottom: 6px; }
+.reference-panel .rp-nudge input { width: 90px; }
+.reference-panel .rp-readout { color: var(--dim, #8a847a); min-height: 2.8em; }
+.reference-panel .rp-notes { font-size: 11px; margin-top: 4px; }
+.reference-panel .rp-note { color: var(--dim, #8a847a); font-size: 11px; margin-top: 4px; }`;
+
+/** A nudge value: a finite number, or a string that is one (a number box's value); anything else is NaN, and the nudge keeps the value it had. */
+const numberOf = (v) => (typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : Number.NaN);
+
 function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView && doc.defaultView.performance ? doc.defaultView.performance.now() : Date.now()) }) {
-  const win = doc.defaultView, el = (tag, css, text) => { const e = doc.createElement(tag); if (css) e.style.cssText = css; if (text !== undefined) e.textContent = text; return e; };
-  const box = el('div', 'position:absolute;top:44px;right:10px;z-index:6;width:300px;display:none;padding:8px 10px;border-radius:6px;font:12px/1.4 var(--body, system-ui);color:var(--on-ink, #eef1f6);background:color-mix(in srgb, var(--veil, #0b0d11) 88%, transparent);border:1px solid var(--veil-rule, rgba(255, 255, 255, .14))');
-  box.className = 'reference-panel'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'reference track');
-  const head = el('div', 'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-weight:600'), title = el('span', '', 'Reference track');
-  const shut = el('button', 'background:none;border:0;color:inherit;cursor:pointer;font:inherit', '✕'); shut.title = 'close the panel (the reference stays as it is: Show hides it, Clear takes it away)';
+  const win = doc.defaultView, el = (tag, cls, text) => { const e = doc.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+  const box = el('div', 'reference-panel'); box.style.display = 'none';
+  box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'reference track');
+  const head = el('div', 'rp-head'), title = el('span', '', 'Reference track');
+  const shut = el('button', 'rp-shut', '✕'); shut.title = 'close the panel (the reference stays as it is: Show hides it, Clear takes it away)';
   head.append(title, shut);
-  const pickEl = el('select', 'width:100%;margin-bottom:6px'); pickEl.setAttribute('aria-label', 'the installed track to show');
-  const ctl = el('div', 'display:flex;gap:12px;align-items:center;margin-bottom:6px');
+  const pickEl = el('select', 'rp-pick'); pickEl.setAttribute('aria-label', 'the installed track to show');
+  const ctl = el('div', 'rp-ctl');
   const modeEl = el('select', ''); modeEl.setAttribute('aria-label', 'draw it from its AI line or its kn5');
   for (const [v, t] of MODES) { const o = el('option', '', t); o.value = v; modeEl.append(o); }
   modeEl.value = 'line';
   const showBox = el('input'); showBox.type = 'checkbox'; showBox.checked = true; showBox.setAttribute('aria-label', 'show the reference');
-  const showLabel = el('label', 'display:flex;gap:4px;align-items:center;cursor:pointer'); showLabel.append(showBox, 'Show');
+  const showLabel = el('label', 'rp-show'); showLabel.append(showBox, 'Show');
   const clearBtn = el('button', '', 'Clear'); clearBtn.title = 'take the reference away: the pick and the nudge';
   ctl.append(modeEl, showLabel, clearBtn);
-  const rows = el('div', 'display:grid;grid-template-columns:auto 1fr;gap:3px 8px;align-items:center;margin-bottom:6px'), inputs = {};
+  const rows = el('div', 'rp-nudge'), inputs = {};
   for (const [k, label, unit, step] of NUDGES) {
-    const i = el('input', 'width:90px'); i.type = 'number'; i.step = String(step); i.value = '0'; i.setAttribute('aria-label', `move the reference: ${label} (${unit})`);
-    i.onchange = () => { nudge[k] = Number(i.value) || 0; send(); };
+    const i = el('input'); i.type = 'number'; i.step = String(step); i.value = '0'; i.setAttribute('aria-label', `move the reference: ${label} (${unit})`);
+    // a value the box cannot hold (a browser gives '' for "1e400" or "abc", and for a box emptied) keeps the nudge it had, and the box shows it again
+    i.onchange = () => { const v = numberOf(i.value); if (!Number.isFinite(v)) { i.value = String(nudge[k]); return; } nudge[k] = v; send(); };
     inputs[k] = i; rows.append(el('span', '', `${label} (${unit})`), i);
   }
-  // (L250) on the veil, so the words are the page's on-ink colour in every skin (--dim and --text are for the page's own ground: dark on dark in Skyline)
-  const dim = 'color-mix(in srgb, var(--on-ink, #eef1f6) 72%, transparent)';
-  const readout = el('div', `color:${dim};min-height:2.8em`), notesEl = el('div', 'color:var(--on-ink, #eef1f6);font-size:11px;margin-top:4px');
+  const readout = el('div', 'rp-readout'), notesEl = el('div', 'rp-notes');
   notesEl.setAttribute('role', 'status');
-  const note = el('div', `color:${dim};font-size:11px;margin-top:4px`, NOTE.line + NOTE.both);
-  box.append(head, pickEl, ctl, rows, readout, notesEl, note); root.append(box);
+  const note = el('div', 'rp-note', NOTE.line + NOTE.both);
+  box.append(head, pickEl, ctl, rows, readout, notesEl, note);
+  root.append(box, el('style', '', CSS));   // the box first: it is the root's first child, as it was
 
-  let layouts = null, ref = null, nudge = { ...ZERO }, shownKey = null, timing = null, error = null, notes = [], shown = true, seq = 0, mode = 'line';
+  // reading: the layout his newest pick is still reading (null once it lands, is refused or is cleared). A mode change re-reads THAT one, so a pick
+  // made while another was out is never dropped, nor drawn in the mode he left (pane E's V3e and V3f)
+  let layouts = null, ref = null, nudge = { ...ZERO }, shownKey = null, timing = null, error = null, notes = [], shown = true, seq = 0, mode = 'line', reading = null;
   // refusals are kept per mode (a road that does not read leaves its line drawable); a line that does not read is refused in both, since the line places the road
   const refused = new Map(), borrowed = new Set();   // `${mode}\0${key}` -> the words it was refused with; keys of layouts found carrying another layout's line
   const keyOf = (l) => `${l.track}\u0000${l.layout}`, rk = (k, m = mode) => `${m}\u0000${k}`;
@@ -114,7 +137,7 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
     relabel(); say(); return layouts;
   }
   async function clear() {
-    seq++;   // a pick still reading is dropped when it lands
+    seq++; reading = null;   // a pick still reading is dropped when it lands
     ref = null; shownKey = null; timing = null; error = null; notes = []; nudge = { ...ZERO };
     for (const [k] of NUDGES) inputs[k].value = '0';
     pickEl.value = ''; await send(); say(); return null;
@@ -123,7 +146,7 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
     if (track === null || track === undefined) return clear();
     const my = ++seq, m = mode, l = (layouts || []).find((x) => x.track === track && x.layout === (layout || '')) || { track, layout: layout || '', hasAi: true, uiLength: null };
     const key = keyOf(l), args = { track, layout: l.layout };
-    error = null; notes = [];
+    error = null; notes = []; reading = l;
     let shape, line, next, t0, t1, t2, lineOk = false;
     try {
       t0 = clock();
@@ -134,13 +157,14 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
       next = m === 'road' ? roadReference(decodeRoad(roadBytes), line) : line; t2 = clock();
     } catch (e) {
       if (my !== seq) return null;   // a later pick (or Clear) won: this one says nothing
+      reading = null;
       const words = refusalWords(e);
       refused.set(rk(key, lineOk ? m : 'line'), words);
       ref = null; shownKey = null; timing = null; error = `${nameOf(l)}: ${words}`;
       relabel(); await send(); say(); return null;   // what was shown before is taken down: the select no longer names it
     }
     if (my !== seq) return null;
-    ref = next; shownKey = key; timing = { readMs: t1 - t0, buildMs: t2 - t1 };
+    reading = null; ref = next; shownKey = key; timing = { readMs: t1 - t0, buildMs: t2 - t1 };
     pickEl.value = key;
     const info = await send(); say();
     const n = await notesFor(l, shape, line, my);
@@ -148,11 +172,12 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
     notes = n; relabel(); say();
     return info;
   }
-  /** Line (the AI line's ribbon) or Road (the kn5's valid-track meshes); a layout shown is read again in the new mode, with the same nudge. */
+  /** Line (the AI line's ribbon) or Road (the kn5's valid-track meshes); the layout his newest pick is still reading, else the one shown, is read again
+   *  in the new mode, with the same nudge (a re-pick: the read still out is dropped when it lands). */
   async function setMode(m) {
     if (!MODES.some(([v]) => v === m)) throw new Error(`reference panel: the mode is line or road, got ${JSON.stringify(m)}`);
     mode = m; modeEl.value = m;
-    const l = shownKey && layouts && layouts.find((x) => keyOf(x) === shownKey);
+    const l = reading || (shownKey && layouts && layouts.find((x) => keyOf(x) === shownKey));
     if (l) return pick(l.track, l.layout);
     relabel(); say(); return null;
   }
@@ -170,7 +195,8 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
     list, pick, clear, setMode,
     /** Show (true) or hide (false) the picked reference; the pick and the nudge stay. */
     show(on) { shown = !!on; showBox.checked = shown; const p = send(); say(); return p; },
-    setNudge(n) { for (const [k] of NUDGES) if (n && n[k] !== undefined) { nudge[k] = Number(n[k]) || 0; inputs[k].value = String(nudge[k]); } return send(); },
+    /** Move it by hand; a value that is not a finite number keeps the nudge it had, as the boxes do. */
+    setNudge(n) { for (const [k] of NUDGES) if (n && n[k] !== undefined) { const v = numberOf(n[k]); if (Number.isFinite(v)) nudge[k] = v; inputs[k].value = String(nudge[k]); } return send(); },
     state: () => ({ open: box.style.display !== 'none', layouts: layouts ? layouts.length : null, mode, picked: shownKey, kind: ref ? ref.kind || 'line' : null,
       triangles: ref && ref.kind === 'road' ? ref.triangles : null, shown: shown && !!ref, showOn: shown, nudge: { ...nudge },
       timing: timing ? { ...timing } : null, error, notes: notes.slice(), refused: [...refused.keys()].filter((k) => k.startsWith(`${mode}\u0000`)).length, readout: readout.textContent }),
