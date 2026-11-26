@@ -108,16 +108,58 @@ function crossSection(ix, c, f, n, step = 0.5) {
 }
 
 /**
+ * The road across a station read by rays cast DOWN inside the station's cross-plane (normal f), every `du` m along the
+ * level across: the fallback where crossSection's walk reads far narrower than the read itself (a real lap, 2026-11-26: the
+ * read's station sat 1.5 m under the top of a cupped, banked road, on a strip of road-tagged mesh, and the walk measured
+ * the strip; its 0.6 m probe start also loses a cup that turns up fast). Each ray keeps every layer it passes through;
+ * the band starts at the HIGHEST layer within `above` m over c (the drivable top, not the layer the station sat on)
+ * and is followed outwards to the layer nearest in height to the last point, ending where no layer lies within `stepMax`
+ * m (an edge, or a step onto another road): a road over the band is never taken, being metres from the band in height.
+ * Width is the 3-D length along the band, the centre its arc midpoint, the normal the surface's there. null where there
+ * is no layer under c, or the surface at c is steeper than `maxTilt` degrees (rays straight down cannot read a wall).
+ */
+function downBand(ix, c, f, { du = 0.25, reach = 25, above = 2.5, stepMax = 1.0, maxTilt = 60 } = {}) {
+  const f0 = unit(f), across = unit(cross(f0, [0, 1, 0])); if (len(cross(f0, [0, 1, 0])) < 1e-6) return null;
+  const down = unit(cross(f0, across)), D = down[1] < 0 ? down : scale(down, -1), top = 8, depth = 11;
+  const layers = (u) => { const o = add(add(c, across, u), D, -top), out = []; let t0 = 0;
+    for (let k = 0; k < 8 && t0 < depth; k++) { const h = ix.ray(add(o, D, t0), D, depth - t0); if (!h) break; out.push({ p: h.p, n: dot(h.n, D) > 0 ? scale(h.n, -1) : h.n }); t0 += h.t + 0.01; }
+    return out; };
+  const here = (u) => layers(u).filter((h) => dot(sub(h.p, c), scale(D, -1)) <= above && dot(sub(h.p, c), scale(D, -1)) >= -1);
+  const h0 = here(0)[0]; if (!h0 || Math.acos(Math.min(1, dot(h0.n, scale(D, -1)))) > maxTilt * DEG) return null;
+  const side = (sgn) => { const pts = [h0]; let arc = 0;
+    for (let k = 1; k * du <= reach; k++) {
+      const prev = pts[pts.length - 1], next = layers(sgn * k * du).map((h) => ({ h, d: len(sub(h.p, prev.p)) })).sort((a, b) => a.d - b.d)[0];
+      if (!next || next.d > stepMax) break; arc += next.d; pts.push(next.h);
+    }
+    return { pts, arc }; };
+  const L = side(1), R = side(-1), poly = [...R.pts.slice().reverse(), ...L.pts.slice(1)], width = L.arc + R.arc;
+  let acc = 0, mid = poly[0];
+  for (let i = 1; i < poly.length; i++) { const seg = len(sub(poly[i].p, poly[i - 1].p)); if (acc + seg >= width / 2) { mid = (width / 2 - acc) < seg / 2 ? poly[i - 1] : poly[i]; break; } acc += seg; }
+  return { left: L.pts[L.pts.length - 1].p, right: R.pts[R.pts.length - 1].p, width, centre: mid.p, normal: mid.n, reread: true };
+}
+
+/**
  * The mesh centreline for a read: one entry per road station, in order, with s the cumulative 3-D length of the mesh
  * centres (a jump is its chord). A station whose width differs by more than 20% from its predecessor's is FLAGGED (a seam
  * or a reader glitch, trap (a)): excluded from the fit and listed.
+ * Where the walk reads under half the read's own width (the read's `width`; a read without one is left as walked), or
+ * finds nothing, the station is read again by downBand and the band is taken when it reads wider; `reread` counts them.
+ * A jump whose LANDING lies within `drivenM` of a station the read took before the take-off has landed on road already
+ * driven (a real lap, 2026-11-26: a ramp's read "landed" 1 m off its own earlier line, heading the other way, and drove
+ * it again): the line ends at the take-off, the jump stays a break back to the start, and `falseLandings` says where.
  */
-function meshCentreline(read, ix) {
-  const out = [], jumps = [];
+function meshCentreline(read, ix, { drivenM = 20 } = {}) {
+  const out = [], jumps = [], falseLandings = []; let reread = 0, pending = null;
   for (const x of read.stations) {
-    if (x.jump) { jumps.push({ atIndex: out.length, d: x.d, gap: x.gap_m, drop: x.drop_m }); continue; }
+    if (x.jump) { pending = { atIndex: out.length, d: x.d, gap: x.gap_m, drop: x.drop_m }; jumps.push(pending); continue; }
     if (!x.c || !x.f || !x.n) continue;
-    const cs = crossSection(ix, x.c, x.f, x.n);
+    if (pending) {   // the landing: the first road station after a jump
+      const j = pending; pending = null; let on = null;
+      for (const y of out) { const g = len(sub(y.reader, x.c)); if (g < drivenM && (!on || g < on.g)) on = { g, d: y.d }; }
+      if (on) { falseLandings.push({ d: j.d, landingD: x.d, onD: on.d, distM: +on.g.toFixed(1) }); break; }
+    }
+    let cs = crossSection(ix, x.c, x.f, x.n);
+    if (x.width > 0 && (!cs || cs.width < 0.5 * x.width)) { const b = downBand(ix, x.c, x.f); if (b && (!cs || b.width > cs.width)) { cs = b; reread++; } }
     out.push({ d: x.d, k: x.k, reader: x.c, cs });
   }
   const st = out.filter((x) => x.cs);   // a station with no surface under it is left out and counted
@@ -127,7 +169,7 @@ function meshCentreline(read, ix) {
   for (let i = 0; i < st.length; i++) { const w0 = st[(i - 1 + st.length) % st.length].w, w = st[i].w; st[i].flag = Math.abs(w - w0) > 0.2 * Math.max(w, w0); }
   // jump markers by station index (the marker sits between the take-off and the landing station)
   const idxOf = (atIndex) => { let k = 0, seen = 0; for (let i = 0; i < out.length && seen < atIndex; i++) { if (out[i].cs) k++; seen++; } return k; };
-  return { st, L, missing, jumps: jumps.map((j) => ({ ...j, landing: idxOf(j.atIndex) % st.length })) };
+  return { st, L, missing, reread, falseLandings, jumps: jumps.map((j) => ({ ...j, landing: idxOf(j.atIndex) % st.length })) };
 }
 
 // ── 2. splitting ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -380,7 +422,7 @@ function summarise(t, tol) {
     bankWithin5: +(ok.filter((e) => e.bank <= 5 * DEG).length / ok.length).toFixed(4), bankP95Deg: +(pct(ok.map((e) => e.bank), 0.95) / DEG).toFixed(2), iterations: t.iterations, capped: t.capped };
 }
 
-module.exports = { roadTris, rayIndex, crossSection, meshCentreline, splitPoints, piecesOf, knotsOf, basis, basisN, bandChol, denseSolve, fitSystem, evalPiece, rmf, fitTrack, jumpChecks, summarise };
+module.exports = { roadTris, rayIndex, crossSection, downBand, meshCentreline, splitPoints, piecesOf, knotsOf, basis, basisN, bandChol, denseSolve, fitSystem, evalPiece, rmf, fitTrack, jumpChecks, summarise };
 
 if (require.main === module) {
   const args = process.argv.slice(2), flag = (k, d) => { const i = args.indexOf(k); return i < 0 ? d : args[i + 1]; };
@@ -390,7 +432,7 @@ if (require.main === module) {
   const tol = +flag('--tol', 5), main = fitTrack(mc, { tol }), hold = fitTrack(mc, { tol, holdout: true });
   // the hold-out: fitted on the even stations only, scored on the odd ones (not a verdict; how well the equation interpolates)
   const odd = hold.errs.filter((e) => e.i % 2 === 1 && !e.flag);
-  const report = { method: 'p-d184-scripts-E §1', lapM: +mc.L.toFixed(1), stations: mc.st.length, missingSurface: mc.missing, flagged: mc.st.map((x, i) => (x.flag ? i : -1)).filter((i) => i >= 0),
+  const report = { method: 'p-d184-scripts-E §1', lapM: +mc.L.toFixed(1), stations: mc.st.length, missingSurface: mc.missing, rereadByDownRays: mc.reread, falseLandings: mc.falseLandings, flagged: mc.st.map((x, i) => (x.flag ? i : -1)).filter((i) => i >= 0),
     result: summarise(main, tol), holdout: { lineWithin5: +(odd.filter((e) => e.pos <= 5).length / odd.length).toFixed(4), lineP95: +pct(odd.map((e) => e.pos), 0.95).toFixed(2) }, jumps: jumpChecks(main, mc) };
   if (args.includes('--curve')) report.curve = [10, 5, 2, 1].map((tt) => { const r = summarise(fitTrack(mc, { tol: tt }), tt); return { tolM: tt, controlPoints: r.controlPoints, dof: r.dof, lineWithin: r.lineWithin5, capped: r.capped }; });
   const w = flag('--write', null);

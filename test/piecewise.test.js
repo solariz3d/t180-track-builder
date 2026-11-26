@@ -133,3 +133,50 @@ test('the rotation-minimising frame (double reflection) on a planar circle keeps
   const r = PW.rmf(xs, ts, [0, 1, 0]);
   assert.ok(r.every((v) => Math.abs(v[1] - 1) < 1e-9), 'stays (0, 1, 0)');
 });
+
+// ── the down-ray re-read (a station on a lower layer of cupped road) ──
+/** A cupped road: a flat floor of 10 m whose sides rise linearly to 50° over 4 m of arc (18 m along the surface). */
+function cupped(u) {
+  const w = 5, L = 4, psi = 50 * Math.PI / 180, k = psi / L, a = Math.abs(u), sg = Math.sign(u) || 1;
+  if (a <= w) return [u, 0];
+  const t = Math.min(L, a - w), x = w + Math.sin(k * t) / k, y = (1 - Math.cos(k * t)) / k;
+  return [sg * x, y];
+}
+// The layer under it is a 2 m strip 1.5 m down (measured on a real lap: the read's station sat 1.5 m under the top, and the
+// cross-section walked the strip). The read itself says the road is 18 wide.
+const stacked = () => [...swept(cupped, -9, 9, 0.5, 0, 100, 2), ...swept((u) => [u, -1.5], -1, 1, 0.5, 0, 100, 2)];
+const stackedRead = (width) => { const st = []; for (let z = 4; z <= 96; z += 4) st.push({ d: z, c: [0.2, -1.5, z], f: [0, 0, 1], n: [0, 1, 0], k: 0, width }); return { end: 'limit', stations: st }; };
+test('a station on a narrow layer under cupped road is re-read by down-rays: the full width, the centre on the top surface', () => {
+  const mc = PW.meshCentreline(stackedRead(18), PW.rayIndex(stacked()));
+  assert.strictEqual(mc.missing, 0);
+  for (const x of mc.st) {
+    assert.ok(Math.abs(x.w - 18) < 0.5, `width ${x.w.toFixed(2)} at d ${x.d}`);
+    assert.ok(Math.abs(x.p[1]) < 1e-6 && Math.abs(x.p[0]) < 0.3, `centre ${x.p} at d ${x.d}`);
+  }
+  assert.strictEqual(mc.reread, mc.st.length);
+});
+test('the re-read does not take a road 5 m above, and leaves a read with no width of its own as the cross-section found it', () => {
+  const above = [...stacked(), ...swept((u) => [u, 3.5], -10, 10, 1, 0, 100, 2)];
+  const mc = PW.meshCentreline(stackedRead(18), PW.rayIndex(above));
+  assert.ok(mc.st.every((x) => Math.abs(x.p[1]) < 1e-6), 'a station moved onto the road above');
+  const bare = PW.meshCentreline(stackedRead(undefined), PW.rayIndex(stacked()));
+  assert.ok(bare.st.every((x) => Math.abs(x.w - 2) < 0.1), 'without a read width there is nothing to call narrow');
+  assert.strictEqual(bare.reread, 0);
+});
+
+// ── the landing guard (a jump that lands on road already driven) ──
+test('a jump whose landing lies on road the read already took ends the line at the take-off, and says where it landed', () => {
+  // a straight out along +z with a flat road the whole way; the read jumps at z 200 and "lands" back at z 120, on road it drove
+  const T = swept(flat, -10, 10, 1, -10, 410, 2), st = [];
+  for (let z = 0; z <= 200; z += 4) st.push({ d: z, c: [0, 0, z], f: [0, 0, 1], n: [0, 1, 0], k: 0 });
+  st.push({ jump: true, d: 200, gap_m: 80, drop_m: 0 });
+  for (let z = 120, d = 280; z >= 0; z -= 4, d += 4) st.push({ d, c: [0, 0, z], f: [0, 0, -1], n: [0, 1, 0], k: 0 });
+  const mc = PW.meshCentreline({ end: 'limit', stations: st }, PW.rayIndex(T));
+  assert.strictEqual(mc.st[mc.st.length - 1].d, 200, 'the line runs past the take-off');
+  assert.strictEqual(mc.falseLandings.length, 1);
+  assert.deepStrictEqual([mc.falseLandings[0].d, mc.falseLandings[0].landingD, mc.falseLandings[0].onD], [200, 280, 120]);
+});
+test('a jump that lands on new road is kept as it was', () => {
+  const g0 = 1.0, g1 = 1.0 + 40 / R, mc = PW.meshCentreline(ringRead(g0, g1), PW.rayIndex(ringMesh(g0, g1)));
+  assert.deepStrictEqual([mc.jumps.length, mc.falseLandings.length], [1, 0]);
+});
