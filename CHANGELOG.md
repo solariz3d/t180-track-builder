@@ -16,6 +16,11 @@ All notable changes to this project are recorded here. The format follows
 - **A saved piece keeps the numbers that made it, in a `.t180recipe` file beside it.** Written by Save as piece when one Extend laid exactly the selected pieces; the piece file itself is unchanged, so older builds open the piece as before and ignore the recipe. Rename carries it, Delete removes it, and a recipe left beside a different file of the same name is not used (it names the piece file by a hash).
 
 ### Fixed
+- **The pit lane's gap from the road can no longer be set below 0.1 m.** A gap of 0 was accepted, and the export then refused the lane on any road: its run
+  lay on the road's own edge, meeting the road and leaving a gap the downforce ray fell through (332 red on a plain flat straight). Measured on synthetic
+  roads, the export refused gaps of 0, 0.005 and 0.01 m and passed every gap from 0.02 m. The panel now refuses a gap under 0.1 m and says why
+  (`PIT_GAP_TOO_SMALL`), and the lane stays as it was. A saved track whose lane already has a smaller gap still opens unchanged. To go back, remove the
+  check in `setPitLane` (`app/core/coreshell.js`).
 - Extend, Straight, Undo, Redo are the panel's first row again, with or without a saved piece's ghost up. Place piece and Cancel piece (and the note about the ghost) now sit directly under that row instead of above it, so a ghost going up or away no longer moves the buttons you press, and all of them stay in view without scrolling at 1400 x 860. With no ghost, their empty row no longer adds a gap at the top of the panel.
 - Renaming a saved piece now keeps its numbers: the recipe is rewritten for the renamed piece text (it is hashed, and the rename changes the name field), and a case-only rename (Run to run, one file on Windows) rewrites it in place instead of saving then deleting it. Found by pane C reading L238.
 
