@@ -8,12 +8,15 @@
 //   2  a press at a shown window's centre reaches what is under it: the browser's hit test there finds the same element with the windows as without them, a real press
 //      there is that element's, and a camera drag (the right button) begun there turns the camera
 //   3  a 60-step drag of the length handle, its readout showing and its words changing: no window element is made or removed, and the count is the same at every step
+//   4  (L256, the landing: L250's reference panel meets L251's windows) the reference panel, opened before any readout was shown, is drawn over the handles' windows
+//      made after it: a box where those windows paint, at the panel's point, is not what the screen shows there
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromePath, launchChrome, connect } = require('./soundrender.js');
 const TH = require('../lib/theme.js');
+const { decode } = require('./png.js');
 
 const REPO = path.join(__dirname, '..', '..');
 const CHROME = chromePath();
@@ -124,5 +127,29 @@ test('row 3: a 60-step drag of the length handle, its readout\'s words changing:
   assert.ok(words.size >= 10, `the readout's words changed through the drag (${words.size} different)`);
   assert.deepEqual([...new Set(counts)], [n0], `the window elements: ${n0} before, at every step ${JSON.stringify([...new Set(counts)])}`);
   assert.deepEqual(m, { added: 0, removed: 0 }, 'no window element made or removed during the drag');
+  assert.deepEqual(errors, []);
+});
+
+// L256 (the landing): the reference panel (View ▸ Reference track…, app/reference/panel.js) is a pane over the view, as the menus are, and no window paints over it.
+// The handles' windows are made at their first readout (markwindow.js layer), so when the panel was opened first they come after it in the page; at one z-index they
+// would paint over it (pane B's zref256.js: at the merge of L250 and L251, z 6 each, they did). Pane A's z-order method (p-l251-read-A_2026-11-26_evidence/vary.js):
+// a magenta box inside that layer's own container, where its windows paint, and the screen's pixel read there
+test('row 4: the reference panel, opened before any readout was shown, is drawn over the handles\' windows made after it', { skip }, async () => {
+  await load('sigil'); await setLength(1000);
+  await ev("document.dispatchEvent(new CustomEvent('t180:reference-panel')); await new Promise((r) => setTimeout(r, 800)); return true;");
+  const p = await ev("const e = document.querySelector('.reference-panel'); if (!e || getComputedStyle(e).display === 'none') return null; const b = e.getBoundingClientRect(); return [Math.round(b.left + b.width / 2), Math.round(b.top + 30)];");
+  assert.ok(p, 'the reference panel is open');
+  assert.equal(await ev('return document.querySelectorAll(\'[data-mark-windows="drag handles"]\').length;'), 0, 'the handles\' windows are not made yet: the panel came first');
+  const h = await handle('length'); assert.ok(h, 'the length handle is on the page');
+  await mouse('mouseMoved', h.x, h.y); await sleep(400);
+  assert.equal((await shown()).length, 1, 'hovering the length handle shows its readout, so the handles\' windows are made now, after the panel');
+  await mouse('mouseMoved', 700, 800); await sleep(300);
+  await ev(`const box = document.querySelector('[data-mark-windows="drag handles"]'), s = box.getBoundingClientRect(), b = document.createElement('div'); b.id = 'l256probe';
+    b.style.cssText = 'position:absolute;pointer-events:none;background:#ff00ff;width:40px;height:20px;left:' + (${p[0]} - s.left - 20) + 'px;top:' + (${p[1]} - s.top - 10) + 'px'; box.append(b); return true;`);
+  await sleep(150);
+  const d = await send('Page.captureScreenshot', { format: 'png', clip: { x: p[0] - 1, y: p[1] - 1, width: 3, height: 3, scale: 1 } });
+  const c = decode(Buffer.from(d.result.data, 'base64')).px(1, 1);
+  await ev("document.getElementById('l256probe').remove(); return true;");
+  assert.ok(!(c[0] > 230 && c[1] < 40 && c[2] > 230), `the panel is drawn over the handles' windows at (${p}): the pixel there is ${c}; magenta is the windows' layer`);
   assert.deepEqual(errors, []);
 });

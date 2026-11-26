@@ -40,8 +40,10 @@ const NOTE = Object.freeze({
 // popover's, as the guide card's; 4 px, SIGIL's r3, until that scale is on the page). Nothing is inline, so a look's own rule reaches every part of it
 // ([data-theme="<look>"] .reference-panel …). Its fallbacks are SIGIL's own values. L256 (the landing, on L249): it wears the menus' ground, the page's
 // texture over its panel with their inner hairline, and each look styles it in its menus' own rule (app/themes/*.css: `.more-menu, .reference-panel`).
+// Its z-index is 7, one over the handles' layer (6, app/core/handles.js): since L251 their windows are elements made at the first readout, so with the panel
+// opened first they came after it and, at its old 6, painted over it (L256, markwindow-page.test.js row 4)
 const CSS = `
-.reference-panel { position: absolute; top: 44px; right: 10px; z-index: 6; width: 300px; padding: 8px 10px; font: 12px/1.4 var(--body, system-ui);
+.reference-panel { position: absolute; top: 44px; right: 10px; z-index: 7; width: 300px; padding: 8px 10px; font: 12px/1.4 var(--body, system-ui);
   background: var(--tex, none), var(--panel, #0b0b0a); color: var(--text, #ebe6dc); border: 1px solid var(--line, #24221f); border-radius: var(--r3, 4px);
   box-shadow: inset 0 1px 0 var(--hair, transparent); }
 .reference-panel .rp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; }
