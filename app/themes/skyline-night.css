@@ -39,7 +39,7 @@
 
 /* buttons and menu names: glossy navy buttons, cornered by the page's scale (r2); a hover is a brighter gloss and the accent's border on the resting shadow */
 [data-theme="skyline-night"] button, [data-theme="skyline-night"] .more > summary { color: var(--text); border-color: #3a64a0; background: var(--pill); box-shadow: 0 1px 0 rgba(0, 0, 0, .4), inset 0 1px 0 rgba(170, 215, 255, .25); }
-[data-theme="skyline-night"] button:hover:not([disabled]), [data-theme="skyline-night"] .more > summary:hover { color: var(--accent); border-color: #5aaef0; background: linear-gradient(180deg, #33578f 0%, #24437a 49%, #1a3768 51%, #213f72 100%); box-shadow: 0 1px 0 rgba(0, 0, 0, .4), inset 0 1px 0 rgba(170, 215, 255, .3); }
+[data-theme="skyline-night"] button:hover:not([disabled]), [data-theme="skyline-night"] .more > summary:hover { color: var(--accent); border-color: #5aaef0; background: linear-gradient(180deg, #2e4e81 0%, #203c6e 49%, #17325e 51%, #1e3967 100%); box-shadow: 0 1px 0 rgba(0, 0, 0, .4), inset 0 1px 0 rgba(170, 215, 255, .3); }
 [data-theme="skyline-night"] button:active:not([disabled]) { background: linear-gradient(180deg, #0f2245, #1a3462); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .5); }
 [data-theme="skyline-night"] .more[open] > summary, [data-theme="skyline-night"] header #install > button { color: #04203f; border-color: #7cc8ff; text-shadow: 0 1px 0 rgba(255, 255, 255, .35); background: var(--pill-on); box-shadow: 0 1px 0 rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .55); }
 [data-theme="skyline-night"] .more[open] > summary { text-shadow: none; }
