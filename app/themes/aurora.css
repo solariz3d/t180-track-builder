@@ -111,4 +111,7 @@
 [data-theme="aurora"] {
   --mark-win-font: var(--display); --mark-win-weight: 600; --mark-win-radius: 8; --mark-win-edge: 1.25; --mark-win-glow: 12;
   --mark-win-bg: rgba(8, 10, 30, .86); --mark-win-text: #eaf6ff;
+  /* L244 (the user, 2026-11-26 02:23: "yes handle colors per theme"): the marks' and handles' colours, the lights: ice blue, the curtains' pink, gold, red, a lime (the road's edges are already green), starlight, and violet for the edges. Each field keeps one colour everywhere in this
+     look; bank and turn at least 60 apart, every pair of fields and each against the road's edge, the grid, the fog and the sky (app/test/markwindow.test.js W5) */
+  --mark-bank: #5ab4ff; --mark-turn: #ff6ec7; --mark-climb: #ffd86b; --mark-width: #ff6b6b; --mark-cup: #b6ff5c; --mark-length: #f4f0ff; --mark-edge: #c9a0ff;
 }

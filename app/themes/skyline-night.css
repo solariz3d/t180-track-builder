@@ -96,4 +96,7 @@
 [data-theme="skyline-night"] {
   --mark-win-font: var(--body); --mark-win-weight: 600; --mark-win-radius: 12; --mark-win-edge: 1.5; --mark-win-glow: 8;
   --mark-win-bg: rgba(14, 30, 62, .88); --mark-win-text: #e8f2ff; --mark-win-sheen: rgba(255, 255, 255, .35);
+  /* L244 (the user, 2026-11-26 02:23: "yes handle colors per theme"): the marks' and handles' colours, the city at night: neon blue and violet, sodium amber, a red, green, lamp-warm length, cyan for the edges. Each field keeps one colour everywhere in this
+     look; bank and turn at least 60 apart, every pair of fields and each against the road's edge, the grid, the fog and the sky (app/test/markwindow.test.js W5) */
+  --mark-bank: #4f9dff; --mark-turn: #d77bff; --mark-climb: #ffc44d; --mark-width: #ff5f6d; --mark-cup: #3ee08f; --mark-length: #ffd9a0; --mark-edge: #4fe0e0;
 }

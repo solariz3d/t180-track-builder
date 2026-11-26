@@ -79,3 +79,48 @@ test('W4: on every look, bank and turn are told apart (their colours at least 60
     assert.ok((hi + 0.05) / (lo + 0.05) >= 4.5, `${look}: its words on its window read at ${((hi + 0.05) / (lo + 0.05)).toFixed(2)}:1`);
   }
 });
+
+// L244 (the user, 2026-11-26 02:23: "yes handle colors per theme"): each look's own mark colours
+const FIELDS = ['bank', 'turn', 'climb', 'width', 'cup', 'length', 'edge'];
+const TODAY = { bank: '#4d86ff', turn: '#b968ff', climb: '#ffd23d', width: '#ff5a5a', cup: '#3ddc6e', length: '#ffffff', edge: '#3fd0c9' };
+const rgbDist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+
+test('W5: every look sets its own colour for each field, no two fields within 60 of each other (W4\'s unit), and each 60 or more off that look\'s road edges, grid, fog and sky', () => {
+  const seen = new Set();
+  for (const look of LOOKS) {
+    const v = varsOf(look), T = tokensFor(look), c = {};
+    for (const f of FIELDS) { assert.ok(v[`--mark-${f}`], `${look} sets --mark-${f}`); c[f] = T.rgba(`--mark-${f}`, TODAY[f]).slice(0, 3); }
+    for (const [i, f] of FIELDS.entries()) for (const g of FIELDS.slice(i + 1)) assert.ok(rgbDist(c[f], c[g]) >= 60, `${look}: ${f} ${c[f]} and ${g} ${c[g]} are ${rgbDist(c[f], c[g]).toFixed(0)} apart`);
+    for (const n of ['--road-edge', '--ground-grid', '--fog', '--sky']) {
+      assert.ok(v[n], `${look} sets ${n}`); const back = T.floats(n, [0.5, 0.5, 0.5]).map((x) => x * 255);
+      for (const f of FIELDS) assert.ok(rgbDist(c[f], back) >= 60, `${look}: ${f} ${c[f]} stands ${rgbDist(c[f], back).toFixed(0)} off ${n}`);
+    }
+    seen.add(FIELDS.map((f) => c[f].join(',')).join('|'));
+  }
+  assert.equal(seen.size, LOOKS.length, 'no two looks share their colours');
+});
+
+test('W6: a field\'s hue, wherever it comes from (Build, the landing, the Sculpt brush and Smooth\'s channel, the dots\' rows), draws as the look\'s colour for that field; a hue with no field, and every hue on a page with no tokens, as it is', () => {
+  const none = createTokens(winOf({}), { log: () => {} }), set = createTokens(winOf({ '--mark-bank': '#000001', '--mark-turn': '#000002', '--mark-climb': '#000003', '--mark-width': '#000004', '--mark-cup': '#000005', '--mark-length': '#000006', '--mark-edge': '#000007' }), { log: () => {} });
+  for (const [kind, want] of [['brush-twist', '#000001'], ['brush-bend', '#000002'], ['brush-climb', '#000003'], ['brush-width', '#000004'], ['brush-wall', '#000004'], ['brush-cup', '#000005'], ['brush-edge', '#000005'], ['landturn', '#000002'], ['landup', '#000003'], ['landfwd', '#000006'], ['landleft', '#ff9f43']]) {
+    assert.equal(HD.paintOf(set, kind), want, `${kind}`); assert.equal(HD.paintOf(none, kind), HD.KINDS[kind].colour, `${kind}, no tokens: today's`);
+  }
+  assert.equal(HD.hueOf(set, HD.BRUSH_CHANNELS.phi.colour), '#000001', 'Smooth on bank'); assert.equal(HD.hueOf(set, HD.BRUSH_CHANNELS.lateral.colour), '#ffb020', 'the brush\'s sideways: no field');
+  assert.equal(HD.hueOf(set, '#3FD0C9'), '#000007', 'the edge, in any case'); assert.equal(HD.hueOf(set, null), null); assert.equal(HD.hueOf(set, undefined), undefined);
+  // drawn: a stage whose page sets the tokens; the dots' rows (white, red with the green inner half, green) and a bank brush glyph Smooth paints, through handles.js's own draw
+  const strokes = [], ctx = new Proxy({ measureText: (t) => ({ width: String(t).length * 7 }), strokes }, { get: (o, k) => (k in o ? o[k] : () => {}), set: (o, k, val) => { if (k === 'strokeStyle') strokes.push(val); o[k] = val; return true; } });
+  const vars = { '--mark-bank': '#000001', '--mark-width': '#000004', '--mark-cup': '#000005', '--mark-length': '#000006' }, frames = [];
+  const canvas = { style: {}, setAttribute() {}, getContext: () => ctx, remove() {}, isConnected: true };
+  const stage = { clientWidth: 900, clientHeight: 600, style: {}, ownerDocument: { createElement: () => canvas }, getBoundingClientRect: () => ({ left: 0, top: 0 }), isConnected: true, append() {}, addEventListener() {}, removeEventListener() {} };
+  const win = { ...winOf(vars), devicePixelRatio: 1, requestAnimationFrame: (f) => { frames.push(f); return frames.length; }, cancelAnimationFrame() {} };
+  const samples = Array.from({ length: 41 }, (_, i) => ({ s: i * 5, pos: [0, 0, i * 5], T: [0, 0, 1], L: [1, 0, 0], U: [0, 1, 0] }));
+  const dots = { stations: Array.from({ length: 33 }, (_, i) => 40 + i * 5), run: { s0: 40, s1: 200 }, radius: 60, rows: [{ u: 0, colour: '#ffffff' }, { u: 1, colour: '#ff5a5a', inner: '#3ddc6e' }, { u: 0.5, colour: '#3ddc6e' }], at: (s, u) => ({ pos: [u * 10, 0, s], U: [0, 1, 0], L: [1, 0, 0] }) };
+  const model = { samples, s0: 40, s1: 200, half: () => 10, kinds: ['brush-twist'], base: () => 0, ctx: () => ({ half: 10 }), dots, brush: { samples, s: 100, half: 10, colour: HD.BRUSH_CHANNELS.phi.colour } };
+  const ov = HD.mount(stage, win, { model: () => model, pose: () => ({ eye: [0, 60, -40], target: [0, 0, 120], up: [0, 1, 0], fov: 60 * Math.PI / 180 }), begin() {}, apply() {}, end() {} });
+  frames.splice(0).forEach((f) => f(0));
+  assert.ok(ov.dots().length > 0 && ov.handles().some((h) => h.brush), 'dots and the glyph are laid out');
+  for (const [lit, want] of [['#ffffff', '#000006'], ['#ff5a5a', '#000004'], ['#3ddc6e', '#000005'], ['#4d86ff', '#000001']]) {
+    assert.ok(strokes.includes(want), `${want} is drawn (${lit}'s field)`); assert.ok(!strokes.includes(lit), `${lit} itself is not`);
+  }
+  ov.unmount();
+});

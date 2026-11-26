@@ -133,8 +133,13 @@ function extraKind(k) {
 const extraId = (base, i) => `extra:${base}:${i}`;
 // L242: a kind's colour as the theme draws it: --mark-<field> (bank, turn, climb, width, cup, length) over today's literal (K.colour). An extra kind wears its field's;
 // the corner kinds (turnDeg, climbDeg) are turn and climb
-const FIELD_OF = Object.freeze({ turnDeg: 'turn', climbDeg: 'climb' });
-function paintOf(T, kind) { const K = KINDS[kind]; if (!K) return '#ffffff'; const b = K.extra ? K.base : kind; return MW.colourOf(T, FIELD_OF[b] || b, K.colour); }
+// L244 (the user, 2026-11-26 02:23: "yes handle colors per theme"): every mark drawn in one of the field hues wears that field's theme colour, wherever the hue comes from: Build's
+// kinds and their extras, the landing's (forward, height, heading), the Sculpt brush's glyph, Smooth's channel and the dots' rows (app/core/panel.js). The hues below are the
+// meaning (a field has one hue everywhere, as the comments above say), so the field is read off the hue, in this one place. A hue with no field (the landing's sideways orange,
+// the brush's sideways amber) stays as it is; so does every hue on a page that sets no --mark-<field>.
+const HUE_FIELD = Object.freeze({ '#4d86ff': 'bank', '#b968ff': 'turn', '#ffd23d': 'climb', '#ff5a5a': 'width', '#3ddc6e': 'cup', '#ffffff': 'length', '#3fd0c9': 'edge' });
+function hueOf(T, colour) { const f = typeof colour === 'string' ? HUE_FIELD[colour.toLowerCase()] : undefined; return f ? MW.colourOf(T, f, colour) : colour; }
+function paintOf(T, kind) { const K = KINDS[kind]; if (!K) return '#ffffff'; return hueOf(T, K.colour); }
 const KINDS = new Proxy(BASE_KINDS, { get: (t, k) => (typeof k === 'string' && k.startsWith('extra:') && !(k in t) ? extraKind(k) : t[k]) });
 const LANDING_ORDER = Object.freeze(['landfwd', 'landleft', 'landup', 'landturn']);
 // (2026-10-15, reported: scrubbing a turn from a 1000 m straight jumped 0.08 instead of 0.01, so every handle has to be precisely scrubbable): the PRECISE
@@ -428,16 +433,16 @@ function mount(stage, win, host) {
   const drawDot = (ctx, h) => {
     const s = h.screen, ink = rim();
     ctx.lineWidth = 4; ctx.strokeStyle = ink; ctx.beginPath(); ctx.arc(s.x, s.y, DOT_R, 0, 2 * Math.PI); ctx.stroke();
-    ctx.lineWidth = 2; ctx.strokeStyle = h.colour; ctx.beginPath(); ctx.arc(s.x, s.y, DOT_R, 0, 2 * Math.PI); ctx.stroke();
+    ctx.lineWidth = 2; ctx.strokeStyle = hueOf(T, h.colour); ctx.beginPath(); ctx.arc(s.x, s.y, DOT_R, 0, 2 * Math.PI); ctx.stroke();
     if (h.inner) {   // the inner half: the half facing the centreline on screen (the dot's own L axis points outward)
       const a = Math.atan2(h.axes.L[1], h.axes.L[0]) + Math.PI;
-      ctx.strokeStyle = h.inner; ctx.beginPath(); ctx.arc(s.x, s.y, DOT_R, a - Math.PI / 2, a + Math.PI / 2); ctx.stroke();
+      ctx.strokeStyle = hueOf(T, h.inner); ctx.beginPath(); ctx.arc(s.x, s.y, DOT_R, a - Math.PI / 2, a + Math.PI / 2); ctx.stroke();
     }
   };
   // THE BRUSH GLYPH. Build's mark and double arrow, the arrow along the pointer's own axis (the drag reads the pointer, not the road), hollow for a Sculpt-only kind; one box a
   // kind beside it: during the tool's drag the value (model.brush.text, the strip's own words), on hover the words for each way, the Alt tag and the family's line (model.brush.note)
   const drawBrush = (ctx, h, W, H, boxed) => {
-    const s = h.screen, K = KINDS[h.kind], B = model.brush || {}, colour = B.colour || paintOf(T, h.kind), ink = rim(), size = 7, reach = 22;
+    const s = h.screen, K = KINDS[h.kind], B = model.brush || {}, colour = B.colour ? hueOf(T, B.colour) : paintOf(T, h.kind), ink = rim(), size = 7, reach = 22;
     const ang = K.screen === 'x' ? 0 : -Math.PI / 2, ux = Math.cos(ang), uy = Math.sin(ang), heads = K.words.length > 1 ? [-1, 1] : [1];
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     for (const [w, c] of [[5, ink], [2.2, colour]]) {
@@ -626,4 +631,4 @@ function mount(stage, win, host) {
   };
 }
 
-module.exports = { paintOf, extraId, SNAP_PX, LOCK_PX, HIT_PX, CLEAR_PX, clearExtras, placeDots, dotHit, DOT_MIN_M, DOT_MIN_PX, DOT_CAP, wrapTurn, KINDS, BRUSH_KINDS, BRUSH_CHANNELS, brushFormat, brushWords, slideWords, ORDER, LANDING_ORDER, DEG, PRECISE_MOD, WARP_WAIT_MS, WARP_MISSES, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, scrubGain, SPEED_SLOW, SPEED_FAST, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };
+module.exports = { paintOf, hueOf, extraId, SNAP_PX, LOCK_PX, HIT_PX, CLEAR_PX, clearExtras, placeDots, dotHit, DOT_MIN_M, DOT_MIN_PX, DOT_CAP, wrapTurn, KINDS, BRUSH_KINDS, BRUSH_CHANNELS, brushFormat, brushWords, slideWords, ORDER, LANDING_ORDER, DEG, PRECISE_MOD, WARP_WAIT_MS, WARP_MISSES, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, scrubGain, SPEED_SLOW, SPEED_FAST, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };

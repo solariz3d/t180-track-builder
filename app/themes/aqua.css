@@ -3,7 +3,7 @@
    teal sky. One file, scoped to <html data-theme="aqua">, over app/index.html at be4a527. It changes how things are drawn and never where they are: colour,
    gradients, translucency and blur, corner radius, shadows, inset gloss, mix-blend layers. It never touches a size, a margin, a padding, a border WIDTH, a
    font, a letter-spacing or a weight, so every box keeps its place to the pixel (layout_check.js). The meaning colours (--mine --bad --warn --ok, and every
-   canvas hue) keep their hues; only --bad is lighter here, so an error reads on these teal panes. Fonts: the page's own (Windows). */
+   canvas hue but the marks', which are this skin's own since L244, each field still one colour) keep their hues; only --bad is lighter here, so an error reads on these teal panes. Fonts: the page's own (Windows). */
 
 [data-theme="aqua"] {
   /* the warning colours as text, measured on this look's panels (5.6:1 or better behind the checker's lines) */
@@ -165,4 +165,7 @@
 [data-theme="aqua"] {
   --mark-win-font: var(--body); --mark-win-weight: 600; --mark-win-radius: 10; --mark-win-edge: 1.5; --mark-win-glow: 9;
   --mark-win-bg: rgba(3, 56, 70, .90); --mark-win-text: #f2fdff; --mark-win-sheen: rgba(255, 255, 255, .62);
+  /* L244 (the user, 2026-11-26 02:23: "yes handle colors per theme"): the marks' and handles' colours, a reef under the water: azure, coral pink, sun yellow, coral red, sea-glass green, sand, and a pearl lilac for the edges (teal would sink into the teal grid). Each field keeps one colour everywhere in this
+     look; bank and turn at least 60 apart, every pair of fields and each against the road's edge, the grid, the fog and the sky (app/test/markwindow.test.js W5) */
+  --mark-bank: #4fa8ff; --mark-turn: #ff7ad9; --mark-climb: #ffe066; --mark-width: #ff6b5a; --mark-cup: #7dff9e; --mark-length: #ffe9b8; --mark-edge: #c8b6ff;
 }

@@ -2,7 +2,7 @@
    One file, scoped to <html data-theme="glass">, over app/index.html at be4a527. It changes how things are drawn and never where they are:
    colour, gradients, translucency and blur, corner radius, shadows, inset gloss, clip-path facets and the overlay pseudo-elements. It never
    touches a size, a margin, a padding, a border WIDTH, a font, a letter-spacing or a weight, so every box keeps its place to the pixel
-   (layout_check.js). The meaning colours (--mine --bad --warn --ok, and every canvas hue) are not redefined. Fonts: the page's own (Windows). */
+   (layout_check.js). The meaning colours (--mine --bad --warn --ok, and every canvas hue but the marks', which are this skin's own since L244, each field still one colour) are not redefined. Fonts: the page's own (Windows). */
 
 [data-theme="glass"] {
   /* the warning colours as text, measured on this look's panels (5.6:1 or better behind the checker's lines) */
@@ -144,4 +144,7 @@
 [data-theme="glass"] {
   --mark-win-font: var(--body); --mark-win-weight: 600; --mark-win-radius: 0; --mark-win-edge: 1; --mark-win-glow: 6;
   --mark-win-bg: rgba(10, 28, 44, .80); --mark-win-text: #f0f9ff; --mark-win-sheen: rgba(255, 255, 255, .55);
+  /* L244 (the user, 2026-11-26 02:23: "yes handle colors per theme"): the marks' and handles' colours, cold glass: clear blue, violet, pale gold, a cold red, mint, a warm frost for length (the road's edges are ice-white), ice cyan for the edges. Each field keeps one colour everywhere in this
+     look; bank and turn at least 60 apart, every pair of fields and each against the road's edge, the grid, the fog and the sky (app/test/markwindow.test.js W5) */
+  --mark-bank: #5fa8ff; --mark-turn: #c77dff; --mark-climb: #ffd75e; --mark-width: #ff6470; --mark-cup: #4ee39a; --mark-length: #ffe2c4; --mark-edge: #7af0ff;
 }

@@ -45,8 +45,11 @@
     --body: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
     --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
     /* L242: the small windows on the view (a mark's label, a handle's readout), drawn on a canvas, read these (app/core/markwindow.js): SIGIL's own, a hairline edge,
-       2 px corners and its display type; the veil, the words and the marks' colours stay today's. A skin sets its own under [data-theme] */
+       2 px corners and its display type; the veil and the words stay today's (the marks' colours: L244, below). A skin sets its own under [data-theme] */
     --mark-win-font: var(--display); --mark-win-weight: 600; --mark-win-radius: 2; --mark-win-edge: 1;
+    /* L244 (the user, 2026-11-26 02:23: "yes handle colors per theme"): the marks' and handles' colours, SIGIL's: its violet and paper, the hues a little softer and warmer than the old saturated ones; length a pale coral, not white (white sat on the road's white edges). Each field keeps one colour everywhere in this
+       look; bank and turn at least 60 apart, every pair of fields and each against the road's edge, the grid, the fog and the sky (app/test/markwindow.test.js W5) */
+    --mark-bank: #6b95ff; --mark-turn: #c58cff; --mark-climb: #f2c14e; --mark-width: #f0644a; --mark-cup: #52d68a; --mark-length: #ffb3a7; --mark-edge: #47c4d6;
     /* D399: each look's own texture, the top background layer of the header, the left panel and the menus (never the 3D view): one tile, drawn by
        scripts/texture_tiles.js. SIGIL's is a fine film grain; a skin sets its own --tex under [data-theme]. Its strengths keep every text where it reads
        today: none goes under 4.5:1 (app/test/texture-page.test.js). A fine tile is sized in DEVICE pixels (--dpx), so at Windows' fractional display

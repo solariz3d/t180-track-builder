@@ -3,6 +3,7 @@
 // that draws. It reads getComputedStyle(<html>) once per token, keeps the answer, and reads again when <html data-theme> changes (a MutationObserver).
 // Every read names today's colour as its fallback, which is what a page without the token draws (the preview's smoke page, a test's stand-in window):
 // SIGIL's :root (app/index.html) holds exactly those literals, so SIGIL draws as it did before the skins.
+// (Since L244 the marks' colours, --mark-<field>, are the one exception: SIGIL sets its own there too, and the literal beside each read is the old colour.)
 //
 //   tokensOf(win)                  -> the window's one reader (kept on the window: each loadCjs builds a fresh module graph, as the settings store does)
 //   createTokens(win, { log })     -> { css, rgba, floats, alpha, solid, word, refresh, onChange, version }
