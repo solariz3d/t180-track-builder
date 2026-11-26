@@ -65,17 +65,10 @@ async function load(look) {
   await ev("const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Skip'); if (b && b.offsetParent) b.click(); return true;");
 }
 const setLength = (m) => ev(`const f = [...document.querySelectorAll('#palette input')].find((e) => /metres added/.test(e.getAttribute('aria-label') || e.title || '')); f.value = '${m}'; f.dispatchEvent(new Event('input', { bubbles: true })); await new Promise((r) => setTimeout(r, 1200)); return true;`);
-/** the centre of a handle's colour on the overlay canvas (the handles are the only thing drawn there), in page px */
-const findHandle = (rgb, rightmost) => ev(`
-  const want = ${JSON.stringify(rgb)}, hits = [], off = document.getElementById('stage').getBoundingClientRect();
-  for (const c of document.querySelectorAll('#stage canvas')) {
-    let ctx = null; try { ctx = c.getContext('2d'); } catch (e) {} if (!ctx) continue;
-    const d = ctx.getImageData(0, 0, c.width, c.height).data, cells = new Map();
-    for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) { const k = (y * c.width + x) * 4; if (d[k + 3] < 200) continue; if (Math.abs(d[k] - want[0]) < 14 && Math.abs(d[k + 1] - want[1]) < 14 && Math.abs(d[k + 2] - want[2]) < 14) { const key = (x >> 5) + ',' + (y >> 5), a = cells.get(key) || [0, 0, 0]; a[0] += x; a[1] += y; a[2]++; cells.set(key, a); } }
-    const groups = []; for (const [k, a] of cells) { const cx = +k.split(',')[0], cy = +k.split(',')[1]; let g = groups.find((g) => Math.abs(g.cx - cx) <= 1 && Math.abs(g.cy - cy) <= 1); if (!g) { g = { cx, cy, sx: 0, sy: 0, n: 0 }; groups.push(g); } g.sx += a[0]; g.sy += a[1]; g.n += a[2]; }
-    for (const g of groups) if (g.n > 30) hits.push({ x: g.sx / g.n * c.clientWidth / c.width + off.left, y: g.sy / g.n * c.clientWidth / c.width + off.top, n: g.n });
-  }
-  hits.sort((a, b) => ${rightmost ? 'b.x - a.x' : 'b.n - a.n'}); return hits[0] || null;`);
+// AMENDED (pane P, D677, 2026-11-26, the librarian's ruling): findHandle, which found a handle by a fixed pixel colour ([185, 104, 255] the turn, white the
+// length), is gone. L244 (c9fe4f1, his word: "yes handle colors per theme") gave each look its own --mark-turn and --mark-length, so no look drew those colours
+// and rows 1-6 and 8 failed "the handle is on the overlay" in every look. Every drag now takes the handle from the page's own t180:handles-request list, as
+// the placed rows already did: it survives any future colour. The drag still has to move the field ("the handle was not held" below), so a handle not held fails.
 const mouse = (type, x, y, extra = {}) => send('Input.dispatchMouseEvent', { type, x, y, button: extra.button || 'none', buttons: extra.buttons || 0, clickCount: extra.clickCount || 0 });
 const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p * (s.length - 1) + 0.5))]; };
 const fieldNow = (re) => ev(`const f = [...document.querySelectorAll('#palette input')].find((e) => e.type !== 'checkbox' && ${re}.test(e.getAttribute('aria-label') || e.title || '') && !/start/i.test(e.getAttribute('aria-label') || '')); return f ? f.value : null;`);
@@ -94,11 +87,12 @@ async function drag(look, length, kind, ms = DRAG_MS, typed = {}, { placed = fal
     assert.equal(Number(got), Number(v), `${look}: the field ${re} reads back ${JSON.stringify(got)} after ${v} was typed`);
   }
   await setLength(length); await sleep(Math.min(4000, length / 4));   // a long piece's full ghost takes its time (a 20 km one about 2 s)
-  const rgb = kind === 'turn' ? [185, 104, 255] : [255, 255, 255];
-  // after a placed piece the handles are drawn small: the page's own list of them (t180:handles-request) is read instead of their colour, and the pointer moves along the handle's axis
-  const listed = placed || setup ? await ev("let l = null; document.dispatchEvent(new CustomEvent('t180:handles-request', { detail: { reply: (x) => { l = x; } } })); const r = document.getElementById('stage').getBoundingClientRect(); return { l, left: r.left, top: r.top };") : null;
-  const lh = listed && listed.l ? listed.l.find((x) => x.kind === (kind === 'turn' ? 'turnDeg' : 'length')) : null, len = lh ? Math.hypot(lh.dx, lh.dy) : 0, axis = (placed || setup) && len > 0 ? [lh.dx / len, lh.dy / len] : kind === 'turn' ? [1, 0] : [0, -1];
-  const h = placed || setup ? (lh ? { x: lh.x + listed.left, y: lh.y + listed.top } : null) : await findHandle(rgb, kind === 'turn'); assert.ok(h, `${look}: the ${kind} handle is on the overlay`);
+  // the page's own list of the handles (t180:handles-request); after a placed piece they are drawn small and the pointer moves along the handle's axis
+  const listed = await ev("let l = null; document.dispatchEvent(new CustomEvent('t180:handles-request', { detail: { reply: (x) => { l = x; } } })); const r = document.getElementById('stage').getBoundingClientRect(); return { l, left: r.left, top: r.top };");
+  const want = kind === 'turn' ? 'turnDeg' : 'length', all = listed && listed.l ? listed.l.filter((x) => x.kind === want) : [];
+  // on an unplaced piece the turn is taken at its rightmost handle, as the colour search took it
+  const lh = all.length ? (!(placed || setup) && kind === 'turn' ? all.reduce((a, b) => (b.x > a.x ? b : a)) : all[0]) : null, len = lh ? Math.hypot(lh.dx, lh.dy) : 0, axis = (placed || setup) && len > 0 ? [lh.dx / len, lh.dy / len] : kind === 'turn' ? [1, 0] : [0, -1];
+  const h = lh ? { x: lh.x + listed.left, y: lh.y + listed.top } : null; assert.ok(h, `${look}: the ${kind} handle is in the page's list of handles (t180:handles-request)`);
   const amp = kind === 'turn' ? 250 : 220, field = kind === 'turn' ? '/turn/i' : '/metres|length/i', before = await fieldNow(field);
   await mouse('mouseMoved', h.x, h.y); await sleep(50); await mouse('mousePressed', h.x, h.y, { button: 'left', buttons: 1, clickCount: 1 }); await sleep(100);
   await ev('window.__ft.frames.clear(); window.__ft.on = true; return true;');
