@@ -12,6 +12,9 @@
 //                                                         see-through, with their own lines, after the placed track;
 //                                                         overlay = [{ positions (world line pairs), colour, alpha? }] drawn last,
 //                                                         over everything (the mirror ghost)
+//       extras.reference = { batches: [{ positions, normals, indices }], edges, model, colour?, alpha? }   (L243) ANOTHER TRACK'S ROAD
+//                   (src/reference/ribbon.js), drawn see-through after the placed road with depth tested and none written, so the user's
+//                   road is in front wherever it is nearer and the reference never hides it; `model` places it (row-vector, no scale)
 //       extras.look = 'ac' (the default) with extras.materialOf(batch) -> the EXPORTED material ({ name, shader, props,
 //                   samplers, alphaTested }) and extras.textures (a Map, texture file -> { width, height, rgba }): each
 //                   batch is drawn with its AC shader (acshaders.js, the Ms-PL port) and the uniforms aclook.js
@@ -296,6 +299,8 @@ function coarseIndices(c, level) {
 const levelOf = (c, eye) => { if (!eye || chunkModel(c) !== c.model) return 0; const d = boxDistance(c, eye); return d < LOD_NEAR ? 0 : d < LOD_FAR ? 1 : 2; };
 const COLOURS = Object.freeze({ edge: [0.93, 0.93, 0.88], tie: [0.06, 0.07, 0.09], grid: [0.2, 0.23, 0.28], marker: [1.0, 0.62, 0.15], ghost: [0.73, 0.66, 1.0] });   // 2026-10-14, Sigil: the accent violet (#b9a8ff); was sky blue, which tinted the whole view
 const GHOST_ALPHA = 0.42;
+// (L243) the reference track's shadow: a cool teal, apart from the ghost's violet and the road's grey, faint, with brighter edges so its outline reads from overhead
+const REFERENCE = Object.freeze({ colour: [0.42, 0.98, 0.90], alpha: 0.45, edgeAlpha: 1 });
 // From a usability pass: the ties are one near-black line per station; from overhead or far
 // away they outnumber the pixels and hatch the lit road dark (measured: 42–51% of the overhead's drawn pixels near-black),
 // so they fade out between 60 and 250 m (the edges stay). And the canvas is cleared darker than the FOG colour: surfaces
@@ -449,6 +454,23 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     bufferFor(arr, gl.ARRAY_BUFFER); gl.vertexAttribPointer(line.pos, 3, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.LINES, 0, arr.length / 3); lines++;
   }
+  function drawReference(ref, vp) {
+    const model = new Float32Array(ref.model || IDENTITY), c = ref.colour || REFERENCE.colour;
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+    // no fog on the shadow: it is a guide, like the grid, and from an overhead 2-3 km up the fog left about 5 % of its colour (seen in the first pictures, L243)
+    use(surf, vp); gl.uniform1f(surf.fogD, 0); gl.uniform1f(surf.alpha, ref.alpha === undefined ? REFERENCE.alpha : ref.alpha);
+    gl.enableVertexAttribArray(surf.pos); gl.enableVertexAttribArray(surf.nrm);
+    gl.uniformMatrix4fv(surf.model, false, model); gl.uniform3f(surf.colour, c[0], c[1], c[2]);
+    for (const b of ref.batches || []) {
+      bufferFor(b.positions, gl.ARRAY_BUFFER); gl.vertexAttribPointer(surf.pos, 3, gl.FLOAT, false, 0, 0);
+      bufferFor(b.normals, gl.ARRAY_BUFFER); gl.vertexAttribPointer(surf.nrm, 3, gl.FLOAT, false, 0, 0);
+      bufferFor(b.indices, gl.ELEMENT_ARRAY_BUFFER);
+      gl.drawElements(gl.TRIANGLES, b.indices.length, gl.UNSIGNED_SHORT, 0); draws++; tris += b.indices.length / 3;
+    }
+    gl.disableVertexAttribArray(surf.nrm);
+    if (ref.edges && ref.edges.length) { use(line, vp); gl.uniform1f(line.fogD, 0); gl.enableVertexAttribArray(line.pos); drawLines(ref.edges, model, c, REFERENCE.edgeAlpha); }
+    gl.depthMask(true); gl.disable(gl.BLEND);
+  }
   function drawRoadLines(chunks, vp, alpha, blending = false, eye = null) {
     use(line, vp); gl.enableVertexAttribArray(line.pos);
     // the ties fade with distance, which needs blending; the ghost pass has it on already
@@ -549,6 +571,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       } else { chunks = chunksOf(batches, colourKey, 'colour'); drawSurfaces(chunks, vp, 1, null, lodEye); }
       chunkCount = chunks.length;
       if (extras.lines !== false) drawRoadLines(chunks, vp, 1, false, lodEye);
+      if (extras.reference && extras.reference.batches && extras.reference.batches.length) drawReference(extras.reference, vp);   // (L243) another track's road, under the user's
       if (extras.ghost && extras.ghost.length) {       // see-through, over the placed track, without writing depth
         const ghost = chunksOf(extras.ghost, () => 'ghost', 'ghost');
         gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
@@ -587,4 +610,4 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
   };
 }
 
-module.exports = { VIGNETTE_VS, VIGNETTE_FS, BACKDROP_FS, createRenderer, coarseIndices, levelOf, LOD_NEAR, LOD_FAR, LOD_STEP, themeFrom, skyBasis, VS, FS, LVS, LFS, SKY_VS, skyFS, COLOURS, GHOST_ALPHA, TIE_FADE, CLEAR, FOG };
+module.exports = { VIGNETTE_VS, VIGNETTE_FS, BACKDROP_FS, createRenderer, coarseIndices, levelOf, LOD_NEAR, LOD_FAR, LOD_STEP, themeFrom, skyBasis, VS, FS, LVS, LFS, SKY_VS, skyFS, COLOURS, GHOST_ALPHA, REFERENCE, TIE_FADE, CLEAR, FOG };

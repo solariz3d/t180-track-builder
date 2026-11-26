@@ -29,6 +29,9 @@
 //   't180:view'           { detail: { reply(v) } }        { pose, mode, head } (head: the placed track's build head, or null)
 //   't180:ghost-request'  { detail: { reply(g) } }        for the drag handles (and the flights): the ghost of the next piece as { samples, segments, jump, s0 } (jump: it is an Add-jump candidate), or null when none shows (preview.ghostInfo)
 //   't180:ghost-building' { detail: { reply(b) } }        true while an exact ghost is still being built a slice a frame (preview.ghostBuilding), so the handles do not ask for it again meanwhile
+// And (L243) a REFERENCE TRACK, another track's road drawn see-through under the user's (app/reference/panel.js sends it; nothing of it enters the document):
+//   't180:reference'          { detail: { ribbon, nudge?, reply? } | { ribbon: null } }   show it (src/reference/ribbon.js ribbonOf), or hide it with ribbon null
+//   't180:reference-request'  { detail: { reply(info) } }   what is shown (preview.reference()), or null
 // And ASKED of the panel (the Sculpt cues), once a frame in Sculpt with no drag open:
 //   't180:sculpt-hover'   { detail: { reply(h) } }        h = { s0, r, tool, channel? } (the brush under the pointer: its station, radius and tool) or null
 //
@@ -109,7 +112,12 @@ function mount(root, shell) {
   // the track checker's reds, drawn on the road (preview.js redMarks); the checker says them on 't180:validation' (app/validate-ui/index.js)
   const redsNow = (e) => { const r = e.detail && e.detail.result; p.setReds(r ? r.red : null); };
   doc.addEventListener('t180:validation', redsNow);
-  return { preview: p, unmount() { doc.removeEventListener('t180-camera-focus', focusNow); doc.removeEventListener('t180:validation', redsNow); doc.removeEventListener('t180:guides', setGuides); doc.removeEventListener('t180:guides-request', guidesNow); doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180:ghost-request', ghostNow); doc.removeEventListener('t180:ghost-building', buildingNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180-pick', pickNow); doc.removeEventListener('t180-grab-ray', rayNow); doc.removeEventListener('t180:view', viewNow); p.dispose(); root.replaceChildren(); } };
+  // (L243) the reference track
+  const referenceSet = (e) => { const d = e.detail || {}; let info = null; try { info = p.setReference(d.ribbon ? { ribbon: d.ribbon, nudge: d.nudge } : null); } catch (err) { if (typeof d.reply === 'function') d.reply({ error: err.message }); return; } if (typeof d.reply === 'function') d.reply(info); };
+  const referenceNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.reference()); };
+  doc.addEventListener('t180:reference', referenceSet);
+  doc.addEventListener('t180:reference-request', referenceNow);
+  return { preview: p, unmount() { doc.removeEventListener('t180:reference', referenceSet); doc.removeEventListener('t180:reference-request', referenceNow); doc.removeEventListener('t180-camera-focus', focusNow); doc.removeEventListener('t180:validation', redsNow); doc.removeEventListener('t180:guides', setGuides); doc.removeEventListener('t180:guides-request', guidesNow); doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180:ghost-request', ghostNow); doc.removeEventListener('t180:ghost-building', buildingNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180-pick', pickNow); doc.removeEventListener('t180-grab-ray', rayNow); doc.removeEventListener('t180:view', viewNow); p.dispose(); root.replaceChildren(); } };
 }
 
 module.exports = { mount, PreviewMountError };
