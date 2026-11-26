@@ -1,7 +1,10 @@
 /* SKYLINE: the builder in open sky, for the Skyline melody. A light skin in the Frutiger Aero manner: white frosted
-   glass, glossy pill buttons, a bright sky behind the track, deep sky blue as the accent. Styling only: no box property (width, height, margin,
+   glass, glossy buttons, a bright sky behind the track, deep sky blue as the accent. Styling only: no box property (width, height, margin,
    padding, border width, font, letter-spacing, position) is set here, so every element keeps its place (app/test/theme.test.js reads this file for
-   them). Windows fonts only (the page's own). The warning hues keep their hue and are deepened only so they read on a light surface. */
+   them). Windows fonts only (the page's own). The warning hues keep their hue and are deepened only so they read on a light surface.
+   L249 (the chrome refactor, briefs/t180_ui_refactor_spec.md): corners come from the page's one scale (--r1..--r4 in index.html) times this look's
+   --radius-factor, so this file sets no corner of its own except Export's capsule; no coloured glow and no halo (hover, open and pressed are a fill or
+   border change on the look's resting shadow; focus is the page's solid ring; floating surfaces take the page's small neutral shadow). */
 
 [data-theme="skyline"] {
   /* the warning colours as text, measured on this look's panels (5.6:1 or better behind the checker's lines) */
@@ -18,55 +21,59 @@
   --sky-style: sun; --sky-a: color(srgb 0.12 0.43 0.84); --sky-b: color(srgb 0.78 0.89 1); --sky-c: color(srgb 1 1 0.97);
   /* no lens vignette over a light sky (the renderer's, app/preview/renderer.js THE VIGNETTE; it was first replaced by a sunlit haze pinned to the screen) */
   --vignette: none;
-  --glass: rgba(255, 255, 255, .8); --glow: rgba(120, 190, 255, .55);
+  --glass: rgba(255, 255, 255, .8);
+  /* L249: the shape and the two hover steps (spec §1, §6). Factor 1: r1..r4 = 2 / 4 / 8 / 12 px. --hover is step 4, --raise mixed 6% toward --text
+     (#e3f0ff -> #d6e4f4); --accent-hover is step 10, the solid accent's hover, 12% toward --text (#0757b3 -> #0751a6, darker on a light look) */
+  --radius-factor: 1; --hover: #d6e4f4; --accent-hover: #0751a6;
   --pill: linear-gradient(180deg, #ffffff 0%, #eaf5ff 49%, #cfe6ff 51%, #e6f3ff 100%);
   --pill-on: linear-gradient(180deg, #2a78d8 0%, #1a63c9 49%, #0b4fa8 51%, #1659b8 100%);
   color-scheme: light;
 }
 
 [data-theme="skyline"], [data-theme="skyline"] body { background: linear-gradient(180deg, #1f6fd6 0%, #5aa9f5 38%, #bfe2ff 72%, #f4faff 100%); }
-[data-theme="skyline"] ::-webkit-scrollbar-thumb { background: linear-gradient(90deg, #9cc8f2, #6aa8e8); border-radius: 4px; }
+[data-theme="skyline"] ::-webkit-scrollbar-thumb { background: linear-gradient(90deg, #9cc8f2, #6aa8e8); border-radius: var(--r2); }
 
 /* THE TOP BAR: a glossy white-to-sky band, the upper half catching light */
-/* the glow budget: a blurred shadow only on a hovered, focused, open or pressed control and on Export; static chrome (the bar, the column, menus, the camera bars, the band, the guide card) has hard edges */
 [data-theme="skyline"] header { background: var(--tex), linear-gradient(180deg, #ffffff 0%, #f1f8ff 48%, #dcedff 52%, #e9f5ff 100%); border-bottom-color: #8fbfec; box-shadow: none; }
-[data-theme="skyline"] header h1 { color: var(--accent); text-shadow: 0 1px 0 #fff; }
-[data-theme="skyline"] header h1::before { border-color: #3d8ee8; background: radial-gradient(circle at 35% 30%, #ffffff 0 18%, #8fd0ff 40%, #1f6fd6 100%); box-shadow: 0 0 8px var(--glow); }
-[data-theme="skyline"] header input, [data-theme="skyline"] header select { background: linear-gradient(180deg, #f3f9ff, #ffffff); border-color: #9cc4ea; border-radius: 12px; color: var(--text); box-shadow: inset 0 1px 0 rgba(20, 80, 160, .18); }
+[data-theme="skyline"] header h1 { color: var(--accent); text-shadow: none; }
+[data-theme="skyline"] header h1::before { border-color: #3d8ee8; background: radial-gradient(circle at 35% 30%, #ffffff 0 18%, #8fd0ff 40%, #1f6fd6 100%); box-shadow: none; }
+[data-theme="skyline"] header input, [data-theme="skyline"] header select { background: linear-gradient(180deg, #f3f9ff, #ffffff); border-color: #9cc4ea; color: var(--text); box-shadow: inset 0 1px 0 rgba(20, 80, 160, .18); }
 
-/* buttons and menu names: glossy sky pills */
-[data-theme="skyline"] button, [data-theme="skyline"] .more > summary { color: var(--text); border-color: #86b6e6; border-radius: 13px; background: var(--pill); box-shadow: 0 1px 0 rgba(20, 80, 160, .22), inset 0 1px 0 rgba(255, 255, 255, .9); }
-[data-theme="skyline"] button:hover:not([disabled]), [data-theme="skyline"] .more > summary:hover { color: var(--accent); border-color: #3d8ee8; background: linear-gradient(180deg, #ffffff 0%, #e6f3ff 49%, #cde6ff 51%, #e2f1ff 100%); box-shadow: 0 0 10px var(--glow), inset 0 1px 0 #fff; }
+/* buttons and menu names: glossy sky buttons, cornered by the page's scale (r2); a hover is a brighter gloss and the accent's border on the resting shadow */
+[data-theme="skyline"] button, [data-theme="skyline"] .more > summary { color: var(--text); border-color: #86b6e6; background: var(--pill); box-shadow: 0 1px 0 rgba(20, 80, 160, .22), inset 0 1px 0 rgba(255, 255, 255, .9); }
+[data-theme="skyline"] button:hover:not([disabled]), [data-theme="skyline"] .more > summary:hover { color: var(--accent); border-color: #3d8ee8; background: linear-gradient(180deg, #ffffff 0%, #e6f3ff 49%, #cde6ff 51%, #e2f1ff 100%); box-shadow: 0 1px 0 rgba(20, 80, 160, .22), inset 0 1px 0 #fff; }
 [data-theme="skyline"] button:active:not([disabled]) { background: linear-gradient(180deg, #bcdcff, #e2f1ff); box-shadow: inset 0 1px 3px rgba(20, 80, 160, .3); }
-[data-theme="skyline"] .more[open] > summary, [data-theme="skyline"] header #install > button { color: #fff; border-color: #1757b8; text-shadow: 0 1px 1px rgba(0, 40, 100, .5); background: var(--pill-on); box-shadow: 0 0 12px var(--glow), inset 0 1px 0 rgba(255, 255, 255, .55); }
+[data-theme="skyline"] .more[open] > summary, [data-theme="skyline"] header #install > button { color: #fff; border-color: #1757b8; text-shadow: 0 1px 1px rgba(0, 40, 100, .5); background: var(--pill-on); box-shadow: 0 1px 0 rgba(20, 80, 160, .22), inset 0 1px 0 rgba(255, 255, 255, .55); }
+[data-theme="skyline"] .more[open] > summary { text-shadow: none; }
+/* Export to Assetto Corsa: the one capsule in the UI, the standout action (spec §3; a factor-1 look) */
+[data-theme="skyline"] header #install > button { border-radius: 999px; }
 [data-theme="skyline"] #winctl button { border-radius: 0; background: transparent; box-shadow: none; border-color: transparent; }
 [data-theme="skyline"] #win-min:hover, [data-theme="skyline"] #win-max:hover { background: rgba(31, 111, 214, .14); box-shadow: none; }
 [data-theme="skyline"] #win-close:hover { background: #c42b3a; box-shadow: none; }
 
-/* the menus: white frosted panes with a sky shadow */
-[data-theme="skyline"] .more-menu { background: var(--tex), linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(236, 246, 255, .94)); border-color: #a9cdf0; border-radius: 14px; box-shadow: inset 0 1px 0 #fff; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
-[data-theme="skyline"] .more-menu button { border-radius: 9px; }
-[data-theme="skyline"] .pieces-menu .piece-row:hover, [data-theme="skyline"] .more-menu .menu-row:hover, [data-theme="skyline"] .more-menu .menu-row:focus { background: rgba(31, 111, 214, .08); }
+/* the menus: white frosted panes (their corner, r3, and their small neutral shadow are the page's; what sits inside is concentric, also the page's) */
+[data-theme="skyline"] .more-menu { background: var(--tex), linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(236, 246, 255, .94)); border-color: #a9cdf0; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+[data-theme="skyline"] .pieces-menu .piece-row:hover, [data-theme="skyline"] .more-menu .menu-row:hover, [data-theme="skyline"] .more-menu .menu-row:focus { background: var(--hover); }
 
 /* fields */
 [data-theme="skyline"] input[type="number"], [data-theme="skyline"] input[type="text"], [data-theme="skyline"] input:not([type]), [data-theme="skyline"] textarea,
-[data-theme="skyline"] .save-piece input, [data-theme="skyline"] .picker select, [data-theme="skyline"] select { background: #ffffff; color: var(--text); border-color: #a6c8ea; border-radius: 7px; box-shadow: inset 0 1px 0 rgba(20, 80, 160, .14); }
+[data-theme="skyline"] .save-piece input, [data-theme="skyline"] .picker select, [data-theme="skyline"] select { background: #ffffff; color: var(--text); border-color: #a6c8ea; box-shadow: inset 0 1px 0 rgba(20, 80, 160, .14); }
 [data-theme="skyline"] input[type="number"]::-webkit-inner-spin-button { background-color: #4f7aa8; }   /* the spin chevrons in this skin's colours (their shape is in index.html) */
 [data-theme="skyline"] input[type="number"]::-webkit-inner-spin-button:hover { background-color: var(--accent); }
 [data-theme="skyline"] input[type="number"]::-webkit-inner-spin-button:active { background-color: #043a7a; }
-[data-theme="skyline"] input:focus, [data-theme="skyline"] select:focus, [data-theme="skyline"] textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(7, 87, 179, .18); }
+[data-theme="skyline"] input:focus, [data-theme="skyline"] select:focus, [data-theme="skyline"] textarea:focus { border-color: var(--accent); }   /* the ring is the page's focus ring, not a halo */
 [data-theme="skyline"] option { background: #fff; color: var(--text); }
 [data-theme="skyline"] option:checked { background: #d6eaff; color: var(--text); }
 @supports (appearance: base-select) {
-  [data-theme="skyline"] header select::picker(select) { background: #fff; border-color: #a9cdf0; border-top-color: var(--accent); border-radius: 12px; box-shadow: none; }
+  [data-theme="skyline"] header select::picker(select) { background: #fff; border-color: #a9cdf0; border-top-color: var(--accent); box-shadow: none; }
   [data-theme="skyline"] header select option { color: var(--text); }
   [data-theme="skyline"] header select option:checked { color: var(--accent); }
 }
 
-/* THE LEFT PANEL: a pane of frosted glass floating in the sky, a sheen across its top */
+/* THE LEFT PANEL: a pane of frosted glass in the sky, a sheen across its top (its corner is the page's: square, docked) */
 [data-theme="skyline"] #left {
   background: var(--tex), linear-gradient(180deg, rgba(255, 255, 255, .85) 0, rgba(255, 255, 255, 0) 120px), var(--glass);
-  border-color: rgba(255, 255, 255, .95); border-radius: 16px;
+  border-color: rgba(255, 255, 255, .95);
   box-shadow: inset 0 1px 0 #fff, inset 0 0 0 1px rgba(120, 180, 240, .25);
   backdrop-filter: blur(18px) saturate(1.3); -webkit-backdrop-filter: blur(18px) saturate(1.3);
 }
@@ -79,17 +86,18 @@
 [data-theme="skyline"] .track li.selected { background: linear-gradient(90deg, rgba(7, 87, 179, .2), rgba(7, 87, 179, .06)); color: var(--accent); }
 [data-theme="skyline"] .bar, [data-theme="skyline"] #banner .brush-strip { background: linear-gradient(180deg, #ffffff, #e3f0ff); }
 
-/* THE CAMERA DOCK: frosted pills along the bottom; its key hints each on a frosted backing (the sky behind them follows the camera) */
-[data-theme="skyline"] #camera [role="toolbar"] { background: var(--glass); border-color: rgba(255, 255, 255, .95); border-radius: 18px; box-shadow: inset 0 1px 0 #fff; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+/* THE CAMERA DOCK: frosted bars along the bottom (r2, the page's); its key hints each on a frosted backing (the sky behind them follows the camera) */
+[data-theme="skyline"] #camera [role="toolbar"] { background: var(--glass); border-color: rgba(255, 255, 255, .95); box-shadow: inset 0 1px 0 #fff; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 [data-theme="skyline"] #camera [role="toolbar"] button { background: transparent; box-shadow: none; border-color: transparent; color: var(--text); }
-[data-theme="skyline"] #camera [role="toolbar"] button:hover:not([disabled]) { background: rgba(31, 111, 214, .1); }
-[data-theme="skyline"] #camera [role="toolbar"] button[aria-pressed="true"], [data-theme="skyline"] #camera [role="toolbar"] button.on { color: #fff; background: var(--pill-on); box-shadow: 0 0 10px var(--glow); text-shadow: 0 1px 1px rgba(0, 40, 100, .5); }
-[data-theme="skyline"] #camera p { color: var(--text) !important; background: rgba(255, 255, 255, .92); border-radius: 9px; text-shadow: none; box-shadow: none; }
-[data-theme="skyline"] .preview-hud { color: var(--text) !important; background: rgba(255, 255, 255, .78) !important; border-radius: 6px; }
+[data-theme="skyline"] #camera [role="toolbar"] button:hover:not([disabled]) { background: var(--hover); }
+/* a pressed key: the lit gloss and the page's accent underline, no glow */
+[data-theme="skyline"] #camera [role="toolbar"] button[aria-pressed="true"], [data-theme="skyline"] #camera [role="toolbar"] button.on { color: #fff; background: var(--pill-on); box-shadow: inset 0 -2px 0 var(--accent); text-shadow: none; }
+[data-theme="skyline"] #camera p { color: var(--text) !important; background: rgba(255, 255, 255, .92); text-shadow: none; box-shadow: none; }
+[data-theme="skyline"] .preview-hud { color: var(--text) !important; background: rgba(255, 255, 255, .78) !important; }
 
 
 /* the guide card (onboarding/index.js) as a white pane; its "look here" outline is the accent (the page's own rule) */
-[data-theme="skyline"] .guide-card { border-radius: 14px; box-shadow: inset 0 1px 0 #fff; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+[data-theme="skyline"] .guide-card { box-shadow: inset 0 1px 0 #fff; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 [data-theme="skyline"] .guide-card .guide-count { opacity: 1; color: var(--dim); }
 
 /* the piece values over the view: a white pane (valuesoverlay.js draws it on --veil, the dark of the handles' readout, by default) */
@@ -97,13 +105,15 @@
 
 /* the question in the page */
 [data-theme="skyline"] .ask-veil { background: rgba(120, 180, 240, .35); }
-[data-theme="skyline"] .ask-card { background: linear-gradient(180deg, #ffffff, #eef6ff); border-radius: 16px; box-shadow: 0 18px 60px rgba(18, 80, 170, .4); }
+[data-theme="skyline"] .ask-card { background: linear-gradient(180deg, #ffffff, #eef6ff); }   /* its corner (r4) and small neutral shadow are the page's: no blue halo */
 
 /* L242 (the user, 2026-11-26 00:58: "we should also incorporate the themes for those windows for each theme"): the small windows on the view, a mark's label and a
-   handle's readout, drawn on a canvas, so set here as tokens that app/core/markwindow.js reads. White frosted glass by day: rounded like its panes, dark blue words, a glossy top edge and a soft blue shadow under it. The font is one of the page's own (its --display or --body); these are
+   handle's readout, drawn on a canvas, so set here as tokens that app/core/markwindow.js reads. White frosted glass by day: cornered on the page's scale like its panes, dark blue words, a glossy top edge and a soft blue shadow under it. The font is one of the page's own (its --display or --body); these are
    canvas tokens and move no box. --mark-<field> sets a mark's and handle's colour (bank, turn, climb, width, cup, length, edge), --mark-rim the dark rim under them. */
 [data-theme="skyline"] {
-  --mark-win-font: var(--body); --mark-win-weight: 600; --mark-win-radius: 12; --mark-win-edge: 1.5; --mark-win-glow: 0;
+  /* L249: the window's corner is on the scale, r1 at this look's factor 1 = 2 px (a 22 px window took 12, a capsule); its fill, sheen and glow stay as he liked them.
+     markwindow.js reads a plain number here (parseFloat), so this is the value, not a calc() */
+  --mark-win-font: var(--body); --mark-win-weight: 600; --mark-win-radius: 2; --mark-win-edge: 1.5; --mark-win-glow: 0;
   --mark-win-bg: rgba(255, 255, 255, .92); --mark-win-text: #0b2747; --mark-win-sheen: rgba(255, 255, 255, .95); --mark-win-shade: rgba(28, 92, 168, .30);
   /* L244 (the user, 2026-11-26 02:23: "yes handle colors per theme"): the marks' and handles' colours, by day, on a light sky: deep inks that read on it, bank a vivid royal blue (a sky blue would vanish into the sky, an indigo read as the slate length at handle size), length a slate, and a white rim under every mark in place of the dark one. Each field keeps one colour everywhere in this
      look; bank and turn at least 60 apart, every pair of fields and each against the road's edge, the grid, the fog and the sky (app/test/markwindow.test.js W5) */
