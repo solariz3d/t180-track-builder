@@ -157,11 +157,12 @@ test('C8: in the panel, the extra bank\'s tick is lit while its handle is hovere
 //   R1: while the tick itself is dragged, the label, tint and arrows follow the drag (they stayed at the old mark until release, and the label read the old number).
 //   R2: a label is nudged off any handle's screen box, and kept below the HUD's bottom edge (the top readout, [aria-label="piece values"]).
 function stubCtx() {
-  const rec = { rects: [], texts: [] };
+  const rec = { rects: [], texts: [], arcs: [] };
   const ctx = new Proxy({ rec }, { get: (t, k) => {
     if (k in t) return t[k];
     if (k === 'measureText') return (s) => ({ width: String(s).length * 7 });
-    if (k === 'clearRect') return () => { rec.rects = []; rec.texts = []; };
+    if (k === 'clearRect') return () => { rec.rects = []; rec.texts = []; rec.arcs = []; };
+    if (k === 'arc') return (x, y, r) => rec.arcs.push({ x, y, r });
     if (k === 'fillRect') return (x, y, w, h) => rec.rects.push({ x, y, w, h });
     if (k === 'fillText') return (s, x, y) => rec.texts.push({ s: String(s), x, y });
     return () => {};
@@ -169,7 +170,9 @@ function stubCtx() {
   return ctx;
 }
 // a straight 1,000 m ghost along +z (L = +x), seen from straight above, the road running up the screen; the stage 900 × 600
-function marksLayer({ from = 380, avoid = null, hudBottom = null } = {}) {
+// AMENDED BY NAME (L241, the rule changed: a label shows only while its mark is hovered, lit or dragged, or just added; at rest a mark is one dot). `lit` lets the
+// placement rows (R2a, R2b) draw the label as they did; `marks` gives the layer more than one mark
+function marksLayer({ from = 380, avoid = null, hudBottom = null, lit = false, marks = null } = {}) {
   const { doc, win } = fakeWindow(); const stage = doc.createElement('div'); stage.clientWidth = 900; stage.clientHeight = 600; stage.style = {};
   const ctx = stubCtx(); const create = doc.createElement; doc.createElement = (t) => { const e = create(t); if (t === 'canvas') e.getContext = () => ctx; return e; };
   if (hudBottom !== null) doc.querySelectorAll = (sel) => (sel === '[aria-label="piece values"]' ? [{ getBoundingClientRect: () => ({ left: 300, top: 0, width: 300, height: hudBottom, bottom: hudBottom }) }] : []);
@@ -177,8 +180,8 @@ function marksLayer({ from = 380, avoid = null, hudBottom = null } = {}) {
   const ghost = { samples, s0: 0, jump: false }, pose = { eye: [0, 700, 500], target: [0, 0, 500], up: [0, 0, 1], fov: Math.PI / 3 };
   doc.addEventListener('t180:ghost-request', (e) => e.detail.reply(ghost)); doc.addEventListener('t180:view', (e) => e.detail.reply({ pose }));
   const state = { from };
-  const item = () => ({ field: 'bank', index: 0, from: state.from, to: 1000, half: 15, halfTo: 15, label: ST.markText('bank', 0, state.from, 1000, 1000), lit: false, ...ST.styleOf('bank') });
-  const layer = ST.mount(stage, win, () => ({ marks: [item()], offers: [] }), { onMarkDrag: (m, f) => { state.from = f; }, ...(avoid ? { avoid } : {}) });
+  const item = () => ({ field: 'bank', index: 0, from: state.from, to: 1000, half: 15, halfTo: 15, label: ST.markText('bank', 0, state.from, 1000, 1000), lit, ...ST.styleOf('bank') });
+  const layer = ST.mount(stage, win, () => ({ marks: marks ? marks(state) : [item()], offers: [] }), { onMarkDrag: (m, f) => { state.from = f; }, ...(avoid ? { avoid } : {}) });
   layer.drawNow();
   const VP = M.viewProj(pose, 900 / 600), scr = (p) => { const c = M.apply(VP, p); return { x: (c[0] / c[3] * 0.5 + 0.5) * 900, y: (1 - (c[1] / c[3] * 0.5 + 0.5)) * 600 }; };
   const box = () => ctx.rec.rects.filter((r) => r.h === 42).at(-1) || null;
@@ -189,8 +192,11 @@ const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h
 
 test('R1: dragging the tick itself, the label\'s number and the stretch\'s start follow the drag before release', () => {
   const A = marksLayer({ from: 380 });
-  assert.match(A.text(), /^Extra bank · 380\.00 m/, 'drawn at 380 first');
+  // AMENDED BY NAME (L241): at rest no label; the pointer over the mark's dot shows it at 380, and the drag from that dot does what it did
+  assert.equal(A.text(), '', 'no label at rest');
   const st = A.layer.marks()[0].strokes[0], p0 = { x: (st.a.x + st.b.x) / 2, y: (st.a.y + st.b.y) / 2 }, to = A.scr([15 * HD.KINDS.bank.lat, 0, 478]);
+  A.stage.fire('pointermove', { clientX: p0.x, clientY: p0.y, pointerId: 1 }); A.layer.drawNow();
+  assert.match(A.text(), /^Extra bank · 380\.00 m/, 'hovered, drawn at 380 first');
   A.stage.fire('pointerdown', { clientX: p0.x, clientY: p0.y, pointerId: 1 });
   A.stage.fire('pointermove', { clientX: to.x, clientY: to.y, pointerId: 1 });
   assert.equal(A.state.from, 478, 'the drag moved the change to 478 m');
@@ -201,19 +207,19 @@ test('R1: dragging the tick itself, the label\'s number and the stretch\'s start
 });
 
 test('R2a: a label whose place falls on a handle\'s screen box is nudged off it', () => {
-  const free = marksLayer({ from: 380 }), at = free.box(); free.layer.unmount();
+  const free = marksLayer({ from: 380, lit: true }), at = free.box(); free.layer.unmount();
   assert.ok(at, 'the label is drawn');
   const handle = { x: at.x + at.w / 2 - 12, y: at.y + at.h / 2 - 12, w: 24, h: 24 };   // a handle's box right on the label's middle
-  const A = marksLayer({ from: 380, avoid: () => [handle] }), b = A.box();
+  const A = marksLayer({ from: 380, avoid: () => [handle], lit: true }), b = A.box();
   assert.ok(b && !overlaps(b, handle), `the label (${JSON.stringify(b)}) clears the handle (${JSON.stringify(handle)})`);
   assert.ok(b.x >= 0 && b.y >= 0 && b.x + b.w <= 900 && b.y + b.h <= 600, 'and stays on the stage');
   A.layer.unmount();
 });
 
 test('R2b: a label is kept below the HUD\'s bottom edge', () => {
-  const free = marksLayer({ from: 380 }), at = free.box(); free.layer.unmount();
+  const free = marksLayer({ from: 380, lit: true }), at = free.box(); free.layer.unmount();
   const hud = Math.round(at.y + at.h / 2);   // the readout reaching half way down where the label would be
-  const A = marksLayer({ from: 380, hudBottom: hud }), b = A.box();
+  const A = marksLayer({ from: 380, hudBottom: hud, lit: true }), b = A.box();
   assert.ok(b && b.y >= hud, `the label's top (${b && b.y}) is at or below the HUD's bottom (${hud})`);
   A.layer.unmount();
 });
@@ -227,4 +233,47 @@ test('R2c: the panel hands the marks\' layer each handle\'s screen box (and its 
   p.panel.handles.tips = () => [{ x: 10, y: 20, w: 100, h: 22 }];
   assert.deepEqual(hooks.avoid(), [{ x: 276, y: 176, w: 48, h: 48 }, { x: 10, y: 20, w: 100, h: 22 }], 'the drawn handle\'s box, 24 px every way, and the tip; a handle off screen gives none');
   p.panel.unmount();
+});
+
+// ── L241 (the user, 2026-11-26, his screenshot "it is way too cluttered the UI representing the turns"): at rest one dot per mark and no label; hover, lit, drag or a mark just
+// added show its arrows and label
+const twoMarks = (st) => [st.from, 700].map((f, k) => ({ field: 'bank', index: k, from: f, to: k ? 1000 : 700, half: 15, halfTo: 15, label: ST.markText('bank', k, f, k ? 1000 : 700, 1000), lit: false, ...ST.styleOf('bank') }));
+const labels = (A) => A.ctx.rec.texts.filter((t) => t.s.startsWith('Extra bank')).map((t) => t.s.slice(0, 13));
+test('D1: at rest, no label box and no label text, and one dot per mark, on the mark', () => {
+  const A = marksLayer({ marks: twoMarks });
+  assert.equal(A.box(), null, 'no label box'); assert.equal(A.ctx.rec.texts.length, 0, 'no label text');
+  assert.equal(A.ctx.rec.arcs.length, 2, 'one dot for each of the two marks');
+  const st = A.layer.marks()[1].strokes[0], dot = A.ctx.rec.arcs[1];
+  assert.ok(Math.hypot(dot.x - (st.a.x + st.b.x) / 2, dot.y - (st.a.y + st.b.y) / 2) < 1e-6, 'the dot is at the centre of the mark\'s stroke, where it is grabbed');
+  A.layer.unmount();
+});
+test('D2: the pointer over one dot shows that mark\'s label (and no dot for it); off it, the label goes', () => {
+  const A = marksLayer({ marks: twoMarks }), st = A.layer.marks()[1].strokes[0], p = { x: (st.a.x + st.b.x) / 2, y: (st.a.y + st.b.y) / 2 };
+  A.stage.fire('pointermove', { clientX: p.x, clientY: p.y, pointerId: 1 }); A.layer.drawNow();
+  assert.deepEqual(labels(A), ['Extra bank 2 '], 'only the hovered mark is labelled');
+  assert.equal(A.ctx.rec.arcs.length, 1, 'the other mark stays a dot');
+  A.stage.fire('pointermove', { clientX: 5, clientY: 5, pointerId: 1 }); A.layer.drawNow();
+  assert.equal(A.ctx.rec.texts.length, 0, 'off it, no label'); assert.equal(A.ctx.rec.arcs.length, 2);
+  A.layer.unmount();
+});
+test('D3: a lit mark (its extra handle hovered or dragged) shows its label and no dot', () => {
+  const A = marksLayer({ lit: true }); assert.match(A.text(), /^Extra bank · 380\.00 m/); assert.equal(A.ctx.rec.arcs.length, 0); A.layer.unmount();
+});
+test('D4: a mark just added shows its label for about 2 s, then is a dot; marks there at the first draw do not', () => {
+  const now0 = Date.now; let t = 1e12; Date.now = () => t;
+  try {
+    const n = { v: 1 }, A = marksLayer({ marks: (s) => twoMarks(s).slice(0, n.v) });
+    assert.equal(A.ctx.rec.texts.length, 0, 'the first draw shows none');
+    n.v = 2; A.layer.drawNow();
+    assert.deepEqual(labels(A), ['Extra bank 2 '], 'the added one is labelled');
+    t += 1900; A.layer.drawNow(); assert.equal(labels(A).length, 1, 'still at 1.9 s');
+    t += 200; A.layer.drawNow(); assert.equal(A.ctx.rec.texts.length, 0, 'gone after 2 s'); assert.equal(A.ctx.rec.arcs.length, 2);
+    A.layer.unmount();
+  } finally { Date.now = now0; }
+});
+test('D5: the dot is grabbed as the tick was: a press on it and a drag move the mark', () => {
+  const A = marksLayer({ from: 380 }), dot = A.ctx.rec.arcs[0], to = A.scr([15 * HD.KINDS.bank.lat, 0, 520]);
+  A.stage.fire('pointerdown', { clientX: dot.x, clientY: dot.y, pointerId: 1 }); A.stage.fire('pointermove', { clientX: to.x, clientY: to.y, pointerId: 1 });
+  assert.equal(A.state.from, 520); assert.match(A.text(), /^Extra bank · 520\.00 m/, 'mid-drag, labelled');
+  A.stage.fire('pointerup', { clientX: to.x, clientY: to.y, pointerId: 1 }); A.layer.unmount();
 });

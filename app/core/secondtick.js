@@ -30,6 +30,10 @@ const { tokensOf } = require('../lib/tokens.js');
 
 const EDGE_COLOUR = '#3fd0c9';   // the left and right edge have no handle kind in handles.js, so no colour of their own there: this one is the panel's (L139)
 const STROKE_PX = 7, NUDGE_PX = 10, HIT_PX = 10;
+// L241 (the user, 2026-11-26, his screenshot "it is way too cluttered the UI representing the turns"): AT REST a mark is one small dot on the road in its colour, at its first
+// stroke's centre (inside the grab it always had); its stroke, arrows, tinted stretch and label are drawn only while it is SHOWN: hovered, lit (its extra handle hovered or
+// dragged), dragged by its tick, or for FLASH_MS after it was added. Grabbing and dragging are unchanged (the strokes are still computed and hit as before)
+const DOT_PX = 4.5, FLASH_MS = 2000;
 const STYLE = Object.freeze({
   turn: { kind: 'turn', lat: HD.KINDS.turn.lat, sides: [1, -1], nudgePx: NUDGE_PX },
   bank: { kind: 'bank', lat: HD.KINDS.bank.lat, sides: [1, -1], nudgePx: 0 },
@@ -117,7 +121,7 @@ function mount(stage, win, itemsNow, hooks = {}) {
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4';
   stage.append(canvas);
   const ask = (name) => { let got = null; doc.dispatchEvent(new win.CustomEvent(name, { detail: { reply: (x) => { got = x; } } })); return got; };
-  let raf = 0, sized = '', drawnMarks = [], drawnOffers = [], last = { ghost: null, pose: null, W: 0, H: 0 }, drag = null, placed = [];
+  let raf = 0, sized = '', drawnMarks = [], drawnOffers = [], last = { ghost: null, pose: null, W: 0, H: 0 }, drag = null, placed = [], hover = null, flashes = [], prevByField = null;   // L241: the mark under the pointer, the marks just added, the froms the last draw had per field
   // The HUD's bottom edge in css px of the stage (the top readout, app/core/valuesoverlay.js, the same element labels.js keeps clear of), read at most every
   // 200 ms as labels.js reads its panels (reading a box forces a layout); 0 on a page without it
   let hudAt = -Infinity, hudNow = 0;
@@ -135,15 +139,25 @@ function mount(stage, win, itemsNow, hooks = {}) {
     const ghost = any ? ask('t180:ghost-request') : null, view = ghost ? ask('t180:view') : null, pose = view && view.pose;
     last = { ghost, pose, W, H };
     drawnMarks = pose ? (items.marks || []).map((mk) => { const d = markStroke(ghost, mk, pose, W, H); return d ? { ...d, item: mk } : null; }).filter(Boolean) : [];
+    // a mark ADDED since the last draw (one more of its field, at a from none had before) is shown for FLASH_MS; marks appearing in bulk (a piece opened, the ghost shown) are not
+    const nowMs = Date.now(), byField = {};
+    for (const d of drawnMarks) (byField[d.item.field] = byField[d.item.field] || []).push(d.item.from);
+    if (prevByField) for (const f of Object.keys(byField)) {
+      const was = prevByField[f] || [], now = byField[f];
+      if (now.length === was.length + 1) { const fresh = now.filter((x) => !was.some((y) => Math.abs(x - y) < 1e-6)); if (fresh.length === 1) flashes.push({ field: f, from: fresh[0], until: nowMs + FLASH_MS }); }
+    }
+    prevByField = byField; flashes = flashes.filter((x) => x.until > nowMs);
     drawnOffers = pose ? (items.offers || []).map((of) => { const d = markStroke(ghost, { ...of, nudgePx: of.nudgePx, sides: [of.sides[0]] }, pose, W, H); return d ? { ...d, item: of, at: { x: (d.strokes[0].a.x + d.strokes[0].b.x) / 2, y: (d.strokes[0].a.y + d.strokes[0].b.y) / 2 } } : null; }).filter(Boolean) : [];
     const ctx = canvas.getContext ? canvas.getContext('2d') : null;
     if (ctx) {
       const dpr = win.devicePixelRatio || 1, key = `${W}x${H}@${dpr}`;
       if (key !== sized) { canvas.width = Math.max(1, Math.round(W * dpr)); canvas.height = Math.max(1, Math.round(H * dpr)); sized = key; }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H); ctx.lineCap = 'round';
-      for (const d of drawnMarks) if (d.item.label) drawStretch(ctx, d, last);
-      for (const d of drawnMarks) for (const [w, colour] of [[6, T.css('--ink', '#0b0d11')], [3, d.item.colour]]) { ctx.lineWidth = w; ctx.strokeStyle = colour; for (const st of d.strokes) { ctx.beginPath(); ctx.moveTo(st.a.x, st.a.y); ctx.lineTo(st.b.x, st.b.y); ctx.stroke(); } }
-      placed = []; for (const d of drawnMarks) if (d.item.label) drawExplained(ctx, d, last, W, H);
+      const on = drawnMarks.filter((d) => shownNow(d, nowMs)), rest = drawnMarks.filter((d) => !on.includes(d));
+      for (const d of on) if (d.item.label) drawStretch(ctx, d, last);
+      for (const d of on) for (const [w, colour] of [[6, T.css('--ink', '#0b0d11')], [3, d.item.colour]]) { ctx.lineWidth = w; ctx.strokeStyle = colour; for (const st of d.strokes) { ctx.beginPath(); ctx.moveTo(st.a.x, st.a.y); ctx.lineTo(st.b.x, st.b.y); ctx.stroke(); } }
+      for (const d of rest) { const c = dotOf(d); ctx.beginPath(); ctx.arc(c.x, c.y, DOT_PX, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = T.css('--ink', '#0b0d11'); ctx.fillStyle = d.item.colour; ctx.fill(); ctx.stroke(); }
+      placed = []; for (const d of on) if (d.item.label) drawExplained(ctx, d, last, W, H);
       // an offer: a faint ring in the field's colour, the same size as a handle's mark (it is a handle not yet used)
       ctx.globalAlpha = 0.45;
       for (const d of drawnOffers) { ctx.lineWidth = 2.5; ctx.strokeStyle = d.item.colour; ctx.beginPath(); ctx.arc(d.at.x, d.at.y, 7, 0, Math.PI * 2); ctx.stroke(); }
@@ -187,6 +201,11 @@ function mount(stage, win, itemsNow, hooks = {}) {
     ctx.fillStyle = T.css('--on-ink', '#eef1f6'); ctx.textBaseline = 'middle'; lines.forEach((t, i) => ctx.fillText(t, bx + 6, by + 12 + 18 * i));
     ctx.restore();
   };
+  const keyOf = (it) => `${it.field}:${it.index}`;
+  const dotOf = (d) => { const st = d.strokes[0]; return { x: (st.a.x + st.b.x) / 2, y: (st.a.y + st.b.y) / 2 }; };
+  const shownNow = (d, nowMs) => !!(d.item.lit || (drag && drag.kind === 'mark' && keyOf(drag.d.item) === keyOf(d.item)) || hover === keyOf(d.item)
+    || flashes.some((x) => x.field === d.item.field && Math.abs(x.from - d.item.from) < 1e-6 && x.until > nowMs));
+  const hitMark = (p) => drawnMarks.find((d) => Math.hypot(dotOf(d).x - p.x, dotOf(d).y - p.y) <= HIT_PX || d.strokes.some((st) => segDist(p, st.a, st.b) <= HIT_PX));
   const frame = () => { raf = win.requestAnimationFrame(frame); if (!drag) drawNow(); };
   raf = win.requestAnimationFrame(frame);
   const local = (e) => { const r = stage.getBoundingClientRect ? stage.getBoundingClientRect() : { left: 0, top: 0 }; return { x: e.clientX - r.left, y: e.clientY - r.top }; };
@@ -196,7 +215,7 @@ function mount(stage, win, itemsNow, hooks = {}) {
     const p = local(e);
     if (hooks.yields && hooks.yields(p)) return;   // L140 (B's G4, G10): the press is a handle's
     const offer = drawnOffers.find((d) => Math.hypot(d.at.x - p.x, d.at.y - p.y) <= HIT_PX);
-    const mark = offer ? null : drawnMarks.find((d) => d.strokes.some((st) => segDist(p, st.a, st.b) <= HIT_PX));
+    const mark = offer ? null : hitMark(p);
     if (!offer && !mark) return;
     take(e);
     drag = { kind: offer ? 'offer' : 'mark', d: offer || mark, start: p, moved: false, ghost: last.ghost, pose: last.pose, W: last.W, H: last.H };
@@ -204,7 +223,7 @@ function mount(stage, win, itemsNow, hooks = {}) {
     if (hooks.onDragStart) hooks.onDragStart(drag.d.item);
   };
   const move = (e) => {
-    if (!drag) return;
+    if (!drag) { const h = hitMark(local(e)); hover = h ? keyOf(h.item) : null; return; }   // hover only: the event is not taken, so the handles and the camera still get it
     take(e);
     const p = local(e), { ghost, pose, W, H } = drag;
     if (!ghost || !pose) return;
