@@ -915,6 +915,11 @@ function landingStart(doc, first) {
   const typed = LANDING_FIRST.filter((ch) => first[ch] !== undefined && first[ch] !== null);
   return typed.length ? { ...e, ...Object.fromEntries(typed.map((ch) => [ch, { v: first[ch], m: 0 }])) } : e;
 }
+/** The KIND a new piece with no cup or tube target starts as on a track that is not empty: a cup when a cup is typed as a landing's start after a bare flight,
+ *  else the head's (D.endKind). It is extend's own rule below (`kind`, startTyped && given(f0.c)), for a reader that builds the same start elsewhere (sharp.js probe; A's read, F1). */
+function landingKind(doc, first) {
+  return endsInFlight(doc) && first && first.c !== undefined && first.c !== null ? 'cup' : D.endKind(doc);
+}
 
 function extend(doc, opts = {}) {
   let { length, transition, targets = {}, family, knotM, first, grip, bankShape, startShapes, second, changes } = opts;
@@ -1173,4 +1178,4 @@ function checkBankAsBuilt(doc, opts, out, relay) {
   bankAsBuilt(doc, out.pieces[out.pieces.length - 1], extend(doc, { ...opts, bankCheck: 'list' }));
 }
 
-module.exports = { extend, landingStart, checkBankAsBuilt, flowInside, secondMinM, spanHolds, CHANGE_FLOOR_M, BANK_FIT_FLOOR_M, SECOND_MIN_K, SECOND_FLOOR_M, CHANGE_CHANNELS, roundedLinear, rampShape, BANK_ROUND_M, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, sampleBasis, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };
+module.exports = { extend, landingStart, landingKind, checkBankAsBuilt, flowInside, secondMinM, spanHolds, CHANGE_FLOOR_M, BANK_FIT_FLOOR_M, SECOND_MIN_K, SECOND_FLOOR_M, CHANGE_CHANNELS, roundedLinear, rampShape, BANK_ROUND_M, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, sampleBasis, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };

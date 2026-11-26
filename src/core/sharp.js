@@ -17,7 +17,7 @@
 // track (running over another part of it) is the validator's to show, as for any piece.
 'use strict';
 const D = require('./document.js');
-const { extend, landingStart } = require('./extend.js');
+const { extend, landingStart, landingKind } = require('./extend.js');
 const { toPath, toSegments } = require('./adapter.js');
 const { turnWeights } = require('./turnby.js');
 
@@ -93,7 +93,8 @@ function probe(doc, opts, sharp) {
   const last = [...doc.pieces].reverse().find((P) => P.type === 'road'), from = landingStart(doc, opts.first);
   let start = D.createDoc('sharp probe');
   if (from) {
-    const kind = D.endKind(doc), first = { kh: 0, kv: 0, phi: from.phi.v, w: from.w.v, r: from.r.v, e: from.e.v, s: from.s.v };
+    // its KIND too, and both edges: a cup typed after a bare flight probes as a cup (extend.js landingKind), and the right edge is its own (A's read of C1, F1 and F2)
+    const kind = landingKind(doc, opts.first), first = { kh: 0, kv: 0, phi: from.phi.v, w: from.w.v, r: from.r.v, e: from.e.v, er: from.er.v, s: from.s.v };
     if (kind === 'cup') first.c = from.c.v; else if (kind === 'tube') first.t = from.tNext ? from.tNext.v : from.t.v;
     start = extend(start, { length: PROBE_IN, family: last ? last.family : 'bowl', first });
   } else start = extend(start, { length: PROBE_IN, family: opts.family || 'bowl' });

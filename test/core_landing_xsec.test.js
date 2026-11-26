@@ -116,3 +116,27 @@ test('C-3: an edge typed as the landing\'s start past the cap, or under the floo
   assert.throws(() => extend(t, { length: 60, first: { er: 140 } }), (e) => e.code === 'BAD_EDGE' && /first piece's right edge 140° is past what/.test(e.message));
   assert.equal(D.serialize(t), text);
 });
+
+// THE REPAIR ROUND (pane A's read of 9e79648, exo_memory/handback/p-c1-landing-read-A_2026-11-26.md, F1 to F3): Sharp's probe starts as the corner does, KIND too
+const SHq = (deg) => ({ angle: (deg * Math.PI) / 180, ramp: 4 });
+const bowl = (o = {}) => extend(D.createDoc('probe'), { length: 200, family: 'bowl', ...o });
+test('C-4 (Sharp, KIND, A\'s F1): a cup typed as the landing\'s start after a PLAIN or a TUBE take-off\'s flight gives Sharp the tightest radius of a take-off already that cup (its probe is a cup, as the corner is)', () => {
+  const SH = require('../src/core/sharp.js'), fly = (d) => J.jump(d, { forward: 40 });
+  const cupRef = (w) => SH.tightestSharp(fly(bowl({ first: { c: 70, ...(w ? { w } : {}) } })), { length: 100, targets: { c: 70 } }, SHq(90));
+  assert.equal(SH.tightestSharp(fly(bowl()), { length: 100, targets: { c: 70 }, first: { c: 70 } }, SHq(90)), cupRef(), 'after a plain take-off');
+  const tube = bowl({ first: { t: 200 } }), w = D.pieceEnd(tube.pieces[0]).w.v;
+  assert.equal(SH.tightestSharp(fly(tube), { length: 100, targets: { c: 70 }, first: { c: 70 } }, SHq(90)), cupRef(w), 'after a tube take-off (the cup at the tube\'s width)');
+});
+
+test('Sharp (RIGHT EDGE, A\'s F2): a head whose right edge differs from its left probes as its mirror does (a right edge of 60 turning one way, a left edge of 60 turning the other), with and without a flight', () => {
+  const SH = require('../src/core/sharp.js'), fly = (d) => J.jump(d, { forward: 40 });
+  assert.equal(SH.tightestSharp(bowl({ first: { c: 40, e: 5, er: 60 } }), { length: 100 }, SHq(90)), SH.tightestSharp(bowl({ first: { c: 40, e: 60, er: 5 } }), { length: 100 }, SHq(-90)), 'no flight');
+  const t = fly(bowl({ first: { c: 40, e: 5, er: 5 } }));
+  assert.equal(SH.tightestSharp(t, { length: 100, targets: { er: 60 }, first: { er: 60 } }, SHq(90)), SH.tightestSharp(t, { length: 100, targets: { e: 60, er: 5 }, first: { e: 60, er: 5 } }, SHq(-90)), 'the right edge typed after a flight');
+});
+
+test('C-2 (Jump, A\'s F3): the Jump button after a bare flight (Extend\'s options, then the jump: jump.js jumpHere) lays its road piece at the TYPED width, as Extend does', () => {
+  const t = flown(), d = J.jumpHere(t, { length: 60, targets: { w: 18 }, first: { w: 18 } });
+  assert.equal(d.pieces[2].type, 'road'); assert.equal(d.pieces[2].channels.w[0], 18);
+  assert.throws(() => J.jumpHere(t, null), (e) => e.code === 'JUMP_AFTER_JUMP', 'with no options, a jump straight after a flight is still refused');
+});

@@ -42,6 +42,13 @@ const MUTANTS = [
   // Sharp's probe (the plan's site to check, sharp.js:95)
   { id: 'S1 Sharp\'s radius probe starts at the take-off\'s cross-section after a flight', file: S, test: 'core', pattern: 'Sharp',
     from: 'from = landingStart(doc, opts.first);', to: 'from = D.endState(doc);' },
+  // the repair round (pane A's read of 9e79648, F1 and F2): the probe's KIND and its right edge
+  { id: "S2 Sharp's probe takes the take-off's kind (a cup typed after a flight is probed as the take-off was)", file: S, test: 'core', pattern: "A's F1",
+    from: 'const kind = landingKind(doc, opts.first), first =', to: 'const kind = D.endKind(doc), first =' },
+  { id: "S3 Sharp's probe drops the right edge (its right edge is its left)", file: S, test: 'core', pattern: "A's F2",
+    from: 'e: from.e.v, er: from.er.v, s: from.s.v };', to: 'e: from.e.v, s: from.s.v };' },
+  { id: "X11 landingKind is always the head's kind", file: X, test: 'core', pattern: "A's F1",
+    from: "return endsInFlight(doc) && first && first.c !== undefined && first.c !== null ? 'cup' : D.endKind(doc);", to: 'return D.endKind(doc);' },
   // the panel
   { id: 'P1 the panel sends no first after a flight', file: P, test: 'panel', pattern: 'panel',
     from: 'else if (afterFlight && Object.keys(landingFirst(targets)).length) out.first = landingFirst(targets);', to: 'else if (false) out.first = landingFirst(targets);' },
@@ -81,7 +88,7 @@ function runMutant(m) {
 
 test('control: the unmutated copy passes every row of both files', () => {
   const r = runMutant({ id: 'control', file: null });
-  assert.ok(r.tests >= 17, `only ${r.tests} tests ran`); assert.equal(r.fail, 0, r.failed.join(' | '));
+  assert.ok(r.tests >= 20, `only ${r.tests} tests ran`); assert.equal(r.fail, 0, r.failed.join(' | '));
 });
 // D352: a crashed inner run is no verdict. The stand-in puts the machine's crash (test/inner_run.js STANDIN) at the top of the first mutant's file
 test('a crashed inner run reads NOT TESTED, never a verdict (the crash stand-in, D352)', () => {
