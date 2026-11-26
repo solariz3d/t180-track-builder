@@ -57,6 +57,7 @@ const { normalize, sealed, spanOf, readAt, offsetAt, psiAt } = require('../../sr
 const M = require('../camera/math.js');
 const { keyAction: shortcutOf } = require('../core/keys.js');   // what Ctrl+key does in the app (undo, redo, save, remove the head): the keys that stop Left Ctrl
 const { acrossAt } = require('../core/zonegrab.js');   // a point on the road's surface across it
+const { placeAt, moveOf } = require('../../src/reference/ribbon.js');   // (L243) another track's road as a shadow layer
 
 // the Sigil surface's one material and its 2×2 texture (warm near-black; the lighting does the rest)
 const SIGIL_TEX = 't180_sigil_surface';
@@ -130,6 +131,12 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   // AC lighting shades (so turns, banks and walls still read) under the bone edge lines. Only the preview: the export writes the chosen surface as ever
   let sigil = false;
   let reds = null;   // the track checker's red ranges ([{ s0, s1 }]), drawn on the road (redMarks); set by the page from the checker's t180:validation
+  // (L243) A REFERENCE TRACK: another track's road (src/reference/ribbon.js), drawn see-through under the user's, never picked, never in the document,
+  // a save or an export. Its start sits on the placed track's start, facing the same way (the origin facing +z with no track), moved by the nudge; never scaled.
+  let refShown = null;   // { ribbon, nudge } or null
+  const refAnchor = () => { const p = track && track.path; if (!p || !p.samples || !p.samples.length) return { pos: [0, 0, 0], T: [0, 0, 1] }; const m = sampleAt(p, 0); return { pos: m.pos.slice(), T: m.T.slice() }; };
+  const referenceNow = () => (refShown ? { batches: refShown.ribbon.batches, edges: refShown.ribbon.edges, model: placeAt(refShown.ribbon, refAnchor(), refShown.nudge) } : null);
+  const referenceInfo = () => { if (!refShown) return null; const r = refShown.ribbon, M = placeAt(r, refAnchor(), refShown.nudge), at = moveOf(r, M); return { lengthM: r.lengthM, width: { ...r.width }, closed: r.closed, points: r.points, nudge: { ...refShown.nudge }, start: at.pos, forward: at.T, anchor: refAnchor() }; };
   const lookFor = (scene) => { if (resolvedFor !== scene.materials) { resolved = sigil ? SIGIL_LOOK : resolveLook(scene, set, images); resolvedFor = scene.materials; } return resolved; };
   // a textured EQUATION-CORE cell's coordinates run on the path's own arc length (src/texture/flow.js), the same coordinates the export writes.
   // Batches whose uvs are unchanged keep the very same array (the renderer keeps a GPU buffer per array), so an edit re-uploads only the new pieces.
@@ -414,6 +421,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       shownPose = rig.update(c, dt);
       const L = look === 'ac' && track && track.mesh ? lookFor(track.mesh.scene) : null;
       renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay: overlayOf(plan, track, withReds(sculptCues(track, hoverNow(), startMovedOf(shell.getState())), redMarks(track, reds))), depthLines: plan ? plan.depth : null,
+        reference: referenceNow(),   // (L243) another track's road, see-through under the user's (renderer.js drawReference)
         look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null, lod: true, time: skyTime(t) });   // lod: the placed road is drawn coarser far from the eye (renderer.js LOD_NEAR); the export, the checker and the readouts never see it
       if (layer) layer.update({ plan, pose: shownPose, aspect: w / h, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight });
     }
@@ -468,6 +476,15 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
      * wraps), looking at it. A click on a red in a list calls this. Returns false when there is no track to look at.
      */
     /** The track checker's red ranges ([{ s0, s1 }], its result's red list), drawn on the road as lines across it in red; null or [] draws none. */
+    /** (L243) Show another track's road as a shadow layer: { ribbon (src/reference/ribbon.js ribbonOf), nudge? { dx, dy, dz, yawDeg } }, or null to hide it. Returns reference(). */
+    setReference(ref) {
+      if (ref && !(ref.ribbon && Array.isArray(ref.ribbon.batches))) throw new Error('preview: a reference needs a ribbon from src/reference/ribbon.js');
+      const nudge = ref ? { ...(ref.nudge || {}) } : null;
+      if (ref) placeAt(ref.ribbon, refAnchor(), nudge);   // a bad nudge throws here, before anything is replaced
+      refShown = ref ? { ribbon: ref.ribbon, nudge } : null; return referenceInfo();
+    },
+    /** (L243) The reference shown now, read only: { lengthM, width, closed, points, nudge, start, forward, anchor } (start and forward where its start landed), or null. */
+    reference: () => referenceInfo(),
     setReds(list) { reds = Array.isArray(list) && list.length ? list.map((x) => ({ s0: Number.isFinite(x.s0) ? x.s0 : x.s, s1: Number.isFinite(x.s1) ? x.s1 : Number.isFinite(x.s0) ? x.s0 : x.s })).filter((x) => Number.isFinite(x.s0) && Number.isFinite(x.s1)) : null; },
     focus(s) {
       const p = track && track.path; if (!p || !Number.isFinite(s) || !p.samples.length) return false;
