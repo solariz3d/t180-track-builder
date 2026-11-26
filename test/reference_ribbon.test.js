@@ -1,11 +1,11 @@
-// reference_ribbon.test.js (L243): another track's AI line read into a road ribbon at true scale (src/reference/ribbon.js).
+// reference_ribbon.test.js (L243; L250 rows at the end): another track's AI line read into a road ribbon at true scale (src/reference/ribbon.js).
 // A known file gives a known length and width. The files are built here with the builder's own encodeAiLine, so nothing of another author's
 // track is in the repository; a grid is appended by hand, as every installed line on L carries one.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
 const { encodeAiLine, readAiLine, EXTRA } = require('../src/export/ailine.js');
-const { readAiShape, ribbonOf, placeAt, moveOf, apply, RefTrackError } = require('../src/reference/ribbon.js');
+const { readAiShape, ribbonOf, placeAt, moveOf, apply, RefTrackError, refusalWords, sameLine, uiLengthM, lineNotes } = require('../src/reference/ribbon.js');
 
 /** A circle of radius R (m) in the ground plane, n points, run in the +phi direction: closed. side: { sideLeft, sideRight, camber, flatNormals }. */
 function circleLine(R, n, side = {}) {
@@ -120,4 +120,51 @@ test('refuses what it cannot read, by name', () => {
   const x = Buffer.from(good); x.writeInt32LE(49, 16 + 50 * 20); assert.strictEqual(code(x), 'BAD_EXTRA');
   assert.strictEqual(code(Buffer.concat([good, Buffer.alloc(8)])), 'TRAILING');
   assert.strictEqual(code(good), 'read');
+});
+
+// ── L250: the panel's words, borrowed lines, open lines ──
+
+test('L250: the two kinds of line that do not read on L are refused in words, never drawn in part', () => {
+  const stub = Buffer.alloc(12); stub.writeInt32LE(3, 0);   // a 12-byte stub: version 3, 0 points
+  const good = encodeAiLine(circleLine(200, 50)), short = good.subarray(0, good.length - 8);   // 8 bytes short of its points
+  for (const [b, why] of [[stub, /cut short \(12 bytes/], [short, /cut short \(50 points need/]]) {
+    let err = null; try { readAiShape(b); } catch (e) { err = e; }
+    assert.ok(err, 'refused');
+    const w = refusalWords(err);
+    assert.match(w, /^Not drawn: its AI line is cut short/); assert.match(w, why); assert.match(w, /never drawn in part\.$/);
+    assert.doesNotMatch(w, /TRUNCATED/, 'the code is not shown, its words are');
+  }
+  assert.strictEqual(refusalWords('the AI line says it has 0 points'), 'Not drawn: the AI line says it has 0 points. A line that does not read whole is never drawn in part.', 'the native side\'s own words pass through');
+});
+
+test('L250: an open line draws open: no span and no edge joins its last point to its first; a lap whose ends are 2 spacings apart is closed', () => {
+  const line = circleLine(200, 400); line.points = line.points.slice(0, 300); line.extra = line.extra.slice(0, 300); line.open = true;
+  const r = ribbonOf(readAiShape(encodeAiLine(line)));
+  assert.strictEqual(r.closed, false);
+  const E = r.edges, first = [r.batches[0].positions[0], r.batches[0].positions[2]];
+  assert.strictEqual(E.length, 299 * 12, 'one edge pair a span, 299 spans');
+  for (let i = 0; i < E.length; i += 6) assert.ok(!(Math.hypot(E[i + 3] - first[0], E[i + 5] - first[1]) < 1e-3), `edge ${i / 6} does not run back to the start`);
+  // closed lines on L close within 0.5 to 1.1 point spacings, open ones are 1,536 or more apart (L250 survey)
+  const lap = circleLine(200, 400); lap.points.pop(); lap.extra.pop();   // the last point is 2 spacings from the first: closed
+  assert.strictEqual(ribbonOf(readAiShape(encodeAiLine(lap))).closed, true);
+});
+
+test('L250: sameLine tells the same line, the same points with other widths, and another line apart', () => {
+  const shape = (o) => readAiShape(encodeAiLine(circleLine(200, 120, o)));
+  const a = shape({}), b = shape({}), wider = shape({ sideLeft: 5 }), moved = shape({});
+  moved.points[60].pos[0] += 0.02;
+  assert.deepStrictEqual(sameLine(a, b), { samePoints: true, sameSides: true });
+  assert.deepStrictEqual(sameLine(a, wider), { samePoints: true, sameSides: false });
+  assert.deepStrictEqual(sameLine(a, moved), { samePoints: false, sameSides: false }, 'one point 2 cm off is another line');
+  assert.deepStrictEqual(sameLine(a, readAiShape(encodeAiLine(circleLine(200, 121)))), { samePoints: false, sameSides: false }, 'another point count');
+});
+
+test('L250: a layout\'s stated length is read in metres, and a line more than 5 % off it is said so', () => {
+  for (const [s, m] of [['5793', 5793], ['5793m', 5793], ['10.3km', 10300], ['3.602', 3602], ['2,469 m', 2469], ['', null], ['long', null], [null, null]]) assert.strictEqual(uiLengthM(s), m, String(s));
+  assert.deepStrictEqual(lineNotes({ lengthM: 5755, uiM: 5793 }), [], 'within 5 %: nothing to say');
+  const off = lineNotes({ lengthM: 2944, uiM: 3619 });
+  assert.strictEqual(off.length, 1); assert.match(off[0], /2,944 m; the layout says 3,619 m \(−18\.7 %\)/);
+  const n = lineNotes({ lengthM: 2469, uiM: 200, same: ['“a”', '“b”', '“c”'], samePath: ['“d”'] });
+  assert.strictEqual(n.length, 3);
+  assert.match(n[0], /the same AI line as “a”, “b” and “c”/); assert.match(n[1], /the same points as “d”, with widths of its own/); assert.match(n[2], /\+1134\.5 %/);
 });

@@ -6,6 +6,11 @@
 //   ribbonOf(shape, opts?) -> { batches, edges, lengthM, width: { median, min, max }, closed, start: { pos, T }, points }
 //   placeAt(ribbon, anchor, nudge?) -> 16 numbers, the row-vector model matrix (world = local · M, kn5's order; the renderer reads it as GL's)
 //   moveOf(ribbon, model) -> { pos, T }   where the reference's start lands, for the tests and the readout
+// (L250, finished) what the panel says about a line, in words:
+//   refusalWords(err) -> why a line is not drawn (it is never drawn in part or wrong)
+//   sameLine(a, b) -> { samePoints, sameSides }   do two layouts' lines drive the same points (and with the same widths)?
+//   uiLengthM(text) -> metres or null              the length a layout's ui_track.json gives ("5793", "5793m", "10.3km", "3.602" as km)
+//   lineNotes({ lengthM, uiM, same, samePath }) -> [sentence]   a layout that carries another layout's line, or a line far off its stated length
 //
 // WHY NOT readAiLine (src/export/ailine.js). readAiLine reads the builder's OWN lines back and refuses a grid (hasGrid = 1), by design. On L, 2026-11-26,
 // it refused every installed line: 44 HAS_GRID and 2 TRUNCATED of 46 fast_lane.ai files in 61 layouts. The road's shape is all BEFORE the grid
@@ -156,4 +161,62 @@ function apply(M, p, w = 1) {
 }
 function moveOf(ribbon, M) { return { pos: apply(M, ribbon.start.pos), T: apply(M, ribbon.start.T, 0) }; }
 
-module.exports = { readAiShape, ribbonOf, placeAt, moveOf, apply, isClosed, RefTrackError, BATCH_POINTS };
+// (L250) WHY A LINE IS NOT DRAWN, in words. On L, 2026-11-26, 2 of 46 installed lines do not read: a 12-byte stub and a file 8 bytes short of its
+// points. Each is refused whole: a line that does not read whole is never drawn in part, and the reference shown before it is taken down.
+const REFUSED = Object.freeze({
+  TRUNCATED: 'its AI line is cut short', BAD_VERSION: 'its AI line is in a format this does not read', TOO_FEW_POINTS: 'its AI line holds no road',
+  BAD_EXTRA: 'its AI line does not hold one record for each point', BAD_GRID_FLAG: 'its AI line is damaged after its points', TRAILING: 'its AI line has bytes after its end',
+  NON_FINITE: 'its AI line has a point that is not a number', NOT_BYTES: 'nothing came back to read', BAD_SHAPE: 'its AI line has too few points to make a road',
+});
+/** Why a line is not drawn: a RefTrackError's code in words with its detail, or the native side's own words (a string). */
+function refusalWords(err) {
+  const code = err && err.code, msg = err && err.message !== undefined ? String(err.message) : String(err);
+  const detail = code && msg.startsWith(`${code}: `) ? msg.slice(code.length + 2) : msg;
+  const why = code && REFUSED[code] ? `${REFUSED[code]} (${detail})` : detail;
+  return `Not drawn: ${why}. A line that does not read whole is never drawn in part.`;
+}
+
+/**
+ * Do two installed lines drive the same points? samePoints: as many points, each within tolM (1 cm); sameSides: the widths match too. On L,
+ * 2026-11-26: five layouts of one track hold the very same file, and one layout's line drives another layout's points exactly with widths of its own.
+ */
+function sameLine(a, b, tolM = 0.01) {
+  const no = { samePoints: false, sameSides: false };
+  if (!a || !b || a.n !== b.n) return no;
+  let sides = true;
+  for (let k = 0; k < a.n; k++) {
+    const p = a.points[k].pos, q = b.points[k].pos;
+    if (!(Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) <= tolM)) return no;
+    if (sides && !(Math.abs(a.extra[k].sideLeft - b.extra[k].sideLeft) <= tolM && Math.abs(a.extra[k].sideRight - b.extra[k].sideRight) <= tolM)) sides = false;
+  }
+  return { samePoints: true, sameSides: sides };
+}
+
+/** The length a layout's ui_track.json gives, in metres, or null when it gives none that reads: "5793", "5793m", "10.3km"; a bare number under 100 is km ("3.602"). */
+function uiLengthM(s) {
+  if (s === null || s === undefined) return null;
+  const m = /^([\d.]+)\s*(km|m)?$/.exec(String(s).trim().toLowerCase().replace(/,/g, ''));
+  if (!m) return null;
+  const v = Number(m[1]);
+  if (!(v > 0)) return null;
+  return m[2] === 'km' || (!m[2] && v < 100) ? v * 1000 : v;
+}
+
+/**
+ * What the panel says about a shown line beyond its length and width, as sentences (none when nothing is odd):
+ *   same: the layouts holding the very same line (points and widths); samePath: those driving the same points with other widths (display names);
+ *   uiM: the length the layout's ui_track.json gives (metres, or null). A line more than 5 % off its stated length is said so.
+ */
+function lineNotes({ lengthM, uiM = null, same = [], samePath = [] }) {
+  const list = (xs) => (xs.length < 3 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+  const f = (x) => Math.round(x).toLocaleString('en-US'), out = [];
+  if (same.length) out.push(`This layout carries the same AI line as ${list(same)}: what is drawn is that line, which may not be this layout's own road.`);
+  if (samePath.length) out.push(`Its AI line drives the same points as ${list(samePath)}, with widths of its own.`);
+  if (Number.isFinite(uiM) && uiM > 0 && Number.isFinite(lengthM)) {
+    const off = lengthM / uiM - 1;
+    if (Math.abs(off) > 0.05) out.push(`Its AI line is ${f(lengthM)} m; the layout says ${f(uiM)} m (${off > 0 ? '+' : '−'}${Math.abs(off * 100).toFixed(1)} %), so it may not be this layout's own line.`);
+  }
+  return out;
+}
+
+module.exports = { readAiShape, ribbonOf, placeAt, moveOf, apply, isClosed, RefTrackError, BATCH_POINTS, refusalWords, sameLine, uiLengthM, lineNotes, REFUSED };
