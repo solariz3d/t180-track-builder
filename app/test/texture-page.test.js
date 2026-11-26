@@ -512,6 +512,9 @@ test('row 14 (L249): a hovered menu row, a hovered Export and a hovered panel bu
 //  16  a real pointer over the File menu's title changes 1% or more of its pixels (SIGIL's changed 0)
 //  17  every menu on the bar, opened, lies wholly inside the window at every width from 900 px (tauri.conf.json's minWidth): each 10 px to 1000, both sides
 //      of each wider fold, and 1400 (File ran up to 55 px off the left edge from 900 to 950, its words cut, and Edit 2 px at 900)
+// 17b  (E's read of L255) the same for File when a saved track has a 61-character name, the longest the native side allows (64 stored, eq- and the name), in
+//      ordinary words, and File ▸ Open… unfolded: at every 10 px from 900 to 1400 it lies wholly inside the window (with the fold for under 1000 px only, it ran
+//      up to 72 px off the left edge from 1000 to 1130)
 //  18  a field clicked into wears one frame: the 2 px ring in the accent, its border keeping its resting colour (it wore the accent border and the ring together)
 /** the pointer parked where it hovers nothing near the bar */
 const park = async () => { await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 850 }); await sleep(350); };
@@ -581,6 +584,40 @@ test('row 17 (L255): every menu on the bar, opened, lies wholly inside the windo
   } finally { await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false }); }
   t.diagnostic(`the menus at 900 px, left..right: ${seen.join('; ')}`);
   assert.deepEqual(out, [], 'an open menu past an edge of the window');
+});
+
+test('row 17b (L255): File with a 61-character saved name (64 stored, the native limit) in its Open… list, unfolded, lies wholly inside the window at every 10 px from 900 to 1400, in every look', { skip }, async (t) => {
+  // a track is stored as eq-<name> (app/core/coreshell.js PREFIX), and the native side takes a stored name of up to 64 characters (src-tauri lib.rs valid_name),
+  // so the longest name File ▸ Open… can list is 61 characters
+  const longName = 'eq-' + 'a saved track whose name runs on for a long while and then more'.slice(0, 61), shown = longName.slice(3);
+  assert.equal(longName.length, 64, 'the longest stored name the native side takes (src-tauri lib.rs valid_name: 1 to 64 characters)');
+  const stand = (await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__TAURI__ = { core: { invoke: (cmd) => cmd === 'list_tracks' ? Promise.resolve(${JSON.stringify([longName, 'eq-short'])})
+    : /^list_/.test(cmd) ? Promise.resolve([]) : Promise.resolve(null) }, event: { listen: () => Promise.resolve(() => {}) } };` })).result.identifier;
+  const out = [], seen = [];
+  try {
+    for (const look of LOOKS) {
+      await load(look);
+      // File opened and its Open… list unfolded once (the list is filled on the first open); then the window narrowed and widened under it
+      const rows = await ev(`const d = document.getElementById('m-file'); d.open = true; await new Promise((r) => setTimeout(r, 500));
+        const head = [...d.querySelectorAll('.menu-list-head')].find((b) => /^Open/.test(b.textContent.trim())); if (head) head.click();
+        for (let i = 0; i < 40 && !d.querySelector('.menu-row'); i++) await new Promise((r) => setTimeout(r, 100));
+        return [...d.querySelectorAll('.menu-row')].map((x) => x.textContent.trim());`);
+      assert.ok(rows.includes(shown), `${look}: Open… lists the long name (rows: ${rows.join(' | ')})`);
+      for (let w = 900; w <= 1400; w += 10) {
+        await send('Emulation.setDeviceMetricsOverride', { width: w, height: 860, deviceScaleFactor: 1, mobile: false }); await sleep(150);
+        const m = await ev("const d = document.getElementById('m-file'), r = d.querySelector('.more-menu').getBoundingClientRect(); return [d.open, Math.round(r.left), Math.round(r.right), window.innerWidth];");
+        assert.equal(m[0], true, `${look} at ${w}: File is still open`);
+        if (w === 1000 || w === 1400) seen.push(`${look} at ${w} ${m[1]}..${m[2]}`);
+        if (m[1] < 0 || m[2] > m[3]) out.push(`${look} at ${w}: File ${m[1]}..${m[2]} in a ${m[3]} px window`);
+      }
+      assert.deepEqual(errors, [], `${look}: no page errors`);
+    }
+  } finally {
+    await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false });
+    await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: stand });
+  }
+  t.diagnostic(`File with the long name open, left..right: ${seen.join('; ')}`);
+  assert.deepEqual(out, [], 'File, with a long saved name, past an edge of the window');
 });
 
 test('row 18 (L255): a field clicked into wears one frame, the 2 px ring in the accent, and its border keeps its resting colour, in every look', { skip }, async () => {
