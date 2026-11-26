@@ -686,6 +686,8 @@ function mount(root, shell, mountOpts = {}) {
   const placeBtn = el('button', { text: 'Place piece', title: 'lay the piece shown as a ghost at the open end (one undo step); change a number first to place your own version', style: 'display:none',
     onclick: () => { if (!pgSeen) return; if (pieceShown) { void shell.placePiece(); } else { send('t180-ghost-clear'); shell.dropPieceGhost(); extendHere(); } } });
   const dropPieceBtn = el('button', { text: 'Cancel piece', title: 'drop the ghost of the saved piece: nothing is placed (Esc does the same)', style: 'display:none', onclick: () => shell.dropPieceGhost() });
+  // L253: their row is hidden with them, so with no ghost the panel is spaced as before L238 (an empty .actions row still took its 10 px margin)
+  const placeRow = el('div', { class: 'actions', style: 'display:none' }, placeBtn, dropPieceBtn);
   const onPieceKey = (e) => { if (e && e.key === 'Escape' && shell.getState().pieceGhost) shell.dropPieceGhost(); };
   doc.addEventListener('keydown', onPieceKey);
   const extendBtn = el('button', { text: 'Extend', title: 'add a piece at the open end; fields left as shown keep going the way the track goes',
@@ -1259,7 +1261,10 @@ function mount(root, shell, mountOpts = {}) {
   const showSel = (st) => { const d = st.history.present; selBox.style.display = shell.selectionInfo() || (st.deleteProposal && st.deleteProposal.base === d) ? '' : 'none'; };
   root.replaceChildren(
     info,   // the track line first, directly under the bar (no heading above it)
-    pieceNote, el('div', { class: 'actions' }, placeBtn, dropPieceBtn), el('div', { class: 'actions' }, extendBtn, straightBtn, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
+    // the FIRST actions row is Extend, Straight, Undo, Redo in every state (D417, the user's screenshot of 16:02: Extend is reachable without scrolling). L253: a saved piece's
+    // note and its Place piece / Cancel piece row come UNDER it, not above, so a ghost going up or down never moves the row he presses, and Place still sits above "Extend at the head"
+    el('div', { class: 'actions' }, extendBtn, straightBtn, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
+    pieceNote, placeRow,
     sculptStrip,
     el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), turnField, SEC.turn.box, climbField, SEC.climb.box, (() => { const r = fieldAt('bank °', bank, 'bank', flowBox); r.append(bankAtBox); return r; })(), SEC.bank.box, ...shapeFields),
     roBox, roRead,
@@ -1332,7 +1337,7 @@ function mount(root, shell, mountOpts = {}) {
     { const pg = st.pieceGhost && st.pieceGhost.base === d && !st.sculpt ? st.pieceGhost : null;
       if (pg !== pgSeen) {
         pgSeen = pg; pieceShown = pg;
-        const on = pg ? '' : 'none'; placeBtn.style.display = dropPieceBtn.style.display = pieceNote.style.display = on;
+        const on = pg ? '' : 'none'; placeBtn.style.display = dropPieceBtn.style.display = pieceNote.style.display = placeRow.style.display = on;
         if (pg) {
           if (pg.numbers) { putBack(pg.numbers); for (const k of Object.keys(HEAD)) applied[k] = HEAD[k][0].value; ghostN++; }   // the boxes now are what the panel put there, so Ctrl+Z does not read them as typed
           const what = `${pg.name}${pg.mirror ? ' (mirrored)' : ''}: ${pg.count} piece${pg.count === 1 ? '' : 's'}`;

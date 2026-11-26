@@ -16,6 +16,9 @@
 //      bars (#camera's toolbars) by a pixel, in all five looks, at windows 1400 x 860 and 2560 x 1440 (measured before the fix: 2,058 and 10,944 px² at 1400)
 //   7  Extend is reachable without scrolling: the panel's first actions row is Extend, Straight, Undo, Redo, Extend sits above "Extend at the head",
 //      and each of the four is on the panel once, in every look
+//  7b  (L253) the same with a saved piece's ghost up: the first actions row is still Extend, Straight, Undo, Redo, and Extend, Place piece and Cancel
+//      piece are each reachable without scrolling at 1400 x 860 (the element at its own centre, inside the unscrolled left column), and the ghost going
+//      up does not move Extend, in every look
 //   8  Skyline Night: every enabled text reads 4.5:1 or more against its own pixels, in the builder and with the File menu open (a text outside the
 //      menu that the menu partly covers is left out, by name). It was titled row 6 beside the other row 6 until renumbered
 //  10  every dialog the page draws (save before closing, Export layouts, Export for Blender) reads 4.5:1 or more on its own pixels in every look, each
@@ -258,6 +261,44 @@ test('row 7 (D417): the first actions row is Extend, Straight, Undo, Redo, and E
     assert.deepEqual(a.counts, [1, 1, 1, 1], `${look}: each of the four is on the panel once`);
     assert.deepEqual(errors, [], `${look}: no page errors`);
   }
+});
+
+// L253: row 7 with a saved piece's ghost up (L238), where Place piece and Cancel piece show. The ghost goes up the way a person puts it up, Pieces ▾ and a
+// click on the saved piece, whose file a stand-in native side serves with no recipe beside it (so the panel shows the longer "read off" note, the tallest it
+// gets). Each of Extend, Place piece and Cancel piece is the element at its own centre, inside #left's box with #left unscrolled, at 1400 x 860
+const REACH = `const left = document.getElementById('left'), L = left.getBoundingClientRect(), bottom = Math.min(L.bottom, window.innerHeight);
+  const at = (t) => { const b = [...document.querySelectorAll('#palette button')].find((x) => x.textContent.trim() === t); if (!b) return { t, missing: true };
+    const r = b.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { t, top: Math.round(r.top), bottom: Math.round(r.bottom), shown: r.height > 0, inView: r.height > 0 && r.top >= L.top && r.bottom <= bottom, own: hit === b || b.contains(hit) }; };
+  return { scrollTop: left.scrollTop, bottom: Math.round(bottom), buttons: ['Extend', 'Place piece', 'Cancel piece'].map(at) };`;
+test('row 7b (L253): with a saved piece\'s ghost up, the first actions row is still Extend, Straight, Undo, Redo, and Extend, Place piece and Cancel piece are reachable without scrolling at 1400 x 860, in every look', { skip }, async (t) => {
+  const { createCoreShell } = require('../core/coreshell.js'), PC = require('../../src/core/piece.js');
+  const s = await createCoreShell({ autosaveMs: 0 }); s.extend({ length: 120, family: 'bowl' });
+  const text = PC.serialize(PC.saveRun(s.getState().history.present, 0, 0, { name: 'bend' }));
+  const stand = (await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__TAURI__ = { core: { invoke: (cmd, a) => cmd === 'list_pieces' ? Promise.resolve(['bend'])
+    : cmd === 'open_piece' && a && a.name === 'bend' ? Promise.resolve(${JSON.stringify(text)}) : /^list_/.test(cmd) ? Promise.resolve([]) : Promise.resolve(null) }, event: { listen: () => Promise.resolve(() => {}) } };` })).result.identifier;
+  const got = [];
+  try {
+    await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false });
+    for (const look of LOOKS) {
+      await load(look);
+      await extend(2);
+      const before = (await ev(ACTIONS)).extendTop;
+      await ev(`const m = document.getElementById('pieces'); m.open = true; for (let i = 0; i < 40 && !document.querySelector('#pieces-bin .piece-row[data-piece="bend"]'); i++) await new Promise((r) => setTimeout(r, 100));
+        const row = document.querySelector('#pieces-bin .piece-row[data-piece="bend"]'); if (row) row.click(); return !!row;`);
+      let place = false;
+      for (let i = 0; i < 40 && !place; i++) { await sleep(100); place = await ev("const b = [...document.querySelectorAll('#palette button')].find((x) => x.textContent.trim() === 'Place piece'); return !!b && b.getBoundingClientRect().height > 0;"); }
+      assert.ok(place, `${look}: the saved piece's ghost is up (Place piece shows)`);
+      const a = await ev(ACTIONS), r = await ev(REACH);
+      got.push(`${look}: ${r.buttons.map((b) => `${b.t} ${b.top}-${b.bottom}`).join(', ')} (Extend at ${before} before the ghost; panel bottom ${r.bottom})`);
+      assert.deepEqual(a.first, ['Extend', 'Straight', 'Undo', 'Redo'], `${look}, a ghost up: the first actions row`);
+      assert.ok(a.extendTop < a.headTop, `${look}, a ghost up: Extend (top ${a.extendTop}) above "Extend at the head" (top ${a.headTop})`);
+      assert.equal(a.extendTop, before, `${look}: the ghost going up does not move Extend`);
+      assert.equal(r.scrollTop, 0, `${look}: the panel is not scrolled`);
+      for (const b of r.buttons) assert.ok(!b.missing && b.inView && b.own, `${look}, a ghost up: ${b.t} is reachable without scrolling (${JSON.stringify(b)}, panel bottom ${r.bottom})`);
+      assert.deepEqual(errors, [], `${look}: no page errors`);
+    }
+  } finally { await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: stand }); t.diagnostic(got.join('; ')); }
 });
 
 /** the probe's keys (as TEXTS makes them: tag, id and the first 40 characters) of the texts inside the element matched by `sel` */
