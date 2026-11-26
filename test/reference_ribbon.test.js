@@ -256,9 +256,29 @@ test('L250 second repair: groundUnder takes the highest road AT OR BELOW the sta
   for (const [above, deckAt] of [[3.562, 5.0], [3.562, 5.5], [1.112, 3.0], [1.112, 1.2], [2.0, 4.5]]) {
     assert.strictEqual(groundUnder([sq(deckAt), sq(0)], [0.5, above, 1.5]), 0, `a start ${above} m above its road, a deck ${deckAt} m above that road: the road, not the deck`);
   }
-  near(groundUnder([sq(2), sq(0)], [0.5, 2, 1.5]), 2, 1e-9, 'a surface at the start\'s own height is at or below it (its height comes back as 1.9999999999999998)');
+  near(groundUnder([sq(2), sq(0)], [0.5, 2, 1.5]), 2, 1e-9, 'a surface at the start\'s own height is at or below it (at 2 m, a power of two; every other height is the next row\'s)');
   assert.strictEqual(groundUnder([sq(5)], [0.5, 3.562, 1.5]), null, 'only a deck overhead: no road under it');
   // through roadReference: the start under a deck is set down on the road below it
   const under = roadReference(decodeRoad(encodeRoad([sq(5), sq(0)], { start: { pos: [0.5, 3.562, 1.5], T: [0, 0, 1], from: 'AC_START_0' } })), null);
   assert.deepStrictEqual(under.start.pos.map((v) => +v.toFixed(6)), [0.5, 0, 1.5]); near(under.startAbove, 3.562, 1e-6, 'it was 3.562 m above its road');
+});
+
+// L256 (pane O's read of the second repair, "First"): a road at the point's own height came out a hair above it at heights that are not powers of two, and
+// was dropped for a lower road (O: 1.0 to 9.2 % of spots). The road's heights are f32; a header's start is the decimal JSON writes for an f32, which sits
+// below the f32 itself (2.2 is 4.8e-8 m under f32 2.2), so a point given that way lost its own road at every spot.
+test('L256: a road at the point\'s own height is taken at any height, not only at powers of two: the cut is a hair, 1 cm, above the point (pane O\'s at-height case)', () => {
+  const { groundUnder } = require('../src/reference/road.js');
+  const sq = (y) => ({ positions: new Float32Array([-10, y, -10, 10, y, -10, 10, y, 10, -10, y, 10]), indices: new Uint16Array([0, 2, 1, 0, 3, 2]) });
+  for (const h of [2.2, 3.7]) {
+    for (const [what, at] of [['the f32 the road holds', Math.fround(h)], ['the decimal a header writes', h]]) {
+      let spots = 0, dropped = 0;
+      for (let i = -99; i <= 99; i++) for (let j = -99; j <= 99; j++) {
+        const x = i / 10, z = j / 10; if (x === z) continue;   // off the squares' shared diagonal
+        spots++; const g = groundUnder([sq(h), sq(h - 6.8)], [x, at, z]);
+        if (g === null || Math.abs(g - Math.fround(h)) > 1e-6) dropped++;
+      }
+      assert.strictEqual(dropped, 0, `a road at ${h} m, the point at ${what}: ${dropped} of ${spots} spots took the road 6.8 m below, or none`);
+    }
+  }
+  assert.strictEqual(groundUnder([sq(2.22), sq(0)], [0.5, 2.2, 1.5]), 0, 'the hair is a hair: a deck 2 cm above the point is still not the ground');
 });

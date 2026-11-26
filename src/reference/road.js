@@ -99,9 +99,12 @@ function encodeRoad(batches, meta = {}) {
 
 /** The height of the road under a point: the highest road surface whose triangle holds its (x, z) AT OR BELOW it, or null when no road is under it.
  *  (Second repair, pane E's bridge_check: it was "at most 2 m above it", which took a deck 5.5 m over a start 3.562 m up for the ground; every start on
- *  L is at least 1.112 m above its road, and every AI line's first point 0.276 m, so at or below finds each.) */
+ *  L is at least 1.112 m above its road, and every AI line's first point 0.276 m, so at or below finds each.) "At" is a hair, HAIR m, above the point
+ *  (L256, pane O's read): a road at the point's own height comes back a few ulps above it at heights that are not powers of two, and a header's start
+ *  is the decimal of an f32, below the f32 the road holds; either way its own road was dropped for a lower one. */
+const HAIR = 0.01;
 function groundUnder(batches, pos) {
-  const x = pos[0], z = pos[2], top = pos[1]; let best = null;
+  const x = pos[0], z = pos[2], top = pos[1] + HAIR; let best = null;
   for (const { positions: P, indices: I } of batches) {
     for (let t = 0; t < I.length; t += 3) {
       const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3, x0 = P[a], z0 = P[a + 2], x1 = P[b], z1 = P[b + 2], x2 = P[c], z2 = P[c + 2];
