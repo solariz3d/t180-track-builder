@@ -127,7 +127,11 @@ test('row 6: the hit test takes the nearest handle inside the radius, none outsi
 function fakeStage(ctx = null) {
   const listeners = {}, frames = [];
   const canvas = { style: {}, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, getContext: () => ctx, remove() { this.gone = true; }, isConnected: true };
-  const stage = { clientWidth: W, clientHeight: Hh, style: {}, ownerDocument: { createElement: () => canvas }, getBoundingClientRect: () => ({ left: 0, top: 0 }), isConnected: true, append() {}, setPointerCapture() {},
+  // (L251) a readout's window is an element (app/core/markwindow.js layer): the document gives one for any tag but the canvas, kept in `els`; words() is what the shown
+  // windows say, line by line, in the order they were put
+  const els = [], el = (t) => { const e = { tagName: t.toUpperCase(), style: {}, attrs: {}, children: [], setAttribute(k, v) { this.attrs[k] = v; }, append(...k) { this.children.push(...k); }, remove() { this.gone = true; }, isConnected: true, textContent: '' }; els.push(e); return e; };
+  const words = () => els.filter((e) => e.attrs['data-mark-window'] !== undefined && e.style.display === 'block').flatMap((e) => e.textContent.split('\n'));
+  const stage = { clientWidth: W, clientHeight: Hh, style: {}, ownerDocument: { createElement: (t) => (t === 'canvas' ? canvas : el(t)) }, getBoundingClientRect: () => ({ left: 0, top: 0 }), isConnected: true, append() {}, setPointerCapture() {},
     addEventListener(t, f, cap) { (listeners[t] = listeners[t] || []).push({ f, cap: !!cap }); }, removeEventListener(t, f) { listeners[t] = (listeners[t] || []).filter((x) => x.f !== f); } };
   const win = { devicePixelRatio: 1, requestAnimationFrame: (f) => { frames.push(f); return frames.length; }, cancelAnimationFrame() {} };
   // a drag's speed is read from the events' times, so the harness gives every press, move and release a time: a move or release with none comes 1 ms after the one before (a flick, the
@@ -136,7 +140,7 @@ function fakeStage(ctx = null) {
   const fire = (type, e) => { if (type === 'pointerdown') clock = e && typeof e.timeStamp === 'number' ? e.timeStamp : clock + 1000; else if ((type === 'pointermove' || type === 'pointerup') && !(e && typeof e.timeStamp === 'number')) e = { ...e, timeStamp: (clock += 1) }; else if (e && typeof e.timeStamp === 'number') clock = e.timeStamp;
     const ev = { button: 0, pointerId: 1, stopped: false, prevented: false, preventDefault() { this.prevented = true; }, stopImmediatePropagation() { this.stopped = true; }, ...e }; for (const { f } of (listeners[type] || []).slice()) { f(ev); if (ev.stopped) break; } return ev; };
   const tick = () => { const f = frames.splice(0); f.forEach((g) => g(0)); };
-  return { stage, win, fire, tick, listeners, canvas };
+  return { stage, win, fire, tick, listeners, canvas, els, words };
 }
 
 test('row 7: the overlay: a press ON a handle opens the drag and nothing else sees it; a press elsewhere is left alone; one apply a frame; the release applies the last position and ends', () => {
@@ -237,26 +241,31 @@ test('row 11: a double-click on a handle resets it: 0 for bank, turn, climb; the
   const away = R.S.fire('dblclick', { clientX: 5, clientY: 5 }); assert.equal(away.stopped, false); assert.equal(away.prevented, false);
 });
 
+// rows 12 and 12b AMENDED BY NAME (L251, the rule changed: the readout is a window element over the canvas, app/core/markwindow.js layer, so its words are read off the
+// shown window, words(), where the canvas's fillText was read; every promise is kept, and each row now also checks that no word is written on the canvas)
 test('row 12: the label shows the exact value the drag sets, and what a double-click would set', () => {
   const texts = [], ctx = new Proxy({}, { get: (t, k) => (k === 'measureText' ? (x) => ({ width: x.length * 7 }) : k === 'fillText' ? (x) => { texts.push(x); } : (t[k] === undefined ? () => {} : t[k])), set: (t, k, v) => { t[k] = v; return true; } });
-  const R = rig({ ctx, base: B2 }), t = R.at('turn:1');
-  R.S.fire('pointermove', { clientX: t.x, clientY: t.y }); R.S.tick(); assert.equal(texts[texts.length - 1], 'turn 2.00°/100 m · double-click: 0', 'hovering: the value it has and what a double-click sets');
+  const R = rig({ ctx, base: B2 }), t = R.at('turn:1'), words = R.S.words;
+  R.S.fire('pointermove', { clientX: t.x, clientY: t.y }); R.S.tick(); assert.deepEqual(words(), ['turn 2.00°/100 m · double-click: 0'], 'hovering: the value it has and what a double-click sets');
   const { x, y } = R.along('turn:1', -33); R.S.fire('pointerdown', { clientX: t.x, clientY: t.y }); R.S.fire('pointermove', { clientX: x, clientY: y }); R.S.tick(); R.S.tick();
-  assert.equal(R.last()[2], -0.74); assert.equal(texts[texts.length - 1], 'turn -0.74°/100 m', 'dragging: exactly what is set');
-  R.S.fire('pointerup', { clientX: x, clientY: y }); R.drag('length:0', 40); const l = R.at('length:0'); texts.length = 0; R.S.fire('pointermove', { clientX: l.x, clientY: l.y }); R.S.tick(); assert.equal(texts[texts.length - 1], 'length 176.80 m · double-click: 160.00', 'length: a double-click would put back 160');
+  assert.equal(R.last()[2], -0.74); assert.deepEqual(words(), ['turn -0.74°/100 m'], 'dragging: exactly what is set');
+  R.S.fire('pointerup', { clientX: x, clientY: y }); R.drag('length:0', 40); const l = R.at('length:0'); R.S.fire('pointermove', { clientX: l.x, clientY: l.y }); R.S.tick(); assert.deepEqual(words(), ['length 176.80 m · double-click: 160.00'], 'length: a double-click would put back 160');
+  assert.deepEqual(texts, [], 'no word on the canvas');
 });
 test('row 12b: while a drag is held at an edge, the label\'s second line is the host\'s reason; with none, the value alone', () => {
   const texts = [], ctx = new Proxy({}, { get: (t, k) => (k === 'measureText' ? (x) => ({ width: x.length * 7 }) : k === 'fillText' ? (x) => { texts.push(x); } : (t[k] === undefined ? () => {} : t[k])), set: (t, k, v) => { t[k] = v; return true; } });
   let why = 'held at 52.67°: 90° needs 244.0 m from its mark, it has 150.0 m (shorter, it rolls faster than it can be ridden smoothly)';
   const R = rig({ ctx, base: B2, model: { held: (k) => (k === 'turn' ? why : '') } }), t = R.at('turn:1');
   const { x, y } = R.along('turn:1', -33); R.S.fire('pointerdown', { clientX: t.x, clientY: t.y }); R.S.fire('pointermove', { clientX: x, clientY: y }); R.S.tick(); R.S.tick();
-  assert.deepEqual(texts.slice(-2), ['turn -0.74°/100 m', why], 'dragging and held: the value, then why');
-  why = ''; texts.length = 0; R.S.fire('pointermove', { clientX: x + 1, clientY: y }); R.S.tick(); R.S.tick();
-  assert.ok(texts.length && !texts.includes(why) && texts.every((s) => s.startsWith('turn ')), `not held: the value alone (${JSON.stringify(texts)})`);
+  assert.deepEqual(R.S.words(), ['turn -0.74°/100 m', why], 'dragging and held: the value, then why');
+  why = ''; R.S.fire('pointermove', { clientX: x + 1, clientY: y }); R.S.tick(); R.S.tick();
+  const now = R.S.words();
+  assert.ok(now.length && !now.includes(why) && now.every((s) => s.startsWith('turn ')), `not held: the value alone (${JSON.stringify(now)})`);
   R.S.fire('pointerup', { clientX: x + 1, clientY: y });
-  const P = rig({ ctx, base: B2 }), u = P.at('turn:1'); texts.length = 0;
+  const P = rig({ ctx, base: B2 }), u = P.at('turn:1');
   P.S.fire('pointerdown', { clientX: u.x, clientY: u.y }); P.S.fire('pointermove', { clientX: x, clientY: y }); P.S.tick(); P.S.tick();
-  assert.deepEqual(texts.slice(-1), ['turn -0.74°/100 m'], 'a host with no reason: the value alone, as before'); assert.equal(texts.filter((s) => !s.startsWith('turn ')).length, 0);
+  assert.deepEqual(P.S.words().slice(-1), ['turn -0.74°/100 m'], 'a host with no reason: the value alone, as before'); assert.equal(P.S.words().filter((s) => !s.startsWith('turn ')).length, 0);
+  assert.deepEqual(texts, [], 'no word on the canvas');
   P.S.fire('pointerup', { clientX: x, clientY: y });
 });
 

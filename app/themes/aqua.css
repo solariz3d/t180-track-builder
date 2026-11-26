@@ -177,6 +177,7 @@
 [data-theme="aqua"] {
   --mark-win-font: var(--body); --mark-win-weight: 600; --mark-win-radius: 2; --mark-win-edge: 1.5; --mark-win-glow: 9;
   --mark-win-bg: rgba(3, 56, 70, .90); --mark-win-text: #f2fdff; --mark-win-sheen: rgba(255, 255, 255, .62);
+  --mark-win-blur: blur(14px) saturate(170%);   /* L251: behind the window, the look's own panel blur (its #left's backdrop-filter, written whole; markwindow.test.js W8) */
   /* L244 (the user, 2026-11-26 02:23: "yes handle colors per theme"): the marks' and handles' colours, a reef under the water: azure, coral pink, sun yellow, coral red, sea-glass green, sand, and a pearl lilac for the edges (teal would sink into the teal grid). Each field keeps one colour everywhere in this
      look; bank and turn at least 60 apart, every pair of fields and each against the road's edge, the grid, the fog and the sky (app/test/markwindow.test.js W5) */
   --mark-bank: #4fa8ff; --mark-turn: #ff7ad9; --mark-climb: #ffe066; --mark-width: #ff6b5a; --mark-cup: #7dff9e; --mark-length: #ffe9b8; --mark-edge: #c8b6ff;

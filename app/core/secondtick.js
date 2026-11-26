@@ -6,7 +6,8 @@
 //   OFFERS: (the user, 06:53Z: "more and more room keeps getting made inbetween, giving room for the next drag icon to show itself") one fainter handle per field,
 //          where the panel says the next change has room (panel.js offersAt). Dragged like that field's handle (handles.js screenAxis, dragPixels, targetFor, the same
 //          maths), it makes that field's next change; a press with no movement makes nothing.
-// A canvas over the preview (#preview), redrawn every animation frame like the flights (app/core/flightlayer.js). The preview is not changed: the pose comes from
+// A canvas over the preview (#preview), redrawn every animation frame like the flights (app/core/flightlayer.js); (L251) a label's window is an element over it
+// (app/core/markwindow.js layer), so the look's blur is real. The preview is not changed: the pose comes from
 // 't180:view' and the ghost from 't180:ghost-request' ({ samples, segments, jump, s0 }). A press on a mark or an offer is taken in the capture phase, so the handles
 // and picking beneath never see it; any other press goes on to them.
 //
@@ -121,6 +122,7 @@ function mount(stage, win, itemsNow, hooks = {}) {
   canvas.setAttribute('aria-label', 'later changes');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4';
   stage.append(canvas);
+  const wins = MW.layer(stage, win, T, { z: 4, name: 'later changes' });   // L251: the labels' windows, elements over this canvas
   const ask = (name) => { let got = null; doc.dispatchEvent(new win.CustomEvent(name, { detail: { reply: (x) => { got = x; } } })); return got; };
   let raf = 0, sized = '', drawnMarks = [], drawnOffers = [], last = { ghost: null, pose: null, W: 0, H: 0 }, drag = null, placed = [], hover = null, flashes = [], prevByField = null;   // L241: the mark under the pointer, the marks just added, the froms the last draw had per field
   // The HUD's bottom edge in css px of the stage (the top readout, app/core/valuesoverlay.js, the same element labels.js keeps clear of), read at most every
@@ -159,7 +161,7 @@ function mount(stage, win, itemsNow, hooks = {}) {
       for (const d of on) if (d.item.label) drawStretch(ctx, d, last);
       for (const d of on) for (const [w, colour] of [[6, rim()], [3, paint(d.item)]]) { ctx.lineWidth = w; ctx.strokeStyle = colour; for (const st of d.strokes) { ctx.beginPath(); ctx.moveTo(st.a.x, st.a.y); ctx.lineTo(st.b.x, st.b.y); ctx.stroke(); } }
       for (const d of rest) { const c = dotOf(d); ctx.beginPath(); ctx.arc(c.x, c.y, DOT_PX, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = rim(); ctx.fillStyle = paint(d.item); ctx.fill(); ctx.stroke(); }
-      placed = []; for (const d of on) if (d.item.label) drawExplained(ctx, d, last, W, H);
+      placed = []; wins.begin(); for (const d of on) if (d.item.label) drawExplained(ctx, d, last, W, H); wins.end();
       // an offer: a faint ring in the field's colour, the same size as a handle's mark (it is a handle not yet used)
       ctx.globalAlpha = 0.45;
       for (const d of drawnOffers) { ctx.lineWidth = 2.5; ctx.strokeStyle = paint(d.item); ctx.beginPath(); ctx.arc(d.at.x, d.at.y, 7, 0, Math.PI * 2); ctx.stroke(); }
@@ -198,7 +200,7 @@ function mount(stage, win, itemsNow, hooks = {}) {
     const nx = -uy, ny = ux, sgn = ny > 0 ? -1 : 1, ox = c.x + nx * 44 * sgn, oy = c.y + ny * 44 * sgn;   // 44 px: past the tick's arrows (reach 26)
     const avoid = (typeof hooks.avoid === 'function' ? hooks.avoid() || [] : []).concat(placed);   // the handles' boxes, and the labels already placed this draw
     const r = placeLabel({ x: ox - w / 2, y: oy - hgt, w, h: hgt }, { W, H, top: hudBottom(), avoid }), bx = r.x, by = r.y; placed.push(r);
-    ctx.globalAlpha = 1; MW.drawWindow(ctx, T, { x: bx, y: by, w, h: hgt }, lines, paint(d.item), { edge: 1.5, lit: !!d.item.lit, firstY: 12 });   // L242: the theme's window (markwindow.js)
+    wins.put({ x: bx, y: by, w, h: hgt }, lines, paint(d.item), { edge: 1.5, lit: !!d.item.lit, firstY: 12 });   // L242: the theme's window; L251: an element (markwindow.js layer)
     ctx.restore();
   };
   // L242: a mark's colour as the theme draws it (handles.js paintOf: --mark-<field> over today's); the edge's own colour is --mark-edge; the rim under it all --mark-rim
@@ -256,7 +258,7 @@ function mount(stage, win, itemsNow, hooks = {}) {
   stage.addEventListener('pointerdown', down, { capture: true }); stage.addEventListener('pointermove', move, { capture: true });
   stage.addEventListener('pointerup', up, { capture: true }); stage.addEventListener('pointercancel', up, { capture: true });
   return { drawNow, marks: () => drawnMarks.slice(), offers: () => drawnOffers.slice(), tick: () => (drawnMarks[0] ? { s: drawnMarks[0].s } : null),
-    unmount() { win.cancelAnimationFrame(raf); canvas.remove(); stage.removeEventListener('pointerdown', down, { capture: true }); stage.removeEventListener('pointermove', move, { capture: true }); stage.removeEventListener('pointerup', up, { capture: true }); stage.removeEventListener('pointercancel', up, { capture: true }); } };
+    unmount() { win.cancelAnimationFrame(raf); canvas.remove(); wins.remove(); stage.removeEventListener('pointerdown', down, { capture: true }); stage.removeEventListener('pointermove', move, { capture: true }); stage.removeEventListener('pointerup', up, { capture: true }); stage.removeEventListener('pointercancel', up, { capture: true }); } };
 }
 
 module.exports = { styleOf, stationAt, markStroke, tickAt, markText, stretchStrip, mount, EDGE_COLOUR };
