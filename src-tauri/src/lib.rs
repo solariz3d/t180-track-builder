@@ -25,6 +25,7 @@ use tauri::Manager;
 
 mod ac;
 mod reference;
+mod kn5road;
 mod backups;
 mod blender;
 
@@ -721,6 +722,16 @@ fn read_reference_line(app: tauri::AppHandle, track: String, layout: String) -> 
     Ok(tauri::ipc::Response::new(reference::read_shape(&reference_tracks_dir(&app)?, &track, &layout)?))
 }
 
+// (L250) the same layout's ROAD from its kn5 files: only the meshes AC counts as valid track, as positions and 16-bit indices in raw bytes
+// (src/kn5road.rs, the format in its header), never the files themselves (450 to 634 MB for three tracks on L). Off the page's thread: a read takes
+// hundreds of milliseconds.
+#[tauri::command]
+async fn read_reference_road(app: tauri::AppHandle, track: String, layout: String) -> Result<tauri::ipc::Response, String> {
+    let tracks = reference_tracks_dir(&app)?;
+    tauri::async_runtime::spawn_blocking(move || kn5road::read_road(&tracks, &track, &layout).map(|r| tauri::ipc::Response::new(kn5road::encode(&r))))
+        .await.map_err(|e| format!("the road's read stopped: {e}"))?
+}
+
 /// The startup card's question. The remembered AC folder, or else the one Steam finds; nothing is remembered (the card's Use it does that).
 #[derive(serde::Serialize)]
 struct AcRootStatus { remembered: Option<String>, found: Option<String> }
@@ -964,7 +975,7 @@ pub fn run() {
             save_autosave, open_autosave, clear_autosave, write_export, write_layouts_export, stage_files, folder_is_empty, remove_empty_folder,
             get_ac_root, find_ac_root, set_ac_root, install_track, installed_state, track_saved_at, get_see_it_setting, set_see_it_setting, see_it_in_assetto,
             test_export_folder, find_blender, set_blender_path, write_blender_export, list_pieces, open_piece, save_piece, delete_piece, save_recipe, open_recipe, delete_recipe, save_undo, open_undo, append_input_log,
-            list_reference_tracks, read_reference_line
+            list_reference_tracks, read_reference_line, read_reference_road
         ])
         .run(tauri::generate_context!())
         .expect("error while running the T-180 Track Builder");
