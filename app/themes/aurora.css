@@ -21,6 +21,12 @@
   --sky-style: aurora; --sky-a: color(srgb 0.31 1 0.69); --sky-b: color(srgb 0.67 0.43 1); --sky-c: color(srgb 0.07 0.08 0.2);
   --violet: #b892ff; --green-glow: rgba(111, 245, 192, .45); --violet-glow: rgba(160, 120, 255, .45); --night-glass: rgba(8, 10, 30, .84);
   color-scheme: dark;
+  /* L249 (the user, 2026-11-26 04:49: "the refactor looks good enough"; the spec, exo_memory/briefs/t180_ui_refactor_spec.md): ONE radius scale for every look,
+     index.html's --r1..--r4 (2 / 4 / 8 / 12 px at factor 1), times this look's factor. Aurora is 0.75, Radix's "small": 1.5 / 3 / 6 / 9, the least round of
+     the rounded looks, as it already was; no capsule here (Export is one only in the factor-1 looks). This file sets no corner of its own but the window
+     buttons' 0 and its scrollbar: the scale is index.html's, read through this factor. And the two colour steps the spec adds (Radix's roles, §6): step 4, a hovered surface (--raise mixed 6%
+     toward --text), and step 10, the accent's own hover (--accent 12% toward --text): index.html's own default rule, written out as this look's values. The lights stay in the sky and the backdrops; the chrome carries no glow. */
+  --radius-factor: 0.75; --hover: #1b1f3c; --accent-hover: #7ef5c8;
 }
 
 @keyframes aurora-breathe { 0%, 100% { background-position: 0 0, 0 0, 0 0, 0 0; } 50% { background-position: 0 0, 30% 0, 70% 0, 0 0; } }   /* the tile (first) stays still */
@@ -30,76 +36,81 @@
 [data-theme="aurora"] ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #3fd9a4, #8a6cff); border-radius: 4px; }
 
 /* THE TOP BAR: night, with the light along its lower edge */
-/* the glow budget: a blurred shadow only on a hovered, focused, open or pressed control and on Export; static chrome (the bar, the column, menus, the camera bars, the band, the guide card) has hard edges */
+/* the glow budget (L249, the spec §5): no coloured glow anywhere on the chrome. A hovered, open or pressed control changes its fill, its rim or its words,
+   focus is index.html's solid ring, and what floats casts a small neutral shadow */
 [data-theme="aurora"] header {
   background: var(--tex), radial-gradient(40% 160% at 22% 0%, rgba(80, 255, 175, .22), transparent 70%), radial-gradient(40% 160% at 70% 0%, rgba(170, 110, 255, .26), transparent 70%), linear-gradient(180deg, #070818 0%, #0b0e2a 100%);
   border-bottom-color: rgba(111, 245, 192, .45); box-shadow: 0 1px 0 rgba(184, 146, 255, .35);
 }
-[data-theme="aurora"] header h1 { color: #dffcf0; text-shadow: 0 0 10px var(--green-glow), 0 0 22px var(--violet-glow); }
-[data-theme="aurora"] header h1::before { border-color: var(--accent); background: radial-gradient(circle at 40% 35%, #ffffff 0 12%, var(--accent) 30%, var(--violet) 70%, transparent 74%); box-shadow: 0 0 10px var(--green-glow), 0 0 18px var(--violet-glow); }
-[data-theme="aurora"] header input, [data-theme="aurora"] header select { background: rgba(10, 14, 40, .8); border-color: rgba(150, 200, 255, .26); border-radius: 10px; }
+[data-theme="aurora"] header h1 { color: #dffcf0; text-shadow: none; }   /* the name and its dot: no glow (L249) */
+[data-theme="aurora"] header h1::before { border-color: var(--accent); background: radial-gradient(circle at 40% 35%, #ffffff 0 12%, var(--accent) 30%, var(--violet) 70%, transparent 74%); box-shadow: none; }
+[data-theme="aurora"] header input, [data-theme="aurora"] header select { background: rgba(10, 14, 40, .8); border-color: rgba(150, 200, 255, .26); }
 
-/* buttons and menu names: night glass, lit at the edge */
-[data-theme="aurora"] button, [data-theme="aurora"] .more > summary { color: var(--text); border-color: rgba(140, 230, 210, .3); border-radius: 10px; background: linear-gradient(180deg, rgba(30, 40, 90, .55), rgba(10, 12, 34, .7)); box-shadow: inset 0 1px 0 rgba(200, 240, 255, .08); }
-[data-theme="aurora"] button:hover:not([disabled]), [data-theme="aurora"] .more > summary:hover { color: var(--accent); border-color: var(--accent); box-shadow: 0 0 12px var(--green-glow), inset 0 0 10px rgba(111, 245, 192, .12); }
+/* buttons and menu names: night glass, lit at the edge (index.html: r2, 3 px here). L249: a hover lights the rim and the words and lifts the glass to step 4, with no
+   glow; an open menu keeps its curtain gradient and violet rim, with no glow */
+[data-theme="aurora"] button, [data-theme="aurora"] .more > summary { color: var(--text); border-color: rgba(140, 230, 210, .3); background: linear-gradient(180deg, rgba(30, 40, 90, .55), rgba(10, 12, 34, .7)); box-shadow: inset 0 1px 0 rgba(200, 240, 255, .08); }
+[data-theme="aurora"] button:hover:not([disabled]), [data-theme="aurora"] .more > summary:hover { color: var(--accent); border-color: var(--accent); background: var(--hover); box-shadow: inset 0 1px 0 rgba(200, 240, 255, .08); }
 [data-theme="aurora"] button:active:not([disabled]) { background: linear-gradient(180deg, rgba(111, 245, 192, .22), rgba(160, 120, 255, .22)); }
-[data-theme="aurora"] .more[open] > summary { color: #ffffff; border-color: var(--violet); background: linear-gradient(135deg, rgba(60, 200, 160, .38), rgba(130, 90, 255, .42)); box-shadow: 0 0 14px var(--violet-glow), 0 0 26px rgba(111, 245, 192, .22); }
-/* Export to Assetto Corsa: the one call to action, lit like the curtain itself */
-[data-theme="aurora"] header #install > button { color: #03130d; border-color: #9dffd9; background: linear-gradient(100deg, #7cf7c6 0%, #6fe3d8 45%, #b9a2ff 100%); box-shadow: 0 0 14px var(--green-glow), 0 0 26px var(--violet-glow); }
+[data-theme="aurora"] .more[open] > summary { color: #ffffff; border-color: var(--violet); background: linear-gradient(135deg, rgba(60, 200, 160, .38), rgba(130, 90, 255, .42)); box-shadow: inset 0 1px 0 rgba(200, 240, 255, .08); }
+/* Export to Assetto Corsa: the one call to action, lit like the curtain itself: the curtain's gradient is its fill, with no glow; at r2, as every control here
+   (index.html makes it a capsule at factor 1 only) */
+[data-theme="aurora"] header #install > button { color: #03130d; border-color: #9dffd9; background: linear-gradient(100deg, #7cf7c6 0%, #6fe3d8 45%, #b9a2ff 100%); box-shadow: none; }
 [data-theme="aurora"] #winctl button { background: transparent; border-color: transparent; border-radius: 0; box-shadow: none; }
 [data-theme="aurora"] #win-min:hover, [data-theme="aurora"] #win-max:hover { background: rgba(111, 245, 192, .12); box-shadow: none; }
 [data-theme="aurora"] #win-close:hover { background: #b0303a; box-shadow: none; }
 
-/* the menus: deep glass with a violet rim */
-[data-theme="aurora"] .more-menu { background: var(--tex), linear-gradient(180deg, rgba(14, 18, 52, .94), rgba(6, 8, 24, .96)); border-color: rgba(184, 146, 255, .45); border-radius: 14px; box-shadow: inset 0 1px 0 rgba(111, 245, 192, .18); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
-[data-theme="aurora"] .more-menu button { border-radius: 8px; }
+/* the menus: deep glass with a violet rim (index.html: r3, 6 px here, and the rows in it square by the concentric rule) */
+[data-theme="aurora"] .more-menu { background: var(--tex), linear-gradient(180deg, rgba(14, 18, 52, .94), rgba(6, 8, 24, .96)); border-color: rgba(184, 146, 255, .45); box-shadow: inset 0 1px 0 rgba(111, 245, 192, .18); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 [data-theme="aurora"] .more-menu hr { border-top-color: rgba(184, 146, 255, .3); }
-[data-theme="aurora"] .pieces-menu .piece-row:hover, [data-theme="aurora"] .more-menu .menu-row:hover, [data-theme="aurora"] .more-menu .menu-row:focus { background: rgba(111, 245, 192, .07); }
+[data-theme="aurora"] .pieces-menu .piece-row:hover, [data-theme="aurora"] .more-menu .menu-row:hover, [data-theme="aurora"] .more-menu .menu-row:focus { background: var(--hover); }   /* step 4 (L249) */
 
 /* fields */
 [data-theme="aurora"] input[type="number"], [data-theme="aurora"] input[type="text"], [data-theme="aurora"] input:not([type]), [data-theme="aurora"] textarea,
-[data-theme="aurora"] .save-piece input, [data-theme="aurora"] .picker select, [data-theme="aurora"] select { background: rgba(6, 8, 26, .85); color: var(--text); border-color: rgba(150, 200, 255, .24); border-radius: 8px; }
+[data-theme="aurora"] .save-piece input, [data-theme="aurora"] .picker select, [data-theme="aurora"] select { background: rgba(6, 8, 26, .85); color: var(--text); border-color: rgba(150, 200, 255, .24); }
 [data-theme="aurora"] input[type="number"]::-webkit-inner-spin-button { background-color: var(--dim); }   /* the spin chevrons in this skin's colours (their shape is in index.html) */
 [data-theme="aurora"] input[type="number"]::-webkit-inner-spin-button:hover { background-color: var(--accent); }
 [data-theme="aurora"] input[type="number"]::-webkit-inner-spin-button:active { background-color: #c9a8ff; }
-[data-theme="aurora"] input:focus, [data-theme="aurora"] select:focus, [data-theme="aurora"] textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(111, 245, 192, .16), 0 0 12px var(--green-glow); }
+[data-theme="aurora"] input:focus, [data-theme="aurora"] select:focus, [data-theme="aurora"] textarea:focus { border-color: var(--accent); box-shadow: none; }   /* the rim turns green; the ring is index.html's (L249: no glow) */
 [data-theme="aurora"] option { background: #080a1a; color: var(--text); }
 [data-theme="aurora"] option:checked { background: rgba(160, 120, 255, .35); color: #fff; }
 @supports (appearance: base-select) {
-  [data-theme="aurora"] header select::picker(select) { background: #080a1a; border-color: rgba(184, 146, 255, .45); border-top-color: var(--accent); border-radius: 12px; box-shadow: none; }
+  [data-theme="aurora"] header select::picker(select) { background: #080a1a; border-color: rgba(184, 146, 255, .45); border-top-color: var(--accent); box-shadow: none; }
 }
 
-/* THE LEFT PANEL: a pane of night glass with a slow curtain of light in its top */
+/* THE LEFT PANEL: a pane of night glass with a slow curtain of light in its top. Docked, it meets the window's edge, so it has no corner (L249, the spec §1) */
 [data-theme="aurora"] #left {
   background: var(--tex), radial-gradient(70% 220px at 20% 0%, rgba(111, 245, 192, .2), transparent 70%), radial-gradient(60% 200px at 85% 0%, rgba(160, 120, 255, .3), transparent 70%), var(--night-glass);
   background-size: calc(3 * var(--dpx)) calc(3 * var(--dpx)), 140% 100%, 140% 100%, 100% 100%; animation: aurora-breathe 18s ease-in-out infinite;   /* the tile's size first */
-  border-color: rgba(150, 200, 255, .2); border-radius: 16px;
+  border-color: rgba(150, 200, 255, .2);
   box-shadow: inset 0 1px 0 rgba(111, 245, 192, .22);
   backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4);
 }
 [data-theme="aurora"] #palette, [data-theme="aurora"] #side { background: transparent; }
 [data-theme="aurora"] #side, [data-theme="aurora"] #side > section { border-color: rgba(150, 200, 255, .14); }
-[data-theme="aurora"] h3 { color: var(--accent); text-shadow: 0 0 8px rgba(111, 245, 192, .35); }
+[data-theme="aurora"] h3 { color: var(--accent); text-shadow: none; }   /* the headings: no glow (L249) */
 [data-theme="aurora"] h3::after { background: linear-gradient(90deg, rgba(111, 245, 192, .6), rgba(184, 146, 255, .5) 50%, rgba(184, 146, 255, 0)); }
 [data-theme="aurora"] .track li.selected { background: linear-gradient(90deg, rgba(111, 245, 192, .2), rgba(160, 120, 255, .12)); color: var(--accent); }
 [data-theme="aurora"] .bar, [data-theme="aurora"] #banner .brush-strip { background: linear-gradient(180deg, #0e1130, #080a1a); }
 
-/* THE CAMERA DOCK */
-[data-theme="aurora"] #camera [role="toolbar"] { background: var(--night-glass); border-color: rgba(150, 200, 255, .2); border-radius: 16px; box-shadow: none; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+/* THE CAMERA DOCK (index.html: r2; its hint backing r1). A pressed key keeps its green words and its underline, with no glow (L249). The HUD strip's corner is
+   index.html's (its own rule is !important there), so this file sets none */
+[data-theme="aurora"] #camera [role="toolbar"] { background: var(--night-glass); border-color: rgba(150, 200, 255, .2); box-shadow: none; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
 [data-theme="aurora"] #camera [role="toolbar"] button { background: transparent; border-color: transparent; box-shadow: none; }
-[data-theme="aurora"] #camera [role="toolbar"] button[aria-pressed="true"], [data-theme="aurora"] #camera [role="toolbar"] button.on { color: var(--accent); background: rgba(111, 245, 192, .1); box-shadow: 0 -2px 0 var(--accent) inset, 0 0 12px rgba(111, 245, 192, .3); text-shadow: 0 0 8px var(--green-glow); }
-[data-theme="aurora"] #camera p { color: var(--dim) !important; background: rgba(4, 5, 16, .72); border-radius: 8px; text-shadow: none; }
-[data-theme="aurora"] .preview-hud { color: var(--text) !important; background: rgba(4, 5, 16, .72) !important; border-radius: 6px; }
+[data-theme="aurora"] #camera [role="toolbar"] button[aria-pressed="true"], [data-theme="aurora"] #camera [role="toolbar"] button.on { color: var(--accent); background: rgba(111, 245, 192, .1); box-shadow: 0 -2px 0 var(--accent) inset; text-shadow: none; }
+[data-theme="aurora"] #camera p { color: var(--dim) !important; background: rgba(4, 5, 16, .72); text-shadow: none; }
+[data-theme="aurora"] .preview-hud { color: var(--text) !important; background: rgba(4, 5, 16, .72) !important; }
 
 /* THE CURTAINS are the 3D view's own sky now (--sky-style above, app/preview/sky/aurora.js), drawn at infinity so they stay put as the camera
    turns; their drift stops under prefers-reduced-motion there. the view's vignette is the renderer's own (app/preview/renderer.js THE VIGNETTE). */
 
 /* the guide card, the piece values, the question in the page */
-[data-theme="aurora"] .guide-card { border-radius: 14px; box-shadow: inset 0 1px 0 rgba(111, 245, 192, .2); }
+[data-theme="aurora"] .guide-card { box-shadow: inset 0 1px 0 rgba(111, 245, 192, .2); }
 [data-theme="aurora"] .guide-card .guide-count { opacity: 1; color: var(--dim); }
 [data-theme="aurora"] [aria-label="piece values"] { box-shadow: inset 0 1px 0 rgba(111, 245, 192, .2); }
 [data-theme="aurora"] .ask-veil { background: rgba(4, 5, 16, .62); }
-[data-theme="aurora"] .ask-card { background: linear-gradient(180deg, #0e1130, #06081c); border-radius: 16px; box-shadow: 0 18px 60px rgba(0, 0, 0, .6), 0 0 30px rgba(120, 90, 255, .3); }
+/* a dialog (index.html: r4, 9 px here; its buttons square by the concentric rule) casts a small neutral shadow and no violet halo (the spec §5: black, blur
+   12 px at most, alpha .12 at most) */
+[data-theme="aurora"] .ask-card { background: linear-gradient(180deg, #0e1130, #06081c); box-shadow: 0 2px 3px rgba(0, 0, 0, .12), 0 8px 12px rgba(0, 0, 0, .12); }
 
 @media (prefers-reduced-motion: reduce) {
   [data-theme="aurora"] #left { animation: none; }
@@ -107,9 +118,11 @@
 
 /* L242 (the user, 2026-11-26 00:58: "we should also incorporate the themes for those windows for each theme"): the small windows on the view, a mark's label and a
    handle's readout, drawn on a canvas, so set here as tokens that app/core/markwindow.js reads. Night glass: indigo, softly rounded, a glow in the mark's colour like the lights over it. The font is one of the page's own (its --display or --body); these are
-   canvas tokens and move no box. --mark-<field> sets a mark's and handle's colour (bank, turn, climb, width, cup, length, edge), --mark-rim the dark rim under them. */
+   canvas tokens and move no box. --mark-<field> sets a mark's and handle's colour (bank, turn, climb, width, cup, length, edge), --mark-rim the dark rim under them.
+   L249 (the user, 02:3x: he liked these windows and disliked only the round ones): the radius is on the scale, r1 times this look's factor (2 x 0.75 = 1.5;
+   a number, because the canvas reads it as one); the fill and the glow stay as they were. */
 [data-theme="aurora"] {
-  --mark-win-font: var(--display); --mark-win-weight: 600; --mark-win-radius: 8; --mark-win-edge: 1.25; --mark-win-glow: 12;
+  --mark-win-font: var(--display); --mark-win-weight: 600; --mark-win-radius: 1.5; --mark-win-edge: 1.25; --mark-win-glow: 12;
   --mark-win-bg: rgba(8, 10, 30, .86); --mark-win-text: #eaf6ff;
   /* L244 (the user, 2026-11-26 02:23: "yes handle colors per theme"): the marks' and handles' colours, the lights: ice blue, the curtains' pink, gold, red, a lime (the road's edges are already green), starlight, and violet for the edges. Each field keeps one colour everywhere in this
      look; bank and turn at least 60 apart, every pair of fields and each against the road's edge, the grid, the fog and the sky (app/test/markwindow.test.js W5) */
