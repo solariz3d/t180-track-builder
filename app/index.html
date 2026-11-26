@@ -44,9 +44,9 @@
     --display: Bahnschrift, "DIN Alternate", "Segoe UI", system-ui, sans-serif;
     --body: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
     --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
-    /* L242: the small windows on the view (a mark's label, a handle's readout), drawn on a canvas, read these (app/core/markwindow.js): SIGIL's own, a hairline edge,
+    /* L242: the small windows on the view (a mark's label, a handle's readout; page elements over the view since L251, drawn on a canvas before) read these (app/core/markwindow.js): SIGIL's own, a hairline edge,
        2 px corners and its display type; the veil and the words stay today's (the marks' colours: L244, below). A skin sets its own under [data-theme] */
-    --mark-win-font: var(--display); --mark-win-weight: 600; --mark-win-radius: 1; --mark-win-edge: 1;   /* L249: the corner is the chrome scale's r1 times SIGIL's factor (.5), a plain number the canvas reads */
+    --mark-win-font: var(--display); --mark-win-weight: 600; --mark-win-radius: 1; --mark-win-edge: 1;   /* L249: the corner is the chrome scale's r1 times SIGIL's factor (.5), a plain number markwindow.js reads (parseFloat) */
     --mark-win-blur: blur(10px);   /* L251: behind the window, SIGIL's own panel blur (#left's backdrop-filter, below; markwindow.test.js W8) */
     /* L244 (the user, 2026-11-26 02:23: "yes handle colors per theme"): the marks' and handles' colours, SIGIL's: its violet and paper, the hues a little softer and warmer than the old saturated ones; length a pale coral, not white (white sat on the road's white edges). Each field keeps one colour everywhere in this
        look; bank and turn at least 60 apart, every pair of fields and each against the road's edge, the grid, the fog and the sky (app/test/markwindow.test.js W5) */

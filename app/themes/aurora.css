@@ -117,10 +117,10 @@
 }
 
 /* L242 (the user, 2026-11-26 00:58: "we should also incorporate the themes for those windows for each theme"): the small windows on the view, a mark's label and a
-   handle's readout, drawn on a canvas, so set here as tokens that app/core/markwindow.js reads. Night glass: indigo, softly rounded, a glow in the mark's colour like the lights over it. The font is one of the page's own (its --display or --body); these are
-   canvas tokens and move no box. --mark-<field> sets a mark's and handle's colour (bank, turn, climb, width, cup, length, edge), --mark-rim the dark rim under them.
+   handle's readout (page elements over the view since L251, drawn on a canvas before), set here as tokens that app/core/markwindow.js reads. Night glass: indigo, softly rounded, a glow in the mark's colour like the lights over it. The font is one of the page's own (its --display or --body); these are
+   the windows' look only and move no box. --mark-<field> sets a mark's and handle's colour (bank, turn, climb, width, cup, length, edge), --mark-rim the dark rim under them.
    L249 (the user, 02:3x: he liked these windows and disliked only the round ones): the radius is on the scale, r1 times this look's factor (2 x 0.75 = 1.5;
-   a number, because the canvas reads it as one); the fill and the glow stay as they were. */
+   a number, because markwindow.js reads it as one); the fill and the glow stay as they were. */
 [data-theme="aurora"] {
   --mark-win-font: var(--display); --mark-win-weight: 600; --mark-win-radius: 1.5; --mark-win-edge: 1.25; --mark-win-glow: 12;
   --mark-win-bg: rgba(8, 10, 30, .86); --mark-win-text: #eaf6ff;

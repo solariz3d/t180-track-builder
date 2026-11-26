@@ -131,7 +131,7 @@ test('W6: a field\'s hue, wherever it comes from (Build, the landing, the Sculpt
 });
 
 // L249 (the chrome refactor; the packet: "Put their radius on the scale (r1 x the look's factor) and leave fill, sheen and glow as they are"): a label window's corner is
-// the chrome's smallest step, r1 (2 px at factor 1), times the look's own --radius-factor. It is a plain number, since the canvas reads it with parseFloat (markwindow.js)
+// the chrome's smallest step, r1 (2 px at factor 1), times the look's own --radius-factor. It is a plain number, since markwindow.js reads it with parseFloat (its num())
 test('W7: each look\'s window corner is the chrome scale\'s r1 (2 px) times that look\'s radius factor, written as a plain number', () => {
   const got = {}, want = {};
   for (const look of LOOKS) {

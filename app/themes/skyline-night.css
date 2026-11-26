@@ -99,8 +99,8 @@
 [data-theme="skyline-night"] .ask-card { background: linear-gradient(180deg, #16305b, #0e1d3b); }   /* its corner (r4) and small neutral shadow are the page's: no deep halo */
 
 /* L242 (the user, 2026-11-26 00:58: "we should also incorporate the themes for those windows for each theme"): the small windows on the view, a mark's label and a
-   handle's readout, drawn on a canvas, so set here as tokens that app/core/markwindow.js reads. Navy glass at night: cornered on the page's scale like its panes, a glossy top edge and the city's glow in the mark's colour. The font is one of the page's own (its --display or --body); these are
-   canvas tokens and move no box. --mark-<field> sets a mark's and handle's colour (bank, turn, climb, width, cup, length, edge), --mark-rim the dark rim under them. */
+   handle's readout (page elements over the view since L251, drawn on a canvas before), set here as tokens that app/core/markwindow.js reads. Navy glass at night: cornered on the page's scale like its panes, a glossy top edge and the city's glow in the mark's colour. The font is one of the page's own (its --display or --body); these are
+   the windows' look only and move no box. --mark-<field> sets a mark's and handle's colour (bank, turn, climb, width, cup, length, edge), --mark-rim the dark rim under them. */
 [data-theme="skyline-night"] {
   /* L249: the window's corner is on the scale, r1 at this look's factor 1 = 2 px (a 22 px window took 12, a capsule); its fill, sheen and glow stay as he liked them.
      markwindow.js reads a plain number here (parseFloat), so this is the value, not a calc() */
