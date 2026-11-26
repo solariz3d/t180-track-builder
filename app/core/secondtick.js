@@ -27,6 +27,7 @@
 const M = require('../camera/math.js');
 const HD = require('./handles.js');
 const { tokensOf } = require('../lib/tokens.js');
+const MW = require('./markwindow.js');   // L242: the label's window and the marks' colours, each theme's own
 
 const EDGE_COLOUR = '#3fd0c9';   // the left and right edge have no handle kind in handles.js, so no colour of their own there: this one is the panel's (L139)
 const STROKE_PX = 7, NUDGE_PX = 10, HIT_PX = 10;
@@ -156,12 +157,12 @@ function mount(stage, win, itemsNow, hooks = {}) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H); ctx.lineCap = 'round';
       const on = drawnMarks.filter((d) => shownNow(d, nowMs)), rest = drawnMarks.filter((d) => !on.includes(d));
       for (const d of on) if (d.item.label) drawStretch(ctx, d, last);
-      for (const d of on) for (const [w, colour] of [[6, T.css('--ink', '#0b0d11')], [3, d.item.colour]]) { ctx.lineWidth = w; ctx.strokeStyle = colour; for (const st of d.strokes) { ctx.beginPath(); ctx.moveTo(st.a.x, st.a.y); ctx.lineTo(st.b.x, st.b.y); ctx.stroke(); } }
-      for (const d of rest) { const c = dotOf(d); ctx.beginPath(); ctx.arc(c.x, c.y, DOT_PX, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = T.css('--ink', '#0b0d11'); ctx.fillStyle = d.item.colour; ctx.fill(); ctx.stroke(); }
+      for (const d of on) for (const [w, colour] of [[6, rim()], [3, paint(d.item)]]) { ctx.lineWidth = w; ctx.strokeStyle = colour; for (const st of d.strokes) { ctx.beginPath(); ctx.moveTo(st.a.x, st.a.y); ctx.lineTo(st.b.x, st.b.y); ctx.stroke(); } }
+      for (const d of rest) { const c = dotOf(d); ctx.beginPath(); ctx.arc(c.x, c.y, DOT_PX, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = rim(); ctx.fillStyle = paint(d.item); ctx.fill(); ctx.stroke(); }
       placed = []; for (const d of on) if (d.item.label) drawExplained(ctx, d, last, W, H);
       // an offer: a faint ring in the field's colour, the same size as a handle's mark (it is a handle not yet used)
       ctx.globalAlpha = 0.45;
-      for (const d of drawnOffers) { ctx.lineWidth = 2.5; ctx.strokeStyle = d.item.colour; ctx.beginPath(); ctx.arc(d.at.x, d.at.y, 7, 0, Math.PI * 2); ctx.stroke(); }
+      for (const d of drawnOffers) { ctx.lineWidth = 2.5; ctx.strokeStyle = paint(d.item); ctx.beginPath(); ctx.arc(d.at.x, d.at.y, 7, 0, Math.PI * 2); ctx.stroke(); }
       ctx.globalAlpha = 1;
     }
     return { marks: drawnMarks, offers: drawnOffers };
@@ -170,10 +171,10 @@ function mount(stage, win, itemsNow, hooks = {}) {
   const drawStretch = (ctx, d, at) => {
     const strip = stretchStrip(at.ghost, d.item); if (!strip) return;
     const scr = toScreenOf(at.pose, at.W, at.H), P = strip.map((q) => [scr(q.a), scr(q.b)]);
-    ctx.save(); ctx.globalAlpha = d.item.lit ? 0.38 : 0.16; ctx.fillStyle = d.item.colour; ctx.beginPath();
+    ctx.save(); ctx.globalAlpha = d.item.lit ? 0.38 : 0.16; ctx.fillStyle = paint(d.item); ctx.beginPath();
     for (let i = 1; i < P.length; i++) { const [a0, b0] = P[i - 1], [a1, b1] = P[i]; if (!a0 || !b0 || !a1 || !b1) continue; ctx.moveTo(a0.x, a0.y); ctx.lineTo(a1.x, a1.y); ctx.lineTo(b1.x, b1.y); ctx.lineTo(b0.x, b0.y); ctx.closePath(); }
     ctx.fill();
-    if (d.item.lit) { ctx.globalAlpha = 0.9; ctx.lineWidth = 2; ctx.strokeStyle = d.item.colour; for (const k of [0, 1]) { ctx.beginPath(); let on = false; for (const pr of P) { const q = pr[k]; if (!q) { on = false; continue; } if (on) ctx.lineTo(q.x, q.y); else { ctx.moveTo(q.x, q.y); on = true; } } ctx.stroke(); } }
+    if (d.item.lit) { ctx.globalAlpha = 0.9; ctx.lineWidth = 2; ctx.strokeStyle = paint(d.item); for (const k of [0, 1]) { ctx.beginPath(); let on = false; for (const pr of P) { const q = pr[k]; if (!q) { on = false; continue; } if (on) ctx.lineTo(q.x, q.y); else { ctx.moveTo(q.x, q.y); on = true; } } ctx.stroke(); } }
     ctx.restore();
   };
   // On the tick, small arrows along the road both ways (it is dragged along the road), and its label beside it, in the handles' tip style
@@ -181,27 +182,28 @@ function mount(stage, win, itemsNow, hooks = {}) {
     const m = stationAt(at.ghost, d.item.from); if (!m || !m.T) return;
     const scr = toScreenOf(at.pose, W, H), c = scr(m.pos), ahead = scr([m.pos[0] + m.T[0], m.pos[1] + m.T[1], m.pos[2] + m.T[2]]); if (!c) return;
     let ux = 1, uy = 0; if (ahead) { const l = Math.hypot(ahead.x - c.x, ahead.y - c.y); if (l > 1e-6) { ux = (ahead.x - c.x) / l; uy = (ahead.y - c.y) / l; } }
-    const ink = T.css('--ink', '#0b0d11'), reach = d.item.lit ? 26 : 20, gap = 9;
+    const ink = rim(), reach = d.item.lit ? 26 : 20, gap = 9;
     // the arrows stand at 0.6 of the half width either side: off the centre (the climb's handle at mid-piece) and off the edges (the bank's strokes, the turn's handle)
     const h = d.item.half > 0 ? d.item.half : 4, spots = [-0.6 * h, 0.6 * h].map((u) => scr(across(m, u))).filter(Boolean);
     ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    for (const [w, colour] of [[5, ink], [2.2, d.item.colour]]) {
+    for (const [w, colour] of [[5, ink], [2.2, paint(d.item)]]) {
       ctx.lineWidth = w; ctx.strokeStyle = colour; ctx.beginPath();
       for (const o of spots) for (const sg of [-1, 1]) { const sx = o.x + ux * gap * sg, sy = o.y + uy * gap * sg, ex = o.x + ux * reach * sg, ey = o.y + uy * reach * sg; ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.moveTo(ex, ey); ctx.lineTo(ex - (ux * 5 + -uy * 4) * sg, ey - (uy * 5 + ux * 4) * sg); ctx.moveTo(ex, ey); ctx.lineTo(ex - (ux * 5 - -uy * 4) * sg, ey - (uy * 5 - ux * 4) * sg); }
       ctx.stroke();
     }
     const cut = d.item.label.indexOf(' · drag'), lines = cut > 0 ? [d.item.label.slice(0, cut), d.item.label.slice(cut + 3)] : [d.item.label];
-    ctx.font = 'bold 12px system-ui, "Segoe UI", sans-serif';
+    ctx.font = MW.font(T);
     const w = Math.max(...lines.map((t) => ctx.measureText(t).width)) + 12, hgt = 6 + 18 * lines.length;
     // beside the tick, off the road: along the screen normal to the road, on the upper side (above it when the road runs across the screen)
     const nx = -uy, ny = ux, sgn = ny > 0 ? -1 : 1, ox = c.x + nx * 44 * sgn, oy = c.y + ny * 44 * sgn;   // 44 px: past the tick's arrows (reach 26)
     const avoid = (typeof hooks.avoid === 'function' ? hooks.avoid() || [] : []).concat(placed);   // the handles' boxes, and the labels already placed this draw
     const r = placeLabel({ x: ox - w / 2, y: oy - hgt, w, h: hgt }, { W, H, top: hudBottom(), avoid }), bx = r.x, by = r.y; placed.push(r);
-    ctx.globalAlpha = 1; ctx.fillStyle = T.alpha('--veil', 0.92, '#0b0d11'); ctx.fillRect(bx, by, w, hgt);
-    ctx.strokeStyle = d.item.colour; ctx.lineWidth = d.item.lit ? 2.5 : 1.5; ctx.strokeRect(bx, by, w, hgt);
-    ctx.fillStyle = T.css('--on-ink', '#eef1f6'); ctx.textBaseline = 'middle'; lines.forEach((t, i) => ctx.fillText(t, bx + 6, by + 12 + 18 * i));
+    ctx.globalAlpha = 1; MW.drawWindow(ctx, T, { x: bx, y: by, w, h: hgt }, lines, paint(d.item), { edge: 1.5, lit: !!d.item.lit, firstY: 12 });   // L242: the theme's window (markwindow.js)
     ctx.restore();
   };
+  // L242: a mark's colour as the theme draws it (handles.js paintOf: --mark-<field> over today's); the edge's own colour is --mark-edge; the rim under it all --mark-rim
+  const paint = (it) => (it.field === 'edge' || it.field === 'edgeR' ? MW.colourOf(T, 'edge', it.colour) : HD.paintOf(T, it.kind));
+  const rim = () => T.css('--mark-rim', T.css('--ink', '#0b0d11'));
   const keyOf = (it) => `${it.field}:${it.index}`;
   const dotOf = (d) => { const st = d.strokes[0]; return { x: (st.a.x + st.b.x) / 2, y: (st.a.y + st.b.y) / 2 }; };
   const shownNow = (d, nowMs) => !!(d.item.lit || (drag && drag.kind === 'mark' && keyOf(drag.d.item) === keyOf(d.item)) || hover === keyOf(d.item)

@@ -22,6 +22,7 @@
 const M = require('../camera/math.js');
 const { tokensOf } = require('../lib/tokens.js');   // the skin's colours (app/lib/tokens.js)
 const ZG = require('./zonegrab.js');   // the dot rows' stations
+const MW = require('./markwindow.js');   // L242: the windows' look and the marks' colours, each theme's own
 
 const DEG = Math.PI / 180;
 /**
@@ -130,6 +131,10 @@ function extraKind(k) {
   EXTRA_KINDS.set(k, K); return K;
 }
 const extraId = (base, i) => `extra:${base}:${i}`;
+// L242: a kind's colour as the theme draws it: --mark-<field> (bank, turn, climb, width, cup, length) over today's literal (K.colour). An extra kind wears its field's;
+// the corner kinds (turnDeg, climbDeg) are turn and climb
+const FIELD_OF = Object.freeze({ turnDeg: 'turn', climbDeg: 'climb' });
+function paintOf(T, kind) { const K = KINDS[kind]; if (!K) return '#ffffff'; const b = K.extra ? K.base : kind; return MW.colourOf(T, FIELD_OF[b] || b, K.colour); }
 const KINDS = new Proxy(BASE_KINDS, { get: (t, k) => (typeof k === 'string' && k.startsWith('extra:') && !(k in t) ? extraKind(k) : t[k]) });
 const LANDING_ORDER = Object.freeze(['landfwd', 'landleft', 'landup', 'landturn']);
 // (2026-10-15, reported: scrubbing a turn from a 1000 m straight jumped 0.08 instead of 0.01, so every handle has to be precisely scrubbable): the PRECISE
@@ -368,6 +373,7 @@ function cursorFor(axis) { return !axis || axis.len < EDGE_ON_PX_PER_M ? 'move' 
  */
 function mount(stage, win, host) {
   const T = tokensOf(win);
+  const rim = () => T.css('--mark-rim', T.css('--ink', '#0b0d11'));   // L242: the dark rim under every arrow, bar and dot
   const doc = stage.ownerDocument, canvas = doc.createElement('canvas');
   canvas.setAttribute('aria-label', 'drag handles');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6';
@@ -398,29 +404,29 @@ function mount(stage, win, host) {
       ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       // the double arrow: along the way a drag runs on screen
       const ang = s.len >= EDGE_ON_PX_PER_M ? Math.atan2(s.dy, s.dx) : (K.axis === 'U' ? -Math.PI / 2 : 0), ux = Math.cos(ang), uy = Math.sin(ang), reach = on ? 22 : 17;
-      for (const [w, c] of [[5, T.css('--ink', '#0b0d11')], [2.2, K.colour]]) {
+      const paint = paintOf(T, h.kind);
+      for (const [w, c] of [[5, rim()], [2.2, paint]]) {
         ctx.lineWidth = w; ctx.strokeStyle = c; ctx.beginPath();
         for (const sg of [-1, 1]) { const ex = s.x + ux * reach * sg, ey = s.y + uy * reach * sg; ctx.moveTo(s.x + ux * (size + 2) * sg, s.y + uy * (size + 2) * sg); ctx.lineTo(ex, ey); ctx.moveTo(ex, ey); ctx.lineTo(ex - (ux * 5 + -uy * 4) * sg, ey - (uy * 5 + ux * 4) * sg); ctx.moveTo(ex, ey); ctx.lineTo(ex - (ux * 5 - -uy * 4) * sg, ey - (uy * 5 - ux * 4) * sg); }
         ctx.stroke();
       }
-      ctx.fillStyle = K.colour; ctx.strokeStyle = T.css('--ink', '#0b0d11'); ctx.lineWidth = 2; ctx.beginPath(); ctx.rect(s.x - size, s.y - size / 2, size * 2, size); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = paint; ctx.strokeStyle = rim(); ctx.lineWidth = 2; ctx.beginPath(); ctx.rect(s.x - size, s.y - size / 2, size * 2, size); ctx.fill(); ctx.stroke();
       if (on) {
         // An extra handle's hover adds the line naming its drag along the road (slideWords); while it slides, the box reads where its change starts
         const from = K.extra && typeof model.slideBase === 'function' ? model.slideBase(h.kind) : null, sliding = !!drag && drag.mode === 'slide' && Number.isFinite(Number(from));
-        const text = sliding ? `${K.label} starts at ${Number(from).toFixed(2)} m` : drag ? format(h.kind, drag.value) : format(h.kind, model.base(h.kind)) + (K.zero ? ' · double-click: 0' : pre && pre.kind === h.kind && pre.to === model.base(h.kind) ? ` · double-click: ${Number(pre.from).toFixed(2)}` : ''); ctx.font = 'bold 12px system-ui, "Segoe UI", sans-serif';
+        const text = sliding ? `${K.label} starts at ${Number(from).toFixed(2)} m` : drag ? format(h.kind, drag.value) : format(h.kind, model.base(h.kind)) + (K.zero ? ' · double-click: 0' : pre && pre.kind === h.kind && pre.to === model.base(h.kind) ? ` · double-click: ${Number(pre.from).toFixed(2)}` : ''); ctx.font = MW.font(T);
         // while a drag is held at the edge of what fits, the host's reason is the second line (model.held: the panel's, for an extra handle; '' when nothing holds it)
         const why = drag && !sliding && typeof model.held === 'function' ? model.held(h.kind) : '';
         const lines = [text].concat(K.extra && !drag ? [slideWords(h.kind, from, h.slideAxis)].filter(Boolean) : why ? [why] : []), hgt = 4 + 18 * lines.length;
         const w = Math.max(...lines.map((t) => ctx.measureText(t).width)) + 12, bx = clamp(s.x + 14, 4, W - w - 4), by = clamp(s.y - 12 - hgt, 4, H - hgt - 2);
         if (lines.length > 1) tipBoxes.push({ x: bx, y: by, w, h: hgt });
-        ctx.fillStyle = T.alpha('--veil', 0.92, '#0b0d11'); ctx.fillRect(bx, by, w, hgt); ctx.strokeStyle = K.colour; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, w, hgt);
-        ctx.fillStyle = T.css('--on-ink', '#eef1f6'); ctx.textBaseline = 'middle'; lines.forEach((t, i) => ctx.fillText(t, bx + 6, by + 11 + 18 * i));
+        MW.drawWindow(ctx, T, { x: bx, y: by, w, h: hgt }, lines, paint, { edge: 1.5, firstY: 11 });   // L242: the theme's window (markwindow.js)
       }
     }
   };
   // a dot, a hollow ring; a rim's inner half green when that side has an edge or a cup to lift
   const drawDot = (ctx, h) => {
-    const s = h.screen, ink = T.css('--ink', '#0b0d11');
+    const s = h.screen, ink = rim();
     ctx.lineWidth = 4; ctx.strokeStyle = ink; ctx.beginPath(); ctx.arc(s.x, s.y, DOT_R, 0, 2 * Math.PI); ctx.stroke();
     ctx.lineWidth = 2; ctx.strokeStyle = h.colour; ctx.beginPath(); ctx.arc(s.x, s.y, DOT_R, 0, 2 * Math.PI); ctx.stroke();
     if (h.inner) {   // the inner half: the half facing the centreline on screen (the dot's own L axis points outward)
@@ -431,7 +437,7 @@ function mount(stage, win, host) {
   // THE BRUSH GLYPH. Build's mark and double arrow, the arrow along the pointer's own axis (the drag reads the pointer, not the road), hollow for a Sculpt-only kind; one box a
   // kind beside it: during the tool's drag the value (model.brush.text, the strip's own words), on hover the words for each way, the Alt tag and the family's line (model.brush.note)
   const drawBrush = (ctx, h, W, H, boxed) => {
-    const s = h.screen, K = KINDS[h.kind], B = model.brush || {}, colour = B.colour || K.colour, ink = T.css('--ink', '#0b0d11'), size = 7, reach = 22;
+    const s = h.screen, K = KINDS[h.kind], B = model.brush || {}, colour = B.colour || paintOf(T, h.kind), ink = rim(), size = 7, reach = 22;
     const ang = K.screen === 'x' ? 0 : -Math.PI / 2, ux = Math.cos(ang), uy = Math.sin(ang), heads = K.words.length > 1 ? [-1, 1] : [1];
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     for (const [w, c] of [[5, ink], [2.2, colour]]) {
@@ -443,10 +449,9 @@ function mount(stage, win, host) {
     if (boxed.has(h.kind)) return; boxed.add(h.kind);
     const lines = B.open ? [B.text || ''] : [B.words || brushWords(h.kind), B.note || ''];   // the zone grab's own words on hover
     const shown = lines.filter(Boolean); if (!shown.length) return;
-    ctx.font = 'bold 12px system-ui, "Segoe UI", sans-serif';
+    ctx.font = MW.font(T);
     const w = Math.max(...shown.map((t) => ctx.measureText(t).width)) + 12, hgt = 6 + 18 * shown.length, bx = clamp(s.x + 30, 4, W - w - 4), by = clamp(s.y - 12 - hgt, 4, H - hgt - 4);
-    tipBoxes.push({ x: bx, y: by, w, h: hgt }); ctx.fillStyle = T.alpha('--veil', 0.92, '#0b0d11'); ctx.fillRect(bx, by, w, hgt); ctx.strokeStyle = colour; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, w, hgt);
-    ctx.fillStyle = T.css('--on-ink', '#eef1f6'); ctx.textBaseline = 'middle'; shown.forEach((t, i) => ctx.fillText(t, bx + 6, by + 12 + 18 * i));
+    tipBoxes.push({ x: bx, y: by, w, h: hgt }); MW.drawWindow(ctx, T, { x: bx, y: by, w, h: hgt }, shown, colour, { edge: 1.5, firstY: 12 });   // L242: the theme's window
   };
   // THE LAYOUT IS DONE WHEN SOMETHING IT READS CHANGED, not every frame (it ran on every frame, the model, every handle placed and drawn: about a third of an idle frame's script, the measurement of
   // 2026-10-19). What a frame draws follows from the model's numbers (the ghost's stations, the fields' values and widths, the mode), the camera, the stage's size, and the hover and drag; when all of
@@ -621,4 +626,4 @@ function mount(stage, win, host) {
   };
 }
 
-module.exports = { extraId, SNAP_PX, LOCK_PX, HIT_PX, CLEAR_PX, clearExtras, placeDots, dotHit, DOT_MIN_M, DOT_MIN_PX, DOT_CAP, wrapTurn, KINDS, BRUSH_KINDS, BRUSH_CHANNELS, brushFormat, brushWords, slideWords, ORDER, LANDING_ORDER, DEG, PRECISE_MOD, WARP_WAIT_MS, WARP_MISSES, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, scrubGain, SPEED_SLOW, SPEED_FAST, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };
+module.exports = { paintOf, extraId, SNAP_PX, LOCK_PX, HIT_PX, CLEAR_PX, clearExtras, placeDots, dotHit, DOT_MIN_M, DOT_MIN_PX, DOT_CAP, wrapTurn, KINDS, BRUSH_KINDS, BRUSH_CHANNELS, brushFormat, brushWords, slideWords, ORDER, LANDING_ORDER, DEG, PRECISE_MOD, WARP_WAIT_MS, WARP_MISSES, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, scrubGain, SPEED_SLOW, SPEED_FAST, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };

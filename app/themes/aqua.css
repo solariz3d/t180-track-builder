@@ -158,3 +158,11 @@
 @supports (appearance: base-select) {
   [data-theme="aqua"] header select::picker(select) { background: linear-gradient(180deg, #06566a, #022a35 40%); border-color: var(--rim); border-top-color: var(--accent); border-radius: 14px; }
 }
+
+/* L242 (the user, 2026-11-26 00:58: "we should also incorporate the themes for those windows for each theme"): the small windows on the view, a mark's label and a
+   handle's readout, drawn on a canvas, so set here as tokens that app/core/markwindow.js reads. A gel drop: deep teal, rounded, a wet highlight on its top edge and a cyan glow in the mark's colour. The font is one of the page's own (its --display or --body); these are
+   canvas tokens and move no box. --mark-<field> sets a mark's and handle's colour (bank, turn, climb, width, cup, length, edge), --mark-rim the dark rim under them. */
+[data-theme="aqua"] {
+  --mark-win-font: var(--body); --mark-win-weight: 600; --mark-win-radius: 10; --mark-win-edge: 1.5; --mark-win-glow: 9;
+  --mark-win-bg: rgba(3, 56, 70, .90); --mark-win-text: #f2fdff; --mark-win-sheen: rgba(255, 255, 255, .62);
+}

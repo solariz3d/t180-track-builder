@@ -137,3 +137,11 @@
 }
 /* "look here": the guide's outline follows the accent (a review's ruling) */
 [data-theme="glass"] .guide-target { outline-color: var(--accent) !important; }
+
+/* L242 (the user, 2026-11-26 00:58: "we should also incorporate the themes for those windows for each theme"): the small windows on the view, a mark's label and a
+   handle's readout, drawn on a canvas, so set here as tokens that app/core/markwindow.js reads. A frosted shard: square corners, a thin bright edge, the cold sheen across its top and a faint glow. The font is one of the page's own (its --display or --body); these are
+   canvas tokens and move no box. --mark-<field> sets a mark's and handle's colour (bank, turn, climb, width, cup, length, edge), --mark-rim the dark rim under them. */
+[data-theme="glass"] {
+  --mark-win-font: var(--body); --mark-win-weight: 600; --mark-win-radius: 0; --mark-win-edge: 1; --mark-win-glow: 6;
+  --mark-win-bg: rgba(10, 28, 44, .80); --mark-win-text: #f0f9ff; --mark-win-sheen: rgba(255, 255, 255, .55);
+}

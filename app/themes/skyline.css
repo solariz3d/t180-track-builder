@@ -98,3 +98,11 @@
 /* the question in the page */
 [data-theme="skyline"] .ask-veil { background: rgba(120, 180, 240, .35); }
 [data-theme="skyline"] .ask-card { background: linear-gradient(180deg, #ffffff, #eef6ff); border-radius: 16px; box-shadow: 0 18px 60px rgba(18, 80, 170, .4); }
+
+/* L242 (the user, 2026-11-26 00:58: "we should also incorporate the themes for those windows for each theme"): the small windows on the view, a mark's label and a
+   handle's readout, drawn on a canvas, so set here as tokens that app/core/markwindow.js reads. White frosted glass by day: rounded like its panes, dark blue words, a glossy top edge and a soft blue shadow under it. The font is one of the page's own (its --display or --body); these are
+   canvas tokens and move no box. --mark-<field> sets a mark's and handle's colour (bank, turn, climb, width, cup, length, edge), --mark-rim the dark rim under them. */
+[data-theme="skyline"] {
+  --mark-win-font: var(--body); --mark-win-weight: 600; --mark-win-radius: 12; --mark-win-edge: 1.5; --mark-win-glow: 0;
+  --mark-win-bg: rgba(255, 255, 255, .92); --mark-win-text: #0b2747; --mark-win-sheen: rgba(255, 255, 255, .95); --mark-win-shade: rgba(28, 92, 168, .30);
+}

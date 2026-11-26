@@ -89,3 +89,11 @@
 [data-theme="skyline-night"] .guide-card .guide-count { opacity: 1; color: var(--dim); }
 [data-theme="skyline-night"] .ask-veil { background: rgba(4, 12, 32, .55); }
 [data-theme="skyline-night"] .ask-card { background: linear-gradient(180deg, #16305b, #0e1d3b); border-radius: 16px; box-shadow: 0 18px 60px rgba(0, 8, 30, .7); }
+
+/* L242 (the user, 2026-11-26 00:58: "we should also incorporate the themes for those windows for each theme"): the small windows on the view, a mark's label and a
+   handle's readout, drawn on a canvas, so set here as tokens that app/core/markwindow.js reads. Navy glass at night: rounded like its panes, a glossy top edge and the city's glow in the mark's colour. The font is one of the page's own (its --display or --body); these are
+   canvas tokens and move no box. --mark-<field> sets a mark's and handle's colour (bank, turn, climb, width, cup, length, edge), --mark-rim the dark rim under them. */
+[data-theme="skyline-night"] {
+  --mark-win-font: var(--body); --mark-win-weight: 600; --mark-win-radius: 12; --mark-win-edge: 1.5; --mark-win-glow: 8;
+  --mark-win-bg: rgba(14, 30, 62, .88); --mark-win-text: #e8f2ff; --mark-win-sheen: rgba(255, 255, 255, .35);
+}
