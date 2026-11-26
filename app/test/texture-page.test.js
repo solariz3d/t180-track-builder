@@ -410,15 +410,21 @@ test('row 13 (L249): the corners are the spec\'s scale times each look\'s factor
       const extend = [...document.querySelectorAll('#palette button')].find((x) => x.textContent.trim() === 'Extend');
       return [r(extend), r(document.querySelector('#m-file .more-menu')), r(document.getElementById('left')), r(document.querySelector('header #install > button')), r(document.querySelector('.ask-card'))];`);
     want[look] = L249_RADII[look].map((v) => `${v}px`);
-    const f = await ev(`for (const v of document.querySelectorAll('.ask-veil')) v.remove(); document.getElementById('m-file').open = false;
-      const b = [...document.querySelectorAll('#palette button')].find((x) => x.textContent.trim() === 'Extend'); b.focus({ focusVisible: true });
+    // AMENDED BY NAME (L249 merge, pane A): a headless page never holds the window's focus (document.hasFocus() is false), so a focused button never matched
+    // :focus and the row read `none 3px` in every look, whatever the page said (exo_memory/handback/p-l249-chrome-A_2026-11-26.md, Merge). The read now runs
+    // with focus emulation on, as a person's window has it, the dialog closed as row 10 closes it, and it first asserts the button IS focused and matches :focus-visible
+    await ev("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await new Promise((r) => setTimeout(r, 150)); for (const v of document.querySelectorAll('.ask-veil')) v.remove(); document.getElementById('m-file').open = false; return true;");
+    await send('Emulation.setFocusEmulationEnabled', { enabled: true });
+    const f = await ev(`const b = [...document.querySelectorAll('#palette button')].find((x) => x.textContent.trim() === 'Extend'); b.focus({ focusVisible: true });
       const s = getComputedStyle(b), probe = document.createElement('i'); probe.style.color = 'var(--accent)'; document.body.appendChild(probe); const accent = getComputedStyle(probe).color; probe.remove();
-      const out = [s.outlineStyle, s.outlineWidth, s.outlineOffset, s.outlineColor === accent ? 'the accent' : s.outlineColor + ' (accent ' + accent + ')']; b.blur(); return out;`);
-    if (JSON.stringify(f) !== JSON.stringify(['solid', '2px', '1px', 'the accent'])) ring.push(`${look}: ${f.join(' ')}`);
+      const out = [document.activeElement === b && b.matches(':focus') ? 'focused' : 'NOT focused', b.matches(':focus-visible') ? 'focus-visible' : 'NOT focus-visible',
+        s.outlineStyle, s.outlineWidth, s.outlineOffset, s.outlineColor === accent ? 'the accent' : s.outlineColor + ' (accent ' + accent + ')']; b.blur(); return out;`);
+    await send('Emulation.setFocusEmulationEnabled', { enabled: false });
+    if (JSON.stringify(f) !== JSON.stringify(['focused', 'focus-visible', 'solid', '2px', '1px', 'the accent'])) ring.push(`${look}: ${f.join(' ')}`);
     assert.deepEqual(errors, [], `${look}: no page errors`);
   }
   assert.deepEqual(got, want, 'computed corners: [panel button, menu, left column, Export, dialog] per look');
-  assert.deepEqual(ring, [], 'a focused button wears a 2 px solid ring in the accent, offset 1 px');
+  assert.deepEqual(ring, [], 'a focused button (focused, and :focus-visible) wears a 2 px solid ring in the accent, offset 1 px');
 });
 
 // Row 14 (L249): the two new colour steps read. Every hover was a glow or a value picked per rule; spec §6 gives each look step 4 (--hover, a hovered row) and step 10
