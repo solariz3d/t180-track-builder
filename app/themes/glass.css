@@ -68,7 +68,6 @@
 [data-theme="glass"] input[type="number"]::-webkit-inner-spin-button { background-color: rgba(190, 235, 255, .75); }   /* the spin chevrons in this skin's colours (their shape is in index.html) */
 [data-theme="glass"] input[type="number"]::-webkit-inner-spin-button:hover { background-color: var(--accent); }
 [data-theme="glass"] input[type="number"]::-webkit-inner-spin-button:active { background-color: #ffffff; }
-[data-theme="glass"] input:focus, [data-theme="glass"] select:focus, [data-theme="glass"] textarea:focus { border-color: var(--accent); }
 [data-theme="glass"] option { background: #071725; color: var(--text); }
 
 /* THE LEFT PANE: a frosted crystal slab floating over the track, one corner cut (the facet), a cold sheen across its face */

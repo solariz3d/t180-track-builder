@@ -31,7 +31,7 @@ function mount(stage, win) {
   // the user, 2026-10-12: the numbers "look goofy". A dashboard read: Bahnschrift (Windows' DIN face, on every Windows
   // 10 and 11) with fixed-width digits, so a number does not jitter as a handle drags it; each label small and grey above
   // its value, and a thin rule between the values. The number is the biggest thing in the strip (24 px, bold); its unit and its label beside it are small and light (11 px)
-  layer.style.cssText = `position:absolute;${SPOT_CSS};z-index:4;pointer-events:none;display:none;flex-direction:column;align-items:center;padding:4px 6px;border-radius:8px;background:color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent);color:var(--on-ink-strong, #ffffff);font:700 24px/1.1 Bahnschrift,"Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap`;
+  layer.style.cssText = `position:absolute;${SPOT_CSS};z-index:4;pointer-events:none;display:none;flex-direction:column;align-items:center;padding:4px 6px;border-radius:var(--r3);background:color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent);color:var(--on-ink-strong, #ffffff);font:700 24px/1.1 Bahnschrift,"Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap`;
   row.style.cssText = 'display:flex';
   layer.append(row);
   stage.append(layer);

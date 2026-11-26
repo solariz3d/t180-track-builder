@@ -463,3 +463,107 @@ test('row 14 (L249): a hovered menu row, a hovered Export and a hovered panel bu
   t.diagnostic(report.join('; '));
   assert.deepEqual(under, [], 'hovered texts under 4.5:1 on their own pixels');
 });
+
+// Rows 15 to 18 (L255): what pane P's read of L249 found older than its range (exo_memory/handback/p-l249-read-P_2026-11-26.md, rows 12 and 13, "Two of A's
+// lines" and "Older than the range"), each measured as a person meets it: a real pointer, a real click, the window's own width, in every look.
+//  15  a real pointer over Export to Assetto Corsa changes 1% or more of its pixels (aurora, skyline and skyline-night changed 0: the look's own Export rule
+//      outranked every hover, and step 10, --accent-hover, was drawn nowhere)
+//  16  a real pointer over the File menu's title changes 1% or more of its pixels (SIGIL's changed 0)
+//  17  every menu on the bar, opened, lies wholly inside the window at every width from 900 px (tauri.conf.json's minWidth): each 10 px to 1000, both sides
+//      of each wider fold, and 1400 (File ran up to 55 px off the left edge from 900 to 950, its words cut, and Edit 2 px at 900)
+//  18  a field clicked into wears one frame: the 2 px ring in the accent, its border keeping its resting colour (it wore the accent border and the ring together)
+/** the pointer parked where it hovers nothing near the bar */
+const park = async () => { await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 850 }); await sleep(350); };
+const rectOf = (sel) => ev(`const e = ${sel}; if (!e) return null; const r = e.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom];`);
+/** the share of the pixels in `r` (and 2 px round it) that change when the pointer moves from parked onto its middle, the hover card held off */
+async function hoverChange(r) {
+  await ev("const st = document.createElement('style'); st.id = 'l255-no-card'; st.textContent = '#hovertip { display: none !important; }'; document.head.appendChild(st); return true;");
+  const clip = { x: Math.max(0, r[0] - 2), y: Math.max(0, r[1] - 2), width: r[2] - r[0] + 4, height: r[3] - r[1] + 4, scale: 1 };
+  const grab = async () => decode(Buffer.from((await send('Page.captureScreenshot', { format: 'png', clip })).result.data, 'base64'));
+  await park(); const rest = await grab();
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: (r[0] + r[2]) / 2, y: (r[1] + r[3]) / 2 }); await sleep(350);
+  const hov = await grab();
+  await park(); await ev("document.getElementById('l255-no-card').remove(); return true;");
+  let n = 0;
+  for (let y = 0; y < rest.h; y++) for (let x = 0; x < rest.w; x++) { const a = rest.px(x, y), b = hov.px(x, y); if (Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) > 6) n++; }
+  return n / (rest.w * rest.h);
+}
+
+test('row 15 (L255): a real pointer over Export to Assetto Corsa changes its pixels in every look', { skip }, async (t) => {
+  const flat = [], seen = [];
+  for (const look of LOOKS) {
+    await load(look);
+    const r = await rectOf("document.querySelector('header #install > button')");
+    assert.ok(r, `${look}: Export is on the page`);
+    const share = await hoverChange(r);
+    seen.push(`${look} ${(share * 100).toFixed(1)}%`);
+    if (share < 0.01) flat.push(`${look}: ${(share * 100).toFixed(1)}% of its pixels`);
+    assert.deepEqual(errors, [], `${look}: no page errors`);
+  }
+  t.diagnostic(`Export hovered, pixels changed: ${seen.join(', ')}`);
+  assert.deepEqual(flat, [], 'Export with the pointer on it changes under 1% of its pixels');
+});
+
+test('row 16 (L255): a real pointer over the File menu\'s title changes its pixels in every look', { skip }, async (t) => {
+  const flat = [], seen = [];
+  for (const look of LOOKS) {
+    await load(look);
+    const r = await rectOf("document.querySelector('#m-file > summary')");
+    assert.ok(r, `${look}: the File title is on the page`);
+    const share = await hoverChange(r);
+    seen.push(`${look} ${(share * 100).toFixed(1)}%`);
+    if (share < 0.01) flat.push(`${look}: ${(share * 100).toFixed(1)}% of its pixels`);
+    assert.deepEqual(errors, [], `${look}: no page errors`);
+  }
+  t.diagnostic(`File title hovered, pixels changed: ${seen.join(', ')}`);
+  assert.deepEqual(flat, [], 'the File title with the pointer on it changes under 1% of its pixels');
+});
+
+test('row 17 (L255): every menu on the bar, opened, lies wholly inside the window at every width from 900 px, in every look', { skip }, async (t) => {
+  // tauri.conf.json's minWidth, then every 10 px to the 1000 px fold (File was off the window from 900 to 950), both sides of each wider fold (index.html's D396
+  // queries), the default
+  const WIDTHS = [900, 910, 920, 930, 940, 950, 960, 970, 980, 990, 999, 1000, 1099, 1100, 1319, 1320, 1400];
+  const out = [], seen = [];
+  try {
+    for (const look of LOOKS) {
+      await load(look);
+      for (const w of WIDTHS) {
+        await send('Emulation.setDeviceMetricsOverride', { width: w, height: 860, deviceScaleFactor: 1, mobile: false }); await sleep(200);
+        const m = await ev(`const o = []; for (const d of document.querySelectorAll('header details.more')) { d.open = true; await new Promise((r) => setTimeout(r, 60));
+          const r = d.querySelector('.more-menu').getBoundingClientRect(); o.push([d.id, Math.round(r.left), Math.round(r.right)]); d.open = false; } return [window.innerWidth, o];`);
+        assert.equal(m[1].length, 7, `${look} at ${w}: the bar's seven menus`);
+        if (w === 900) seen.push(`${look} ${m[1].map((x) => `${x[0]} ${x[1]}..${x[2]}`).join(' ')}`);
+        for (const [id, l, r] of m[1]) if (l < 0 || r > m[0]) out.push(`${look} at ${w}: ${id} ${l}..${r} in a ${m[0]} px window`);
+      }
+      assert.deepEqual(errors, [], `${look}: no page errors`);
+    }
+  } finally { await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false }); }
+  t.diagnostic(`the menus at 900 px, left..right: ${seen.join('; ')}`);
+  assert.deepEqual(out, [], 'an open menu past an edge of the window');
+});
+
+test('row 18 (L255): a field clicked into wears one frame, the 2 px ring in the accent, and its border keeps its resting colour, in every look', { skip }, async () => {
+  const two = [], ring = [];
+  for (const look of LOOKS) {
+    await load(look); await park();
+    const sides = "const s = getComputedStyle(document.getElementById('name')); return [s.borderTopColor, s.borderRightColor, s.borderBottomColor, s.borderLeftColor];";
+    const rest = await ev(sides), r = await rectOf("document.getElementById('name')");
+    await send('Emulation.setFocusEmulationEnabled', { enabled: true });
+    try {
+      const at = [(r[0] + r[2]) / 2, (r[1] + r[3]) / 2];
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: at[0], y: at[1], button: 'left', buttons: 1, clickCount: 1 });
+      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: at[0], y: at[1], button: 'left', buttons: 0, clickCount: 1 });
+      await park();   // off the field, so its border is not a hovered one
+      const f = await ev(`const f = document.getElementById('name'), s = getComputedStyle(f), probe = document.createElement('i'); probe.style.color = 'var(--accent)'; document.body.appendChild(probe);
+        const accent = getComputedStyle(probe).color; probe.remove();
+        return [document.activeElement === f ? 'focused' : 'NOT focused', f.matches(':focus-visible') ? 'focus-visible' : 'NOT focus-visible', s.outlineStyle, s.outlineWidth, s.outlineColor === accent ? 'the accent' : s.outlineColor];`);
+      if (JSON.stringify(f) !== JSON.stringify(['focused', 'focus-visible', 'solid', '2px', 'the accent'])) ring.push(`${look}: ${f.join(' ')}`);
+      const now = await ev(sides);
+      if (JSON.stringify(now) !== JSON.stringify(rest)) two.push(`${look}: border ${now[0]} focused, ${rest[0]} at rest`);
+      await ev("document.activeElement && document.activeElement.blur(); return true;");
+    } finally { await send('Emulation.setFocusEmulationEnabled', { enabled: false }); }
+    assert.deepEqual(errors, [], `${look}: no page errors`);
+  }
+  assert.deepEqual(ring, [], 'the clicked field wears the 2 px solid ring in the accent');
+  assert.deepEqual(two, [], 'the clicked field\'s border changed from its resting colour: a second frame beside the ring');
+});

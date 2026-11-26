@@ -162,6 +162,7 @@
   .more > summary { list-style: none; cursor: pointer; background: transparent; border: 1px solid var(--hair); border-radius: var(--r2); padding: 5px 10px; }
   .more > summary::-webkit-details-marker { display: none; }
   .more[open] > summary { border-color: var(--accent); }
+  :root:not([data-theme]) .more > summary:hover { background: var(--hover); }   /* L255: SIGIL's menu titles hover on step 4 (spec §6), as every skin's titles hover on their own rule */
   .more-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: var(--menu-pad); min-width: 260px; background: var(--tex), var(--panel); border: 1px solid var(--line); border-radius: var(--r3);
     box-shadow: inset 0 1px 0 var(--hair), 0 2px 3px rgba(0, 0, 0, .12), 0 6px 12px rgba(0, 0, 0, .10); }   /* L249: r3, and a small neutral shadow (spec §5) */
   .more-menu > span { display: flex; flex-direction: column; gap: 6px; }
@@ -190,6 +191,10 @@
   @media (width < 1320px) { header h1 .wm-rest { display: none; } header #name { flex: 0 1 121px; min-width: 64px; } }
   @media (width < 1100px) { header { gap: 4px; } header h1 { margin-right: 6px; } header .more > summary { padding: 5px 7px; } }
   @media (width < 1000px) { header h1 .wm-name { display: none; } header #name { min-width: 48px; } }
+  /* L255: AT THE NARROWEST FOLD THE FIRST TWO MENUS OPEN RIGHTWARDS. Every menu opens leftwards from its title (.more-menu, right: 0); under 1000 px File's title
+     ends 205 to 255 px in, so its 260 px menu ran up to 55 px off the window's left edge (P's read of L249), and Edit's 2 px at 900. Hung from their titles'
+     left edges they lie inside at every width (texture-page row 17); from 1000 up they fit leftwards, as before (960 is the first width File did, so 40 px spare) */
+  @media (width < 1000px) { header :is(#m-file, #m-edit) > .more-menu { right: auto; left: 0; } }
   /* D355: THE BRUSH STRIP under the bar (C's panel builds it as .brush-strip; D421 part 3: it is the Sculpt strip now, shown only in Sculpt; the page moves it into the banner row): its
      fields run along one row, in the page's raised panel colour with a hairline under it, as the recovery bar is laid out */
   #banner .brush-strip { padding: 6px 12px; background: var(--raise); border-bottom: 1px solid var(--line); }
@@ -228,7 +233,8 @@
   input[type="number"]:hover::-webkit-inner-spin-button, input[type="number"]:focus::-webkit-inner-spin-button { opacity: 1; }
   input[type="number"]::-webkit-inner-spin-button:hover { background-color: var(--accent); }
   input[type="number"]::-webkit-inner-spin-button:active { background-color: var(--text); }
-  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  /* L255: a focused field keeps its resting border; the ring below is its one focus mark (P's read of L249: the accent border and the ring together read as a
+     heavy double frame, and Chrome matches :focus-visible on every focus of a text field, a click included) */
   :is(button, input, select, textarea, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }   /* L249: the ring on every control, fields included (they had none) */
   /* L249, concentric (spec §2): what sits inside a menu takes the menu's corner less its padding, never under 0; r3 - 8 px is 0 at every factor up to 1, so square rows */
   .more-menu :is(button, .menu-row, .menu-list-head, input, select) { border-radius: max(0px, calc(var(--r3) - var(--menu-pad))); }
