@@ -62,6 +62,9 @@
     /* L249, spec §6: Radix's step 4 (a hovered row) and step 10 (a solid accent fill, hovered), the two steps no look had. By default step 3 (--raise) 6% toward
        the text and the accent 12% toward the text (SIGIL: about #1f1f1d and #bfaffb); a skin sets its own */
     --hover: color-mix(in srgb, var(--raise) 94%, var(--text)); --accent-hover: color-mix(in srgb, var(--accent) 88%, var(--text));
+    /* L254: the left column's opacity once cleared (app/leftcolumn.js), the one place it is set. 0 is fully see-through: his ask was read so, from its purpose
+       (more room for the preview), and he was told. A cleared column lets every click through, whatever this value is */
+    --left-cleared: 0;
     /* D399: each look's own texture, the top background layer of the header, the left panel and the menus (never the 3D view): one tile, drawn by
        scripts/texture_tiles.js. SIGIL's is a fine film grain; a skin sets its own --tex under [data-theme]. Its strengths keep every text where it reads
        today: none goes under 4.5:1 (app/test/texture-page.test.js). A fine tile is sized in DEVICE pixels (--dpx), so at Windows' fractional display
@@ -88,8 +91,9 @@
   ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background: var(--line); } ::-webkit-scrollbar-track { background: transparent; }
   /* Two columns: the controls on the left, the preview takes the rest. The validation panel (design speed, CSP wall
      raycasting, the load graph) and the other side sections sit under the builder's controls in the left column (#left);
-     a third column for them took 300 px from the preview to hold one short panel (the user, 2026-10-03). */
-  body { display: grid; grid-template-columns: 260px minmax(0, 1fr); grid-template-rows: 44px auto minmax(0, 1fr); height: 100vh; }
+     a third column for them took 300 px from the preview to hold one short panel (the user, 2026-10-03). L254: the column is 248 px, the box it had when it
+     floated 12 px in (260 less its 12 px margin), now at the window's edge. */
+  body { display: grid; grid-template-columns: 248px minmax(0, 1fr); grid-template-rows: 44px auto minmax(0, 1fr); height: 100vh; }
   header { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--tex), var(--panel); min-width: 0; }
   header h1 { font: 300 12px var(--display); margin: 0 14px 0 2px; letter-spacing: .08em; white-space: nowrap; display: flex; align-items: center; gap: 10px; }
   header h1::before { content: ""; width: 14px; height: 14px; border: 1px solid var(--text); border-radius: 50%; background: radial-gradient(circle, var(--accent) 0 16%, transparent 18%); flex: none; }
@@ -264,8 +268,19 @@
      bar, a dock along the bottom), so the track is the page and the tools sit on it. Same panels, same order, nothing moved in the DOM. */
   #stage { grid-column: 1 / -1; }
   #left #palette, #left #side { background: transparent; }
-  #left { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; background: var(--tex), rgba(8, 8, 7, .84); border: 1px solid var(--hair);
-    grid-column: 1; position: relative; z-index: 10; margin: 12px 0 12px 12px; align-self: start; max-height: calc(100% - 24px); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }   /* SIGIL: floats over the preview */
+  #left { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; background: var(--tex), rgba(8, 8, 7, .84); border: 1px solid var(--hair); border-width: 0 1px 0 0;
+    grid-column: 1; position: relative; z-index: 10; margin: 0; align-self: stretch; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }   /* SIGIL: over the preview; L254: docked, below */
+  /* L254 (the user's ask, 2026-11-26: the column to the window's edge, and out of the way when the pointer leaves it, to give the preview more room). DOCKED: flush to the window's left edge, from the header's bottom to the window's bottom, square, its one line on
+     the side that faces the preview (the bar draws the line above it). CLEARED (app/leftcolumn.js says when, and what holds it): it fades to --left-cleared and
+     every pointer event goes through it to the preview; the RETURN STRIP (#left-return, made by app/leftcolumn.js) is live only then. Its width is 24 px, WCAG 2.2's
+     minimum pointer target (2.5.8, AA): enough to land on in a window that is not maximized, while in a maximized one the screen's edge stops the pointer on it.
+     It takes the leftmost 24 px of the view from the preview only while the column is cleared. The fade is .2 s; under reduced motion there is none, only the switch */
+  #left { transition: opacity .2s ease; }
+  #left.cleared { opacity: var(--left-cleared); }
+  #left.cleared, #left.cleared * { pointer-events: none !important; }
+  #left-return { grid-row: 3; grid-column: 1; justify-self: start; width: 24px; z-index: 11; pointer-events: none; }
+  #left.cleared + #left-return { pointer-events: auto; }
+  @media (prefers-reduced-motion: reduce) { #left { transition: none; } }
   #palette, #side { flex: none; background: var(--panel); }
   #palette { padding: 4px 8px 8px; }   /* the track line sits right under the bar: no band above it */
   #palette > p:first-child, #palette > :first-child { margin-top: 0; }
@@ -286,7 +301,8 @@
   /* D409: the camera label sits below the top readout (valuesoverlay.js: top 10px, about 56px tall), not under it; at 1400 px the readout reached over it */
   /* D581: its top is --hud-top (app/core/valuesoverlay.js): level with the column card where it clears the strip, else just under it */
   /* the view tag has a backing like the values strip's, so it never sits on the scene (a grid line at the horizon took it to 3.7 : 1) */
-  .preview-hud { z-index: 2; left: 274px !important; top: var(--hud-top, calc(var(--values-bottom, 66px) + 14px)); bottom: auto !important; background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent) !important; color: var(--on-ink-strong, #ffffff) !important; padding: 2px 6px !important; border-radius: var(--r2) !important; font-family: var(--mono) !important; font-size: 12px !important; }
+  /* L254: 14 px right of the column (248 px, at the window's edge), as it was 14 px right of the floating one (its edge at 260): 262, was 274 */
+  .preview-hud { z-index: 2; left: 262px !important; top: var(--hud-top, calc(var(--values-bottom, 66px) + 14px)); bottom: auto !important; background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent) !important; color: var(--on-ink-strong, #ffffff) !important; padding: 2px 6px !important; border-radius: var(--r2) !important; font-family: var(--mono) !important; font-size: 12px !important; }
   #camera p { margin: 0; color: var(--dim); font-size: 12px; letter-spacing: .04em; background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent); padding: 1px 6px; border-radius: var(--r1); }   /* a backing, not a glow, behind the words over the scene; padded, so the letters' own box stays on it (skyline's read 1.2 : 1 where they ran past its edge onto the ground) */
   /* the camera keys: a small "?" at the foot; the line shows while it is hovered or focused, or after a press (app/camera/index.js) */
   #camera .camera-keys { display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -699,6 +715,13 @@
     // left column. Share codes, Install to AC / See it in Assetto and the guide are carried from the piece builder (D239).
     await panels.mountPanel($('palette'), 'equation track', () => loadCjs('app/core/index.js', get), shell);
     { const strip = document.querySelector('#palette .brush-strip'); if (strip) brushSlot.append(strip); }   // D355: C's brush strip (D421: the Sculpt strip) goes under the bar; a panel without one leaves the slot empty
+    // L254: the left column clears away when the pointer has left it, and the strip at the window's edge brings it back (app/leftcolumn.js). It is held while a saved
+    // piece's ghost has its Place piece / Cancel piece row up, read from the state the panel draws that row from (app/core/panel.js THE SAVED PIECE'S GHOST). If the
+    // module cannot load, the column simply stays shown
+    try {
+      (await loadCjs('app/leftcolumn.js', get)).wireLeftColumn(document, { subscribe: (f) => shell.subscribe(f),
+        held: () => { const st = shell.getState(); return !!(st.pieceGhost && st.pieceGhost.base === st.history.present && !st.sculpt); } });
+    } catch (e) { console.error(`the left column's clearing not wired: ${e && e.message}`); }
     for (const [dir, id] of [['preview', 'preview'], ['camera', 'camera'], ['validate-ui', 'validation']]) {
       await panels.mountPanel($(id), dir, () => loadCjs(`app/${dir}/index.js`, get), shell);
     }
