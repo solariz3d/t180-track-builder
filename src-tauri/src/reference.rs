@@ -29,7 +29,7 @@ const POINT: u64 = 20;
 const EXTRA: u64 = 18 * 4;
 const MOST_POINTS: i32 = 1_000_000;   // 16,401 is the most on L; a header past this is not an AI line
 
-fn plain_name(s: &str, may_be_empty: bool) -> Result<(), String> {
+pub(crate) fn plain_name(s: &str, may_be_empty: bool) -> Result<(), String> {   // kn5road.rs checks the same names the same way
     if s.is_empty() { return if may_be_empty { Ok(()) } else { Err("a track's folder name is empty".into()) }; }
     if s == "." || s == ".." || s.contains(['/', '\\', ':']) { return Err(format!("{s:?} is not one plain folder name")); }
     Ok(())
