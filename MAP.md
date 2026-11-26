@@ -123,7 +123,7 @@ texture tile), `test-fast.cjs` (the suite minus the mutation harnesses and the f
 ## `src-tauri/`
 
 - `src/lib.rs`: the native side's commands: track files (`save_track`, `open_track`, `list_tracks`), backups, undo and autosave, saved pieces and the piece library (and each piece's `.t180recipe` sidecar: `save_recipe`, `open_recipe`, `delete_recipe`), finding the AC folder (`find_ac_root`), install and See it (`install_track`, `see_it_in_assetto`). *why: see header*
-- `src/kn5road.rs` (L250): a reference track's ROAD from its kn5 files for the shadow layer's Road mode: only the meshes AC counts as valid track (`read_road`; `is_valid_track` is the name rule), as positions and 16-bit indices in the bytes `encode` lays out for the page; the command is `read_reference_road` in `lib.rs`; read only. *why: see header*
+- `src/kn5road.rs` (L250): a reference track's ROAD from its kn5 files for the shadow layer's Road mode: only the meshes AC counts as valid track (`read_road`; `is_valid_track` is the name rule), as positions and 16-bit indices in the bytes `encode` lays out for the page, with the layout's start from its AC_START_0 or time-line dummies (`start_of`) for a layout with no AI line; the command is `read_reference_road` in `lib.rs`; read only. *why: see header*
 - `src/ac.rs`: Install to AC and See it. `src/backups.rs`: a save moves the old file aside (`move_aside`). `src/main.rs`: the entry point.
 - `src/reference.rs` (L243): the installed tracks and layouts a reference can be picked from (`list_layouts`), and one AI line read up to its grid (`read_shape`); read only.
 - `build.rs`: copies `app/`, `src/` and `tools/` into `src-tauri/dist` for the bundle (tests are left out).
