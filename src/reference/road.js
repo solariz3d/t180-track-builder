@@ -6,10 +6,13 @@
 //                        (meta: the header's { files, missing, meshes, triangles, vertices, keys, surfaces })
 //   encodeRoad(batches, meta?) -> bytes                                                           the same layout, for the tests (the native side writes it in Rust)
 //   roadReference(road, line) -> what the preview's setReference takes: the road's batches, PLACED BY THE LAYOUT'S AI LINE (its start and way), so
-//                                Line and Road of one layout lie exactly on each other and share the nudge
+//                                Line and Road of one layout lie exactly on each other and share the nudge; with no line, by the start its kn5 names
+//   groundUnder(batches, pos) -> the height of the road right under a point, or null
 //
-// WHY THE AI LINE PLACES IT. A kn5's road meshes carry no start or direction of travel. The layout's AI line is in the same world coordinates as its
-// kn5 (both are the track's own), so its first point and its way are the start the Line mode already uses; the road goes where the line says.
+// WHY THE AI LINE PLACES IT. A kn5's road meshes carry no direction of travel. The layout's AI line is in the same world coordinates as its kn5 (both
+// are the track's own), so its first point and its way are the start the Line mode already uses; the road goes where the line says. A layout with no
+// AI line (15 of 61 on L) is placed by the start its kn5 names (the header's start: AC_START_0 is the grid's first slot, a median 11.2 m from the
+// line's first point where there is both, pane O's survey), set down on the road under it.
 //
 // THE BYTES (little-endian), as kn5road.rs encode() writes them (its header says the same):
 //   "T180ROAD" · u32 format (1) · u32 J · J bytes of JSON, space-padded to a multiple of 4 ({ files, missing, meshes, triangles, vertices, keys, surfaces })
@@ -93,11 +96,43 @@ function encodeRoad(batches, meta = {}) {
   return out;
 }
 
-/** The road, ready for the preview: its own batches, the line's start and way (so it is placed as the line is), and no edge lines. */
-function roadReference(road, line) {
-  if (!road || !Array.isArray(road.batches)) throw new RefTrackError('BAD_ROAD', 'a road needs its batches (decodeRoad)');
-  if (!line || !line.start) throw new RefTrackError('NO_START', 'the road is placed by its layout\'s AI line, and there is none to place it by');
-  return { kind: 'road', batches: road.batches, edges: new Float32Array(0), start: line.start, lengthM: line.lengthM, width: line.width, closed: line.closed, points: line.points, triangles: road.triangles };
+/** The height of the road right under a point: the highest road surface whose triangle holds its (x, z), at most `reach` m above it (so a start a
+ *  little under its own road still finds it, and a bridge overhead does not), or null when no road is under it. */
+function groundUnder(batches, pos, reach = 2) {
+  const x = pos[0], z = pos[2], top = pos[1] + reach; let best = null;
+  for (const { positions: P, indices: I } of batches) {
+    for (let t = 0; t < I.length; t += 3) {
+      const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3, x0 = P[a], z0 = P[a + 2], x1 = P[b], z1 = P[b + 2], x2 = P[c], z2 = P[c + 2];
+      if ((x < x0 && x < x1 && x < x2) || (x > x0 && x > x1 && x > x2) || (z < z0 && z < z1 && z < z2) || (z > z0 && z > z1 && z > z2)) continue;
+      const d = (z1 - z2) * (x0 - x2) + (x2 - x1) * (z0 - z2); if (d === 0) continue;
+      const u = ((z1 - z2) * (x - x2) + (x2 - x1) * (z - z2)) / d, v = ((z2 - z0) * (x - x2) + (x0 - x2) * (z - z2)) / d, w = 1 - u - v;
+      if (u < 0 || v < 0 || w < 0) continue;
+      const y = u * P[a + 1] + v * P[b + 1] + w * P[c + 1];
+      if (y <= top && (best === null || y > best)) best = y;
+    }
+  }
+  return best;
 }
 
-module.exports = { decodeRoad, encodeRoad, roadReference, normalsOf };
+/**
+ * The road, ready for the preview: its own batches and no edge lines, placed by the layout's AI line where it has one (its start and way, so Line and
+ * Road lie on each other and share the nudge), else (L250 repair, for the 15 of 61 layouts on L with no AI line) by the start its kn5 names, which
+ * the native side puts in the header (kn5road.rs: AC_START_0, else the middle of the time line AC_TIME_0_L/R), set down on the road under it; else
+ * refused (NO_START), with the native side's reason. A start is never guessed.
+ */
+function roadReference(road, line) {
+  if (!road || !Array.isArray(road.batches)) throw new RefTrackError('BAD_ROAD', 'a road needs its batches (decodeRoad)');
+  const common = { kind: 'road', batches: road.batches, edges: new Float32Array(0), triangles: road.triangles };
+  if (line && line.start) return { ...common, start: line.start, lengthM: line.lengthM, width: line.width, closed: line.closed, points: line.points, placedBy: 'its AI line' };
+  const s = road.meta && road.meta.start;
+  if (!s) throw new RefTrackError('NO_START', (road.meta && road.meta.noStart) || 'its kn5 names no start');
+  const three = (v) => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite);
+  if (!three(s.pos) || !three(s.T)) throw new RefTrackError('BAD_ROAD', 'its start is not a position and a way, three numbers each');
+  if (Math.hypot(s.T[0], s.T[2]) < 0.1) throw new RefTrackError('BAD_ROAD', 'its start does not face along the ground');
+  // its start dummy is where a car is set down, so it may sit above the road; the road under it goes on his start, as a line's first point does
+  const y = groundUnder(road.batches, s.pos);
+  return { ...common, start: { pos: [s.pos[0], y === null ? s.pos[1] : y, s.pos[2]], T: s.T.slice() }, lengthM: null, width: null, closed: null, points: null,
+    placedBy: `its kn5's start (${s.from === 'AC_TIME_0' ? 'the middle of its time line' : 'AC_START_0'})`, startAbove: y === null ? null : s.pos[1] - y };
+}
+
+module.exports = { decodeRoad, encodeRoad, roadReference, normalsOf, groundUnder };

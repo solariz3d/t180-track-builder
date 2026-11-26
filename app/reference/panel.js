@@ -10,7 +10,8 @@
 //     Nothing is ever written: the panel only reads, and the preview only draws.
 //   LINE OR ROAD (L250): "Line" draws the AI line's ribbon (the width the AI may use); "Road" draws the meshes the kn5 counts as valid track (the whole
 //   paved area: pit lane, run-off and other layouts' roads too). Both are placed by the layout's AI line, so they lie on each other and share the nudge.
-//   The road goes to the preview as 't180:reference' (app/preview/index.js); a layout with no AI line is listed, greyed, saying so.
+//   The road goes to the preview as 't180:reference' (app/preview/index.js). A layout with no AI line is listed saying so: greyed in Line, and in Road
+//   (L250 repair) drawn placed by the start its kn5 names (AC_START_0, else its time line's middle, set down on its road), or refused when it names none.
 //   PICK, SHOW OR HIDE, CLEAR: Show off takes the road off the screen and keeps the pick and the nudge; Clear drops both.
 //   A LINE OR ROAD THAT DOES NOT READ is refused in words (ribbon.js refusalWords), its entry marked "(cannot be read)", and whatever was shown
 //   before it is taken down: never drawn wrong, never drawn in part. A LAYOUT THAT CARRIES ANOTHER LAYOUT'S LINE (the same points as another layout of
@@ -29,7 +30,7 @@ const MODES = Object.freeze([['line', 'Line (its AI line)'], ['road', 'Road (its
 const NOTE = Object.freeze({
   line: 'Line: drawn from its AI line, the width the AI may use along the line it drives (a racing line, not the centre; no pit lane).',
   road: 'Road: drawn from its kn5, every surface the track counts as track: its pit lane, run-off and other layouts\' roads show too.',
-  both: ' Its start sits on your start, at your start\'s height, placed by its AI line; your road is drawn over it. Read only: nothing is saved, undone or exported.',
+  both: ' Its start sits on your start, at your start\'s height, placed by its AI line (in Road, a layout with none by the start its kn5 names); your road is drawn over it. Read only: nothing is saved, undone or exported.',
 });
 
 // THE LOOK (L250 repair, pane E's read): one class, on the page's own pane tokens (index.html :root, each look's [data-theme] block): the ground is
@@ -89,6 +90,8 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
   const refused = new Map(), borrowed = new Set();   // `${mode}\0${key}` -> the words it was refused with; keys of layouts found carrying another layout's line
   const keyOf = (l) => `${l.track}\u0000${l.layout}`, rk = (k, m = mode) => `${m}\u0000${k}`;
   const isRefused = (k, m = mode) => refused.has(rk(k, m)) || refused.has(rk(k, 'line'));
+  // (repair) a layout with no AI line is drawn in Road only, placed by the start its kn5 names; it is refused when its road does not read or names none
+  const badOf = (l) => (l.hasAi ? isRefused(keyOf(l)) : mode === 'road' && refused.has(rk(keyOf(l), 'road')));
   const nameOf = (l) => `${l.track}${l.layout ? ` · ${l.layout}` : ''}`;
   const layoutName = (l) => (l.layout ? `“${l.layout}”` : 'the main layout');
   const f = (x) => x.toLocaleString('en-US', { maximumFractionDigits: 1 });
@@ -97,11 +100,15 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
     if (error) { readout.textContent = error; return; }
     if (!ref) {
       if (!layouts) { readout.textContent = 'Reading the tracks…'; return; }
+      if (mode === 'road') {
+        const ok = layouts.filter((l) => !badOf(l)), byStart = ok.filter((l) => !l.hasAi).length, bad = layouts.length - ok.length;
+        readout.textContent = `${ok.length} of ${layouts.length} layouts to show as road${byStart ? ` (${byStart} with no AI line, placed by the start its kn5 names)` : ''}${bad ? `; ${bad} cannot be read` : ''}.`; return;
+      }
       const bad = layouts.filter((l) => l.hasAi && isRefused(keyOf(l))).length, can = layouts.filter((l) => l.hasAi).length - bad;
       readout.textContent = `${can} of ${layouts.length} layouts have an AI line to show${bad ? ` (${bad} cannot be read)` : ''}.`; return;
     }
     const hidden = shown ? '' : 'Hidden (Show draws it again) · ', times = `read ${timing.readMs.toFixed(0)} ms, built ${timing.buildMs.toFixed(0)} ms`;
-    if (ref.kind === 'road') { readout.textContent = `${hidden}${f(ref.triangles)} triangles of road from its kn5, placed by its ${f(Math.round(ref.lengthM))} m AI line · ${times}`; return; }
+    if (ref.kind === 'road') { readout.textContent = `${hidden}${f(ref.triangles)} triangles of road from its kn5, placed by ${ref.lengthM ? `its ${f(Math.round(ref.lengthM))} m AI line` : `${ref.placedBy}: it has no AI line`} · ${times}`; return; }
     const w = ref.width;
     readout.textContent = `${hidden}${f(Math.round(ref.lengthM))} m along its line${ref.closed ? '' : ' (open: point to point)'} · ${f(w.median)} m wide (${f(w.min)} to ${f(w.max)}) · ${times}`;
   };
@@ -109,9 +116,10 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
     pickEl.replaceChildren(el('option', '', 'None'));
     pickEl.firstChild.value = '';
     for (const l of layouts || []) {
-      const k = keyOf(l), bad = l.hasAi && isRefused(k);
-      const o = el('option', '', `${nameOf(l)}${!l.hasAi ? ' (no AI line)' : bad ? ' (cannot be read)' : borrowed.has(k) ? ' (another layout\'s line)' : ''}`);
-      o.value = k; o.disabled = !l.hasAi || bad; if (bad) o.title = refused.get(rk(k)) || refused.get(rk(k, 'line')); pickEl.append(o);
+      const k = keyOf(l), bad = badOf(l);
+      const why = bad ? ' (cannot be read)' : !l.hasAi ? (mode === 'road' ? ' (no AI line: placed by its start)' : ' (no AI line)') : borrowed.has(k) ? ' (another layout\'s line)' : '';
+      const o = el('option', '', `${nameOf(l)}${why}`);
+      o.value = k; o.disabled = bad || (!l.hasAi && mode !== 'road'); if (bad) o.title = refused.get(rk(k)) || refused.get(rk(k, 'line')); pickEl.append(o);
     }
     pickEl.value = shownKey || '';
   };
@@ -147,11 +155,13 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
     const my = ++seq, m = mode, l = (layouts || []).find((x) => x.track === track && x.layout === (layout || '')) || { track, layout: layout || '', hasAi: true, uiLength: null };
     const key = keyOf(l), args = { track, layout: l.layout };
     error = null; notes = []; reading = l;
-    let shape, line, next, t0, t1, t2, lineOk = false;
+    // (repair) a layout with no AI line, in Road: no line is read; its road is placed by the start its kn5 names (road.js roadReference)
+    const byStart = m === 'road' && !l.hasAi;
+    let shape, line = null, next, t0, t1, t2, lineOk = false;
     try {
       t0 = clock();
-      const lineBytes = await call('read_reference_line', args);
-      shape = readAiShape(lineBytes); line = ribbonOf(shape); lineOk = true;   // the line places the road too
+      if (!byStart) { shape = readAiShape(await call('read_reference_line', args)); line = ribbonOf(shape); }
+      lineOk = true;   // the line places the road too, where there is one: a line that does not read refuses both modes
       const roadBytes = m === 'road' ? await call('read_reference_road', args) : null;
       t1 = clock();
       next = m === 'road' ? roadReference(decodeRoad(roadBytes), line) : line; t2 = clock();
@@ -167,7 +177,7 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
     reading = null; ref = next; shownKey = key; timing = { readMs: t1 - t0, buildMs: t2 - t1 };
     pickEl.value = key;
     const info = await send(); say();
-    const n = await notesFor(l, shape, line, my);
+    const n = line ? await notesFor(l, shape, line, my) : [];
     if (my !== seq || n === null) return info;
     notes = n; relabel(); say();
     return info;

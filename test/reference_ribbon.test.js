@@ -202,7 +202,35 @@ test('L250: road bytes that do not read whole are refused by name, in words, and
   const fmt = Buffer.from(good); fmt.writeUInt32LE(2, 8); assert.match(code(fmt), /^BAD_ROAD: .*format 2, not 1/);
   assert.match(code(Buffer.from(encodeRoad([ringRoad(200, 10, 30)], { triangles: 61 }))), /^BAD_ROAD: .*header says 61 triangles, its batches hold 60/);
   assert.doesNotMatch(code(good.subarray(0, 10)), /AI line/, 'a road is never called an AI line');
-  assert.throws(() => roadReference(decodeRoad(good), null), (e) => e.code === 'NO_START' && /placed by its AI line/.test(refusalWords(e)));
+  // (L250 repair) with no line, the road is placed by the start its kn5 names; a header with none (as kn5road.rs writes it: start null and noStart) is
+  // refused with the native side's reason. Was: refused as "placed by its AI line, and it has none", before the native side sent a start.
+  const none = decodeRoad(encodeRoad([ringRoad(200, 10, 30)], { start: null, noStart: 'no AC_START_0, and no AC_TIME_0_L with AC_TIME_0_R, in the layout\'s kn5 files: the start is not guessed' }));
+  assert.throws(() => roadReference(none, null), (e) => e.code === 'NO_START' && /^Not drawn: it has no AI line, and its kn5 names no start to place its road by \(no AC_START_0, .*the start is not guessed\)\./.test(refusalWords(e)));
+});
+
+test('L250 repair: a road with no AI line is placed by the start its kn5 names, set down on the road under it; a start that is not one is refused', () => {
+  const { groundUnder } = require('../src/reference/road.js');
+  const withStart = (start) => decodeRoad(encodeRoad([ringRoad(200, 10, 300)], { start }));
+  // AC_START_0 0.8 m above the ring 1 m round from angle 0, facing round it (+z): the road under it, (200, 0, 1), is what goes on his start
+  const road = roadReference(withStart({ pos: [200, 0.8, 1], T: [0, 0, 1], from: 'AC_START_0' }), null);
+  assert.deepStrictEqual([road.kind, road.placedBy, road.lengthM, road.edges.length], ['road', 'its kn5\'s start (AC_START_0)', null, 0]);
+  assert.deepStrictEqual(road.start.pos.map((v) => +v.toFixed(6)), [200, 0, 1], 'set down on its road'); assert.ok(Math.abs(road.startAbove - 0.8) < 1e-6, 'it was 0.8 m above it');
+  const anchor = { pos: [5, 2, -9], T: [0.6, 0, 0.8] }, M = placeAt(road, anchor, {});
+  const at = [200 * M[0] + M[8] + M[12], 200 * M[1] + M[9] + M[13], 200 * M[2] + M[10] + M[14]];
+  assert.deepStrictEqual(at.map((v) => +v.toFixed(6)), anchor.pos, 'the road under its start lands on his start, at his start\'s height');
+  assert.strictEqual(roadReference(withStart({ pos: [200, 0.8, 0], T: [0, 0, 1], from: 'AC_TIME_0' }), null).placedBy, 'its kn5\'s start (the middle of its time line)');
+  // no road under it (off the ring): its own height, as named
+  assert.deepStrictEqual(roadReference(withStart({ pos: [0, 3, 0], T: [1, 0, 0], from: 'AC_START_0' }), null).start.pos, [0, 3, 0]);
+  // a line, where there is one, still places it (Line and Road lie on each other)
+  const line = ribbonOf(readAiShape(encodeAiLine(circleLine(200, 400))));
+  assert.strictEqual(roadReference(withStart({ pos: [0, 3, 0], T: [1, 0, 0], from: 'AC_START_0' }), line).start, line.start);
+  for (const [bad, why] of [[{ pos: [0, 0], T: [1, 0, 0] }, /not a position and a way/], [{ pos: [0, 0, 0], T: [0, 1, 0] }, /does not face along the ground/], [{ pos: [0, NaN, 0], T: [1, 0, 0] }, /not a position and a way/]]) {
+    assert.throws(() => roadReference(withStart(bad), null), (e) => e.code === 'BAD_ROAD' && why.test(e.message));
+  }
+  // groundUnder: the highest road under a point, within 2 m above it; a deck overhead is not the road under it; null over nothing
+  const deck = { positions: new Float32Array([-10, 9, -10, 10, 9, -10, 0, 9, 10]), indices: new Uint16Array([0, 1, 2]) }, floor = { positions: new Float32Array([-10, 0, -10, 10, 0, -10, 0, 0, 10]), indices: new Uint16Array([0, 2, 1]) };
+  assert.strictEqual(groundUnder([deck, floor], [0, 0.5, 0]), 0); assert.strictEqual(groundUnder([deck, floor], [0, 9.5, 0]), 9); assert.strictEqual(groundUnder([deck, floor], [0, -1.5, 0]), 0, 'a start a little under its road finds it');
+  assert.strictEqual(groundUnder([deck, floor], [50, 0, 0]), null);
 });
 
 test('L250: the road is placed by its layout\'s AI line: the same start and way, so Line and Road lie on each other under one nudge', () => {

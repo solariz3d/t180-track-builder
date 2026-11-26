@@ -11,7 +11,8 @@
 //       its stated length; a layout with a line of its own says nothing
 //   P5  a later pick wins over an earlier one still being read
 //   RD1 Road: the kn5's road, placed by the layout's AI line, so Line and Road lie on each other under one nudge; RD2 a road that does not read is
-//       refused in words, and the same layout's Line still draws
+//       refused in words, and the same layout's Line still draws; RD3 (the repair, with pane O's start) a layout with no AI line is drawn as Road, placed by
+//       the start its kn5 names, or refused in words when it names none; in Line it stays greyed
 //   READ ONLY, each through the real core shell and preview, for Line and for Road: R1 the document, R2 a save (the track and its undo file),
 //   R3 an undo step, R4 an export
 //   D1  the draw: the reference goes down before his road and writes no depth, so his road is drawn over it; D2 its colour is the --reference token
@@ -75,12 +76,12 @@ const held = () => { let open; const pr = new Promise((r) => { open = r; }); ret
 /** The length of a circle of radius r drawn through n points, as ribbonOf measures it. */
 const lapM = (r, n) => n * 2 * r * Math.sin(Math.PI / n);
 const LAP = aiLine(200, 400), WIDE = aiLine(200, 400, { sideLeft: 9 });
-/** A ring of road of radius r, w wide, n quads, in road.js's bytes: what read_reference_road sends. */
-function ringRoad(r, w, n) {
+/** A ring of road of radius r, w wide, n quads, in road.js's bytes: what read_reference_road sends (meta: more of its header, as a start). */
+function ringRoad(r, w, n, meta = {}) {
   const pos = [], idx = [];
   for (let k = 0; k <= n; k++) { const ph = (2 * Math.PI * k) / n; pos.push((r + w / 2) * Math.cos(ph), 0, (r + w / 2) * Math.sin(ph), (r - w / 2) * Math.cos(ph), 0, (r - w / 2) * Math.sin(ph)); }
   for (let k = 0; k < n; k++) { const a = 2 * k; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
-  return Buffer.from(encodeRoad([{ positions: new Float32Array(pos), indices: new Uint16Array(idx) }]));
+  return Buffer.from(encodeRoad([{ positions: new Float32Array(pos), indices: new Uint16Array(idx) }], meta));
 }
 const RING = ringRoad(200, 12, 300);
 const TRACKS = [
@@ -235,6 +236,34 @@ test('RD2: a road that does not read is refused in words and the one shown befor
   await panel.setMode('line');
   assert.equal(optionsOf(panel, root).find((x) => x.text.startsWith('reference track 1 · one')).disabled, false, 'its line is still there to pick');
   await panel.pick('reference track 1', 'one'); assert.ok(p.reference(), 'and it draws');
+});
+
+test('RD3: a layout with no AI line is drawn as Road, placed by the start its kn5 names; with no start it is refused in words; in Line it stays greyed', async () => {
+  const NO_START = 'no AC_START_0, and no AC_TIME_0_L with AC_TIME_0_R, in the layout\'s kn5 files: the start is not guessed';
+  const entries = [
+    { track: 'reference track 7', layout: '', bytes: null, road: ringRoad(200, 12, 300, { start: { pos: [200, 0.8, 1], T: [0, 0, 1], from: 'AC_START_0' } }) },
+    { track: 'reference track 8', layout: '', bytes: null, road: ringRoad(150, 10, 200, { start: null, noStart: NO_START }) },
+    { track: 'reference track 2', layout: '', bytes: aiLine(150, 300), road: ringRoad(150, 10, 200) },
+  ];
+  const { s, p, panel, root, native } = await setup({ entries });
+  s.extend({ length: 120 }); p.step();
+  const opt = (t) => optionsOf(panel, root).find((x) => x.text.startsWith(t));
+  assert.deepEqual([opt('reference track 7').text, opt('reference track 7').disabled], ['reference track 7 (no AI line)', true], 'Line: it has none to draw');
+  await panel.setMode('road');
+  assert.deepEqual([opt('reference track 7').text, opt('reference track 7').disabled], ['reference track 7 (no AI line: placed by its start)', false], 'Road: it can be drawn');
+  assert.match(panel.state().readout, /^3 of 3 layouts to show as road \(2 with no AI line, placed by the start its kn5 names\)\.$/);
+  await panel.pick('reference track 7', '');
+  const st = panel.state(), r = p.reference();
+  assert.equal(st.kind, 'road'); assert.equal(st.picked, 'reference track 7\u0000'); assert.equal(st.triangles, 600);
+  assert.deepEqual(r.start.map((v) => +v.toFixed(9)), r.anchor.pos.map((v) => +v.toFixed(9)), 'its start on his start');
+  assert.match(st.readout, /^600 triangles of road from its kn5, placed by its kn5's start \(AC_START_0\): it has no AI line · read \d+ ms, built \d+ ms$/);
+  assert.equal(native.calls.filter((c) => c === 'read_reference_line').length, 0, 'no line was asked for: it has none');
+  await panel.pick('reference track 8', '');
+  assert.equal(p.reference(), null, 'no start: nothing drawn, and the one shown before is taken down');
+  assert.match(panel.state().readout, /^reference track 8: Not drawn: it has no AI line, and its kn5 names no start to place its road by \(no AC_START_0, .*the start is not guessed\)\. What does not read whole is never drawn in part\.$/);
+  assert.deepEqual([opt('reference track 8').text, opt('reference track 8').disabled], ['reference track 8 (cannot be read)', true]);
+  await panel.setMode('line');
+  assert.deepEqual([opt('reference track 8').text, opt('reference track 8').disabled], ['reference track 8 (no AI line)', true], 'Line: no AI line, as ever');
 });
 
 // ── the repair (pane E's read): a mode change while a road is still reading; a nudge that is not a number; the look ──
