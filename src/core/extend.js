@@ -382,6 +382,10 @@ function secondMinM(ch, a, b, base = null) {
   // −88.45° from 500 on 1,000 m: 592.5 m asked, 500 there) though the built road carried it at 0.955 × the bar. So the bank's shortest under a moving first ramp is read off
   // the BUILT road (builtMin: the shortest span from its own minimum up to this ceiling whose built roll stays under the bar).
   if (ch === 'phi' && share > 0) return builtMin(a, b, base, own, m);
+  // O1, THE TURN AND THE CLIMB TOO (pane E's plan_t180_faster_turn_rows_2026-11-26.md, O1; the chair's D677 BUILD 3): the capped share asked up to twice the change's own
+  // shortest (10.3 m per °/100m), while the built road read 0.48-0.73 of the bar at the change's own (the plan, 2d). So under a moving first ramp the shortest is read off
+  // the built road as the bank's is: the shortest span from the change's own (never under SECOND_FLOOR_M) up to the ceiling whose built rate changes no faster than the bar
+  if ((ch === 'kh' || ch === 'kv') && share > 0) return routeMin(ch, a, b, base, own, Math.max(SECOND_FLOOR_M, m));
   return ch === 'phi' ? m : Math.max(SECOND_FLOOR_M, m);   // the bank has no floor (L135), the rest SECOND_FLOOR_M
 }
 /** The change's own shortest, the first ramp's share and the CEILING they make (secondMinM's closed form; for the bank, the most builtMin may ask). */
@@ -406,6 +410,9 @@ function spanHolds(ch, a, b, base, span) {
   // the bank under a moving first ramp is probed at EVERY span past its own minimum, the ceiling's and past it included (pane E's review 72b9faf4 §2: on the rounded ramp
   // single-metre spikes sit past the closed-form ceiling, and taking those spans unprobed laid his picture's 66.14° back to 0 at a span of 373 m at 1.059 x the bar)
   if (ch === 'phi' && share > 0) return span >= own - 1e-9 && probePeak(0, gridded(a, b), base, span) <= PROBE_BAR;
+  // O1: the turn and the climb under a moving first ramp: at or past the ceiling as before (the document is the road as built for these, L139 registration (A), so no
+  // spike past it); between the change's own shortest and the ceiling, ONE probe of the built road decides
+  if ((ch === 'kh' || ch === 'kv') && share > 0) return span >= ceil - 1e-9 || (span >= Math.max(SECOND_FLOOR_M, own) - 1e-9 && routePeak(ch, b - a, base, span) <= PROBE_BAR);
   return span >= ceil - 1e-9;
 }
 /**
@@ -478,6 +485,48 @@ function probePeak(a, b, base, L2) {
     let m = 0; for (let s = HOLD + L - L2 - 20; s <= HOLD + L + 20; s += 0.5) m = Math.max(m, Math.abs(rs(s + 2) - 2 * rs(s) + rs(s - 2)) / 4);
     return remember(key, m / ROUTE_BAR);
   } finally { probing = false; }
+}
+/**
+ * O1: THE TURN'S AND THE CLIMB'S PROBE (pane E's plan_t180_faster_turn_rows_2026-11-26.md, O1). A probe track is laid as the bank's is (probePeak): a held straight, the piece
+ * with its first ramp alone (the field from 0 to base.step over base.length, the quintic, as extend lays a whole-piece ramp), and the change ADDED from L − L2 to the piece's
+ * end exactly as extend adds it (channelFn from 0 by the step, the C2 quintic, SECOND_SUB knots), then a straight. The turn and the climb are built as the document lays them
+ * (pane E's L139 registration fc21dcdd, (A)), so the built rate is the channel's value; its change over a metre, read every 0.5 m from 20 m before the mark to 20 m past
+ * the piece's end, peak ÷ ROUTE_BAR. The window holds the first ramp's own peak where it reaches it: a first ramp sharper than the bar there leaves the change at its ceiling.
+ */
+const ROUTE_BASES = new Map();
+function routeBase(ch, step, L, HOLD) {
+  const key = [ch, step, L, HOLD].join('|');
+  if (ROUTE_BASES.has(key)) return ROUTE_BASES.get(key);
+  const hold = extend(D.createDoc('probe'), { length: HOLD, family: 'bowl' }), piece = extend(hold, { length: L, targets: { [ch]: step } }).pieces[1];
+  if (ROUTE_BASES.size >= 64) ROUTE_BASES.delete(ROUTE_BASES.keys().next().value);
+  ROUTE_BASES.set(key, { hold, piece });
+  return ROUTE_BASES.get(key);
+}
+function routePeak(ch, dG, base, L2) {
+  const L = base.length;
+  if (L2 >= L) return 0;
+  const key = memoKey(0, dG, base, [L2, ch === 'kh' ? -3 : -4]);
+  if (PROBE_MEMO.has(key)) return PROBE_MEMO.get(key);
+  const HOLD = 400, AFTER = 200, pb = routeBase(ch, base.step, L, HOLD), F = L - L2, f = channelFn({ v: 0, m: 0 }, dG, L2, C2_CHANNELS.has(ch) ? ch : 'c', null), turns = [];
+  for (let j = 0; j < SECOND_SUB; j++) turns.push(F + (L2 * j) / SECOND_SUB);
+  const P0 = pb.piece, copy = { ...P0, knots: P0.knots.slice(), channels: Object.fromEntries(Object.entries(P0.channels).map(([k, v]) => [k, v.slice()])) };
+  let d = D.appendPiece(pb.hold, secondRamp(copy, { [ch]: { g: (x) => (x > F ? f(x - F) : 0), from: F, step: dG, turns } }));
+  d = extend(d, { length: AFTER });
+  const ends = [0, HOLD, HOLD + L, HOLD + L + AFTER];
+  const r = (s) => { const i = s < ends[1] ? 0 : s < ends[2] ? 1 : 2; return D.channelValue(d.pieces[i], ch, Math.min(d.pieces[i].length, Math.max(0, s - ends[i]))); };
+  let m = 0; for (let s = HOLD + F - 20; s <= HOLD + L + 20; s += 0.5) m = Math.max(m, Math.abs(r(s + 0.5) - r(s - 0.5)));
+  return remember(key, m / ROUTE_BAR);
+}
+/** O1: the turn's or climb's shortest under a moving first ramp: from the change's own (never under SECOND_FLOOR_M, rounded up to 0.1 m) up in PROBE_STEP_M to the first
+ *  span the built road holds, then back down by the metre; the ceiling, which always holds, when none below it does. */
+function routeMin(ch, a, b, base, own, cap) {
+  const key = memoKey(a, b, base, [-5, ch === 'kh' ? -3 : -4]);
+  if (PROBE_MEMO.has(key)) return PROBE_MEMO.get(key);
+  const floor = Math.max(SECOND_FLOOR_M, Math.ceil(own * 10) / 10), ok = (L2) => routePeak(ch, b - a, base, L2) <= PROBE_BAR;
+  let L2 = floor;
+  while (L2 < cap && !ok(L2)) L2 = Math.min(cap, L2 + PROBE_STEP_M);
+  if (L2 < cap) while (L2 - 1 >= floor && ok(L2 - 1)) L2 -= 1;
+  return remember(key, Math.min(L2, cap));
 }
 /** The probe's held straight and the piece with its first ramp alone (no change), laid once for each first ramp: { hold, piece }. */
 const PROBE_BASES = new Map();
