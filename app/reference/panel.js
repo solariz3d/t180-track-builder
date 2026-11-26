@@ -9,9 +9,11 @@
 //     -> the AI line's bytes up to its grid; read_reference_road { track, layout } -> the road from its kn5 (src/reference/road.js decodeRoad).
 //     Nothing is ever written: the panel only reads, and the preview only draws.
 //   LINE OR ROAD (L250): "Line" draws the AI line's ribbon (the width the AI may use); "Road" draws the meshes the kn5 counts as valid track (the whole
-//   paved area: pit lane, run-off and other layouts' roads too). Both are placed by the layout's AI line, so they lie on each other and share the nudge.
+//   paved area: pit lane, run-off and other layouts' roads too). Both are placed by the layout's AI line, so they lie on each other across and share the
+//   nudge; Road is set down on its own road under the line's first point, so it is flush with his (the second repair).
 //   The road goes to the preview as 't180:reference' (app/preview/index.js). A layout with no AI line is listed saying so: greyed in Line, and in Road
 //   (L250 repair) drawn placed by the start its kn5 names (AC_START_0, else its time line's middle, set down on its road), or refused when it names none.
+//   Picked in Road and changed to Line (the second repair), it is kept: Line asks nothing, says it has nothing to draw, and Road draws it again.
 //   PICK, SHOW OR HIDE, CLEAR: Show off takes the road off the screen and keeps the pick and the nudge; Clear drops both.
 //   A LINE OR ROAD THAT DOES NOT READ is refused in words (ribbon.js refusalWords), its entry marked "(cannot be read)", and whatever was shown
 //   before it is taken down: never drawn wrong, never drawn in part. A LAYOUT THAT CARRIES ANOTHER LAYOUT'S LINE (the same points as another layout of
@@ -84,8 +86,9 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
   root.append(box, el('style', '', CSS));   // the box first: it is the root's first child, as it was
 
   // reading: the layout his newest pick is still reading (null once it lands, is refused or is cleared). A mode change re-reads THAT one, so a pick
-  // made while another was out is never dropped, nor drawn in the mode he left (pane E's V3e and V3f)
-  let layouts = null, ref = null, nudge = { ...ZERO }, shownKey = null, timing = null, error = null, notes = [], shown = true, seq = 0, mode = 'line', reading = null;
+  // made while another was out is never dropped, nor drawn in the mode he left (pane E's V3e and V3f). held (second repair, E's V3i and V3j): a layout
+  // with no AI line he picked, kept while the mode is Line, which has nothing to draw for it; Road draws it again
+  let layouts = null, ref = null, nudge = { ...ZERO }, shownKey = null, timing = null, error = null, notes = [], shown = true, seq = 0, mode = 'line', reading = null, held = null;
   // refusals are kept per mode (a road that does not read leaves its line drawable); a line that does not read is refused in both, since the line places the road
   const refused = new Map(), borrowed = new Set();   // `${mode}\0${key}` -> the words it was refused with; keys of layouts found carrying another layout's line
   const keyOf = (l) => `${l.track}\u0000${l.layout}`, rk = (k, m = mode) => `${m}\u0000${k}`;
@@ -100,6 +103,7 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
     if (error) { readout.textContent = error; return; }
     if (!ref) {
       if (!layouts) { readout.textContent = 'Reading the tracks…'; return; }
+      if (held) { readout.textContent = `${nameOf(held)}: it has no AI line, so Line has nothing to draw. Road draws it, placed by the start its kn5 names.`; return; }
       if (mode === 'road') {
         const ok = layouts.filter((l) => !badOf(l)), byStart = ok.filter((l) => !l.hasAi).length, bad = layouts.length - ok.length;
         readout.textContent = `${ok.length} of ${layouts.length} layouts to show as road${byStart ? ` (${byStart} with no AI line, placed by the start its kn5 names)` : ''}${bad ? `; ${bad} cannot be read` : ''}.`; return;
@@ -121,7 +125,7 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
       const o = el('option', '', `${nameOf(l)}${why}`);
       o.value = k; o.disabled = bad || (!l.hasAi && mode !== 'road'); if (bad) o.title = refused.get(rk(k)) || refused.get(rk(k, 'line')); pickEl.append(o);
     }
-    pickEl.value = shownKey || '';
+    pickEl.value = shownKey || (held ? keyOf(held) : '');
   };
   const send = () => new Promise((resolve) => { doc.dispatchEvent(new win.CustomEvent('t180:reference', { detail: { ribbon: shown ? ref : null, nudge: { ...nudge }, reply: resolve } })); });
 
@@ -145,7 +149,7 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
     relabel(); say(); return layouts;
   }
   async function clear() {
-    seq++; reading = null;   // a pick still reading is dropped when it lands
+    seq++; reading = null; held = null;   // a pick still reading is dropped when it lands
     ref = null; shownKey = null; timing = null; error = null; notes = []; nudge = { ...ZERO };
     for (const [k] of NUDGES) inputs[k].value = '0';
     pickEl.value = ''; await send(); say(); return null;
@@ -154,7 +158,10 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
     if (track === null || track === undefined) return clear();
     const my = ++seq, m = mode, l = (layouts || []).find((x) => x.track === track && x.layout === (layout || '')) || { track, layout: layout || '', hasAi: true, uiLength: null };
     const key = keyOf(l), args = { track, layout: l.layout };
-    error = null; notes = []; reading = l;
+    error = null; notes = []; reading = l; held = null;
+    // (second repair) a layout with no AI line, in Line: nothing to draw and nothing to ask (the native side would refuse a line it has not got). His pick
+    // is kept, so a change to Road draws it again; whatever was shown, or is still reading, is dropped (seq moved on above)
+    if (m === 'line' && !l.hasAi) { reading = null; held = l; ref = null; shownKey = null; timing = null; relabel(); await send(); say(); return null; }
     // (repair) a layout with no AI line, in Road: no line is read; its road is placed by the start its kn5 names (road.js roadReference)
     const byStart = m === 'road' && !l.hasAi;
     let shape, line = null, next, t0, t1, t2, lineOk = false;
@@ -182,12 +189,12 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
     notes = n; relabel(); say();
     return info;
   }
-  /** Line (the AI line's ribbon) or Road (the kn5's valid-track meshes); the layout his newest pick is still reading, else the one shown, is read again
-   *  in the new mode, with the same nudge (a re-pick: the read still out is dropped when it lands). */
+  /** Line (the AI line's ribbon) or Road (the kn5's valid-track meshes); the layout his newest pick is still reading, else the one shown, else the one
+   *  kept in Line with no AI line, is read again in the new mode, with the same nudge (a re-pick: the read still out is dropped when it lands). */
   async function setMode(m) {
     if (!MODES.some(([v]) => v === m)) throw new Error(`reference panel: the mode is line or road, got ${JSON.stringify(m)}`);
     mode = m; modeEl.value = m;
-    const l = reading || (shownKey && layouts && layouts.find((x) => keyOf(x) === shownKey));
+    const l = reading || (shownKey && layouts && layouts.find((x) => keyOf(x) === shownKey)) || held;
     if (l) return pick(l.track, l.layout);
     relabel(); say(); return null;
   }
@@ -207,7 +214,7 @@ function createReferencePanel({ doc, root, call, clock = () => (doc.defaultView 
     show(on) { shown = !!on; showBox.checked = shown; const p = send(); say(); return p; },
     /** Move it by hand; a value that is not a finite number keeps the nudge it had, as the boxes do. */
     setNudge(n) { for (const [k] of NUDGES) if (n && n[k] !== undefined) { const v = numberOf(n[k]); if (Number.isFinite(v)) nudge[k] = v; inputs[k].value = String(nudge[k]); } return send(); },
-    state: () => ({ open: box.style.display !== 'none', layouts: layouts ? layouts.length : null, mode, picked: shownKey, kind: ref ? ref.kind || 'line' : null,
+    state: () => ({ open: box.style.display !== 'none', layouts: layouts ? layouts.length : null, mode, picked: shownKey || (held ? keyOf(held) : null), kind: ref ? ref.kind || 'line' : null,
       triangles: ref && ref.kind === 'road' ? ref.triangles : null, shown: shown && !!ref, showOn: shown, nudge: { ...nudge },
       timing: timing ? { ...timing } : null, error, notes: notes.slice(), refused: [...refused.keys()].filter((k) => k.startsWith(`${mode}\u0000`)).length, readout: readout.textContent }),
   };

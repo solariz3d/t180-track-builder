@@ -174,7 +174,8 @@ function refusalWords(err) {
   const code = err && err.code, msg = err && err.message !== undefined ? String(err.message) : String(err);
   const detail = code && msg.startsWith(`${code}: `) ? msg.slice(code.length + 2) : msg;
   const why = code && REFUSED[code] ? `${REFUSED[code]} (${detail})` : detail;
-  return `Not drawn: ${why}. What does not read whole is never drawn in part.`;
+  // an absent start (NO_START) did not fail to read whole: its words end with the reason (second repair, pane E's re-read)
+  return code === 'NO_START' ? `Not drawn: ${why}.` : `Not drawn: ${why}. What does not read whole is never drawn in part.`;
 }
 
 /**

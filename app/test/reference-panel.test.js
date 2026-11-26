@@ -19,6 +19,9 @@
 //   THE REPAIR (pane E's read of L250, p-l250-read-E_2026-11-26.md :71-86): P6 (E's V3e) and P7 (E's V3f) a mode change while a road is still reading
 //   draws his newest pick, in the mode the panel names; N1 a nudge value that is not a number keeps the nudge it had; L1 the panel's look is a class on
 //   the page's own pane tokens, nothing inline, so a look can style it
+//   THE SECOND REPAIR (pane E's re-read, :226-263): P9 (E's V3i) and P10 (E's V3j) a layout with no AI line, reading or shown as Road, changed to Line:
+//   nothing is asked, Line says it has nothing to draw, and the pick is kept for Road; P11 Clear or another pick lets it go; RD4 (E's V1n) the contract
+//   for such a layout; RD1 amended: Line and Road lie on each other across, and Road is set down on its own road; RD3's words amended
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -34,13 +37,13 @@ const D = require('../../src/core/document.js');
 
 const REPO = path.resolve(__dirname, '..', '..');
 
-/** A circle of radius r (m), n points, as an installed AI line with a grid after it (hasGrid = 1), as every installed line on L carries. */
-function aiLine(r, n, { sideLeft = 4, sideRight = 6, open = false } = {}) {
+/** A circle of radius r (m), n points, as an installed AI line with a grid after it (hasGrid = 1), as every installed line on L carries (y: its height). */
+function aiLine(r, n, { sideLeft = 4, sideRight = 6, open = false, y = 0 } = {}) {
   const points = [], extra = [];
   const m = open ? Math.floor(n * 0.6) : n;
   for (let k = 0; k < m; k++) {
     const ph = (2 * Math.PI * k) / n;
-    points.push({ pos: [r * Math.cos(ph), 0, r * Math.sin(ph)], length: 0, id: k });
+    points.push({ pos: [r * Math.cos(ph), y, r * Math.sin(ph)], length: 0, id: k });
     const e = {}; for (const f of EXTRA) e[f] = 0; Object.assign(e, { sideLeft, sideRight, ny: 1 }); extra.push(e);
   }
   const b = encodeAiLine({ version: 7, points, extra, open });
@@ -76,10 +79,11 @@ const held = () => { let open; const pr = new Promise((r) => { open = r; }); ret
 /** The length of a circle of radius r drawn through n points, as ribbonOf measures it. */
 const lapM = (r, n) => n * 2 * r * Math.sin(Math.PI / n);
 const LAP = aiLine(200, 400), WIDE = aiLine(200, 400, { sideLeft: 9 });
-/** A ring of road of radius r, w wide, n quads, in road.js's bytes: what read_reference_road sends (meta: more of its header, as a start). */
-function ringRoad(r, w, n, meta = {}) {
+/** A ring of road of radius r, w wide, n quads, in road.js's bytes: what read_reference_road sends (meta: more of its header, as a start; phase: its
+ *  quads turned by that many, so angle 0 is inside one and not on a seam). */
+function ringRoad(r, w, n, meta = {}, phase = 0) {
   const pos = [], idx = [];
-  for (let k = 0; k <= n; k++) { const ph = (2 * Math.PI * k) / n; pos.push((r + w / 2) * Math.cos(ph), 0, (r + w / 2) * Math.sin(ph), (r - w / 2) * Math.cos(ph), 0, (r - w / 2) * Math.sin(ph)); }
+  for (let k = 0; k <= n; k++) { const ph = (2 * Math.PI * (k + phase)) / n; pos.push((r + w / 2) * Math.cos(ph), 0, (r + w / 2) * Math.sin(ph), (r - w / 2) * Math.cos(ph), 0, (r - w / 2) * Math.sin(ph)); }
   for (let k = 0; k < n; k++) { const a = 2 * k; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
   return Buffer.from(encodeRoad([{ positions: new Float32Array(pos), indices: new Uint16Array(idx) }], meta));
 }
@@ -141,7 +145,7 @@ async function setup({ entries = TRACKS, storage = null, exporter = null } = {})
   wire(doc, p);
   const panel = createReferencePanel({ doc, root, call: native.call });
   await panel.open();
-  return { s, p, panel, root, native };
+  return { s, p, panel, root, native, doc };
 }
 
 // ── the panel ──
@@ -210,16 +214,27 @@ test('P5: a later pick wins over an earlier one still being read', async () => {
   assert.equal(panel.state().picked, 'reference track 2\u0000'); assert.ok(Math.abs(p.reference().lengthM - 300 * 2 * 150 * Math.sin(Math.PI / 300)) < 0.01, 'reference track 2 is the one drawn');
 });
 
-test('RD1: Road draws the kn5\'s road placed by the layout\'s AI line: Line and Road lie on each other under one nudge', async () => {
-  const { s, p, panel } = await setup();
+// RD1, amended by name in the second repair (the librarian's call, on pane E's weighing): Line and Road lie on each other ACROSS, not in height. Road is
+// set down on its own road under the line's first point, so it is flush with his road, as a layout with no AI line is. Was: "Line and Road lie on each
+// other under one nudge", one placement for both, which left Road as far below his road as the line rides above its own (0.276 to 0.573 m on L).
+test('RD1: Road draws the kn5\'s road placed by the layout\'s AI line: Line and Road lie on each other across under one nudge; Road is set down on its road, flush with his', async () => {
+  const { placeAt } = require('../../src/reference/ribbon.js');
+  // as on L, the AI line rides above its road: here 0.3 m (and the road's quads are turned half a quad, so the line's first point is inside one)
+  const entries = [{ track: 'reference track 2', layout: '', bytes: aiLine(150, 300, { y: 0.3 }), uiLength: '0.95km', road: ringRoad(150, 10, 200, {}, 0.5) }];
+  const { s, p, panel, doc } = await setup({ entries });
+  const sent = []; doc.addEventListener('t180:reference', (e) => sent.push(e.detail.ribbon));
   s.extend({ length: 120 }); p.step();
   await panel.pick('reference track 2', ''); await panel.setNudge({ dx: 7, dz: -3, yawDeg: 40 });
-  const line = p.reference();
+  const line = p.reference(), lineRibbon = sent[sent.length - 1];
   await panel.setMode('road');
-  const road = p.reference(), st = panel.state();
+  const road = p.reference(), roadRibbon = sent[sent.length - 1], st = panel.state();
   assert.equal(st.mode, 'road'); assert.equal(st.kind, 'road'); assert.equal(st.triangles, 400); assert.equal(st.picked, 'reference track 2\u0000', 'the same layout, read again');
-  assert.deepEqual(road.start, line.start, 'the same start'); assert.deepEqual(road.forward, line.forward, 'the same way');
+  assert.deepEqual(road.start, line.start, 'each start lands on his'); assert.deepEqual(road.forward, line.forward, 'the same way');
   assert.deepEqual(st.nudge, { dx: 7, dz: -3, dy: 0, yawDeg: 40 }, 'the same nudge');
+  const ML = placeAt(lineRibbon, line.anchor, st.nudge), MR = placeAt(roadRibbon, road.anchor, st.nudge);
+  assert.deepEqual(MR.filter((v, i) => i !== 13), ML.filter((v, i) => i !== 13), 'across and in its way, Road lies exactly on Line');
+  assert.ok(Math.abs(roadRibbon.start.pos[1]) < 1e-6, `Road's start is on its road, not on the line above it (${roadRibbon.start.pos[1]})`);
+  assert.ok(Math.abs(MR[13] - ML[13] - 0.3) < 1e-6, `so Road is raised by the line's height over its road (${MR[13] - ML[13]}): its road is flush with his`);
   assert.match(st.readout, /^400 triangles of road from its kn5, placed by its 942 m AI line · read \d+ ms, built \d+ ms$/);
   await panel.setMode('line'); assert.equal(panel.state().kind, 'line'); assert.deepEqual(p.reference().start, line.start);
   await assert.rejects(panel.setMode('mesh'), /the mode is line or road/);
@@ -256,11 +271,12 @@ test('RD3: a layout with no AI line is drawn as Road, placed by the start its kn
   const st = panel.state(), r = p.reference();
   assert.equal(st.kind, 'road'); assert.equal(st.picked, 'reference track 7\u0000'); assert.equal(st.triangles, 600);
   assert.deepEqual(r.start.map((v) => +v.toFixed(9)), r.anchor.pos.map((v) => +v.toFixed(9)), 'its start on his start');
-  assert.match(st.readout, /^600 triangles of road from its kn5, placed by its kn5's start \(AC_START_0\): it has no AI line · read \d+ ms, built \d+ ms$/);
+  assert.match(st.readout, /^600 triangles of road from its kn5, placed by its kn5's start \(its first grid slot\): it has no AI line · read \d+ ms, built \d+ ms$/);   // was "(AC_START_0)", AC's own name (second repair)
   assert.equal(native.calls.filter((c) => c === 'read_reference_line').length, 0, 'no line was asked for: it has none');
   await panel.pick('reference track 8', '');
   assert.equal(p.reference(), null, 'no start: nothing drawn, and the one shown before is taken down');
-  assert.match(panel.state().readout, /^reference track 8: Not drawn: it has no AI line, and its kn5 names no start to place its road by \(no AC_START_0, .*the start is not guessed\)\. What does not read whole is never drawn in part\.$/);
+  // (second repair) an absent start is not something that failed to read whole: its refusal no longer ends "What does not read whole is never drawn in part."
+  assert.match(panel.state().readout, /^reference track 8: Not drawn: it has no AI line, and its kn5 names no start to place its road by \(no AC_START_0, .*the start is not guessed\)\.$/);
   assert.deepEqual([opt('reference track 8').text, opt('reference track 8').disabled], ['reference track 8 (cannot be read)', true]);
   await panel.setMode('line');
   assert.deepEqual([opt('reference track 8').text, opt('reference track 8').disabled], ['reference track 8 (no AI line)', true], 'Line: no AI line, as ever');
@@ -308,6 +324,85 @@ test('P8: a pick that ended, cleared while it read or refused, is not drawn by a
   assert.equal(p.reference(), null);
   await panel.setMode('line');
   assert.equal(p.reference(), null, 'refused: nothing drawn until he picks it again'); assert.equal(panel.state().picked, null);
+});
+
+// ── the second repair (pane E's re-read, p-l250-read-E_2026-11-26.md :226-263): a layout with no AI line, drawn as Road, when the mode goes to Line ──
+
+/** A layout with no AI line whose kn5 names a start (as kn5road.rs sends it): AC_START_0 0.8 m above a ring of road (pane E's NOAI, e_vary2.test.js). */
+const NOAI = { track: 'reference track 7', layout: '', bytes: null, road: ringRoad(200, 12, 300, { start: { pos: [200, 0.8, 1], T: [0, 0, 1], from: 'AC_START_0' } }) };
+const K7 = 'reference track 7\u0000', LINE_NONE = 'reference track 7: it has no AI line, so Line has nothing to draw. Road draws it, placed by the start its kn5 names.';
+const lineReads = (native) => native.calls.filter((c) => c === 'read_reference_line').length;
+
+test('P9 (E\'s V3i): Road; a layout with no AI line picked, its road still reading; changed to Line: nothing is asked, Line says it has nothing to draw, and back in Road his pick is drawn', async () => {
+  const { p, panel, native, root } = await setup({ entries: [...TRACKS, NOAI] });
+  await panel.setMode('road');
+  const [pr, open] = held(); native.roadGate.set(K7, pr);
+  const slow = panel.pick('reference track 7', ''), asked = lineReads(native);
+  const mode = panel.setMode('line');
+  open(); await slow; await mode;
+  const st = panel.state();
+  assert.equal(lineReads(native), asked, 'no line was asked for: it has none');
+  assert.equal(p.reference(), null, 'Line has nothing to draw, and the road that landed late is not drawn in it');
+  assert.deepEqual([st.mode, st.kind, st.error], ['line', null, null], 'in Line, drawn as nothing, and not refused');
+  assert.equal(st.readout, LINE_NONE);
+  assert.equal(st.picked, K7, 'his pick is kept'); assert.equal(root.children[0].children[1].value, K7, 'and the select names it');
+  assert.deepEqual(optionsOf(panel, root).filter((x) => x.value === K7).map((x) => [x.text, x.disabled]), [['reference track 7 (no AI line)', true]], 'listed as ever in Line, not "(cannot be read)"');
+  await panel.setMode('road');
+  const back = panel.state();
+  assert.deepEqual([back.mode, back.kind, back.picked], ['road', 'road', K7], 'back in Road, his pick is drawn again');
+  assert.ok(p.reference(), 'drawn');
+});
+
+test('P10 (E\'s V3j): a layout with no AI line SHOWN as Road; changed to Line, then back to Road: drawn again, with its nudge', async () => {
+  const { p, panel, native } = await setup({ entries: [...TRACKS, NOAI] });
+  await panel.setMode('road'); await panel.pick('reference track 7', ''); await panel.setNudge({ dx: 5, yawDeg: 10 });
+  const shown = p.reference(), asked = lineReads(native);
+  await panel.setMode('line');
+  const st = panel.state();
+  assert.equal(lineReads(native), asked, 'no line was asked for');
+  assert.equal(p.reference(), null, 'taken down: Line has nothing to draw');
+  assert.equal(st.readout, LINE_NONE); assert.doesNotMatch(st.readout, /Not drawn|never drawn in part/, 'a layout with no line is not called damaged');
+  assert.equal(st.picked, K7);
+  await panel.setMode('road');
+  const back = panel.state();
+  assert.deepEqual([back.kind, back.picked, back.nudge], ['road', K7, { dx: 5, dz: 0, dy: 0, yawDeg: 10 }], 'his pick, with its nudge');
+  assert.deepEqual(p.reference().start, shown.start, 'drawn where it was');
+  assert.match(back.readout, /placed by its kn5's start \(its first grid slot\): it has no AI line/);
+});
+
+test('P11: a layout with no AI line kept in Line is let go by Clear, and by another pick: the change back to Road draws nothing, or the other', async () => {
+  const { p, panel } = await setup({ entries: [...TRACKS, NOAI] });
+  await panel.setMode('road'); await panel.pick('reference track 7', ''); await panel.setMode('line');
+  await panel.clear();
+  assert.equal(panel.state().picked, null, 'Clear drops it');
+  await panel.setMode('road');
+  assert.equal(p.reference(), null, 'cleared in Line: nothing drawn in Road'); assert.equal(panel.state().picked, null);
+  await panel.pick('reference track 7', ''); await panel.setMode('line');
+  await panel.pick('reference track 2', '');
+  assert.deepEqual([panel.state().kind, panel.state().picked], ['line', 'reference track 2\u0000'], 'another pick in Line is drawn');
+  await panel.setMode('road');
+  assert.deepEqual([panel.state().kind, panel.state().picked], ['road', 'reference track 2\u0000'], 'and it, not the one before, is drawn in Road');
+  await panel.pick('reference track 7', ''); await panel.setMode('line');
+  await panel.pick('reference track 3', '');   // its line does not read (P3)
+  assert.equal(panel.state().picked, null, 'a refused pick lets it go too');
+  await panel.setMode('road');
+  assert.deepEqual([p.reference(), panel.state().picked], [null, null], 'nothing drawn in Road: the refused pick was his last');
+});
+
+test('RD4 (E\'s V1n, which replaces E\'s V1): a layout with no AI line: greyed in Line; in Road listed "(no AI line: placed by its start)", drawn by its start on his start, its road the only read', async () => {
+  const { s, p, panel, native, root } = await setup({ entries: [...TRACKS, NOAI] });
+  s.extend({ length: 120 }); p.step();
+  const opt = () => optionsOf(panel, root).find((x) => x.value === K7);
+  assert.deepEqual([opt().text, opt().disabled], ['reference track 7 (no AI line)', true], 'Line');
+  await panel.setMode('road');
+  assert.deepEqual([opt().text, opt().disabled], ['reference track 7 (no AI line: placed by its start)', false], 'Road');
+  const before = native.calls.length;
+  await panel.pick('reference track 7', '');
+  const st = panel.state(), r = p.reference();
+  assert.deepEqual([st.kind, st.picked], ['road', K7]);
+  assert.deepEqual(r.start.map((v) => +v.toFixed(9)), r.anchor.pos.map((v) => +v.toFixed(9)), 'its start on his start');
+  assert.deepEqual(native.calls.slice(before), ['read_reference_road'], 'its road only: no line read');
+  assert.match(st.readout, /placed by its kn5's start \(its first grid slot\): it has no AI line/, 'in his words: AC_START_0 is the grid\'s first slot');
 });
 
 test('N1: a nudge value that is not a number, typed or given, keeps the nudge it had (the box shows it again), and nothing moves', async () => {

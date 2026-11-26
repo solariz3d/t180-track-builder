@@ -6,8 +6,9 @@
 //                        (meta: the header's { files, missing, meshes, triangles, vertices, keys, surfaces })
 //   encodeRoad(batches, meta?) -> bytes                                                           the same layout, for the tests (the native side writes it in Rust)
 //   roadReference(road, line) -> what the preview's setReference takes: the road's batches, PLACED BY THE LAYOUT'S AI LINE (its start and way), so
-//                                Line and Road of one layout lie exactly on each other and share the nudge; with no line, by the start its kn5 names
-//   groundUnder(batches, pos) -> the height of the road right under a point, or null
+//                                Line and Road of one layout lie on each other across and share the nudge; with no line, by the start its kn5 names.
+//                                Either start is set down on the road under it, so Road is flush with his road (the second repair)
+//   groundUnder(batches, pos) -> the height of the highest road at or below a point, or null
 //
 // WHY THE AI LINE PLACES IT. A kn5's road meshes carry no direction of travel. The layout's AI line is in the same world coordinates as its kn5 (both
 // are the track's own), so its first point and its way are the start the Line mode already uses; the road goes where the line says. A layout with no
@@ -96,10 +97,11 @@ function encodeRoad(batches, meta = {}) {
   return out;
 }
 
-/** The height of the road right under a point: the highest road surface whose triangle holds its (x, z), at most `reach` m above it (so a start a
- *  little under its own road still finds it, and a bridge overhead does not), or null when no road is under it. */
-function groundUnder(batches, pos, reach = 2) {
-  const x = pos[0], z = pos[2], top = pos[1] + reach; let best = null;
+/** The height of the road under a point: the highest road surface whose triangle holds its (x, z) AT OR BELOW it, or null when no road is under it.
+ *  (Second repair, pane E's bridge_check: it was "at most 2 m above it", which took a deck 5.5 m over a start 3.562 m up for the ground; every start on
+ *  L is at least 1.112 m above its road, and every AI line's first point 0.276 m, so at or below finds each.) */
+function groundUnder(batches, pos) {
+  const x = pos[0], z = pos[2], top = pos[1]; let best = null;
   for (const { positions: P, indices: I } of batches) {
     for (let t = 0; t < I.length; t += 3) {
       const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3, x0 = P[a], z0 = P[a + 2], x1 = P[b], z1 = P[b + 2], x2 = P[c], z2 = P[c + 2];
@@ -119,20 +121,24 @@ function groundUnder(batches, pos, reach = 2) {
  * Road lie on each other and share the nudge), else (L250 repair, for the 15 of 61 layouts on L with no AI line) by the start its kn5 names, which
  * the native side puts in the header (kn5road.rs: AC_START_0, else the middle of the time line AC_TIME_0_L/R), set down on the road under it; else
  * refused (NO_START), with the native side's reason. A start is never guessed.
+ * Either start is set down on the road under it (setDown): a start dummy is where a car is set down, and an AI line rides above its road (0.276 to
+ * 0.573 m on L, pane E's start_survey), so the road under it goes on his start and Road is flush with his road in both cases. Line and Road of one
+ * layout then lie on each other across, not in height (the second repair: the librarian's call, on pane E's weighing).
  */
 function roadReference(road, line) {
   if (!road || !Array.isArray(road.batches)) throw new RefTrackError('BAD_ROAD', 'a road needs its batches (decodeRoad)');
   const common = { kind: 'road', batches: road.batches, edges: new Float32Array(0), triangles: road.triangles };
-  if (line && line.start) return { ...common, start: line.start, lengthM: line.lengthM, width: line.width, closed: line.closed, points: line.points, placedBy: 'its AI line' };
+  const setDown = (s) => { const y = groundUnder(road.batches, s.pos); return { start: { pos: [s.pos[0], y === null ? s.pos[1] : y, s.pos[2]], T: s.T.slice() }, startAbove: y === null ? null : s.pos[1] - y }; };
+  // to undo the set-down with a line (Road on the line's own start, as before the second repair): `start: line.start` in place of `...setDown(line.start)`
+  if (line && line.start) return { ...common, ...setDown(line.start), lengthM: line.lengthM, width: line.width, closed: line.closed, points: line.points, placedBy: 'its AI line' };
   const s = road.meta && road.meta.start;
   if (!s) throw new RefTrackError('NO_START', (road.meta && road.meta.noStart) || 'its kn5 names no start');
   const three = (v) => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite);
   if (!three(s.pos) || !three(s.T)) throw new RefTrackError('BAD_ROAD', 'its start is not a position and a way, three numbers each');
   if (Math.hypot(s.T[0], s.T[2]) < 0.1) throw new RefTrackError('BAD_ROAD', 'its start does not face along the ground');
-  // its start dummy is where a car is set down, so it may sit above the road; the road under it goes on his start, as a line's first point does
-  const y = groundUnder(road.batches, s.pos);
-  return { ...common, start: { pos: [s.pos[0], y === null ? s.pos[1] : y, s.pos[2]], T: s.T.slice() }, lengthM: null, width: null, closed: null, points: null,
-    placedBy: `its kn5's start (${s.from === 'AC_TIME_0' ? 'the middle of its time line' : 'AC_START_0'})`, startAbove: y === null ? null : s.pos[1] - y };
+  // AC_START_0 is the grid's first slot: the panel says so in his words (second repair; it said "AC_START_0")
+  return { ...common, ...setDown(s), lengthM: null, width: null, closed: null, points: null,
+    placedBy: `its kn5's start (${s.from === 'AC_TIME_0' ? 'the middle of its time line' : 'its first grid slot'})` };
 }
 
 module.exports = { decodeRoad, encodeRoad, roadReference, normalsOf, groundUnder };
