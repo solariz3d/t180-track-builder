@@ -46,10 +46,22 @@
     --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
     /* L242: the small windows on the view (a mark's label, a handle's readout), drawn on a canvas, read these (app/core/markwindow.js): SIGIL's own, a hairline edge,
        2 px corners and its display type; the veil and the words stay today's (the marks' colours: L244, below). A skin sets its own under [data-theme] */
-    --mark-win-font: var(--display); --mark-win-weight: 600; --mark-win-radius: 2; --mark-win-edge: 1;
+    --mark-win-font: var(--display); --mark-win-weight: 600; --mark-win-radius: 1; --mark-win-edge: 1;   /* L249: the corner is the chrome scale's r1 times SIGIL's factor (.5), a plain number the canvas reads */
     /* L244 (the user, 2026-11-26 02:23: "yes handle colors per theme"): the marks' and handles' colours, SIGIL's: its violet and paper, the hues a little softer and warmer than the old saturated ones; length a pale coral, not white (white sat on the road's white edges). Each field keeps one colour everywhere in this
        look; bank and turn at least 60 apart, every pair of fields and each against the road's edge, the grid, the fog and the sky (app/test/markwindow.test.js W5) */
     --mark-bank: #6b95ff; --mark-turn: #c58cff; --mark-climb: #f2c14e; --mark-width: #f0644a; --mark-cup: #52d68a; --mark-length: #ffb3a7; --mark-edge: #47c4d6;
+    /* L249, THE CHROME REFACTOR (the user, 2026-11-26 04:49: "the refactor looks good enough"; the spec is the lighthouse repo's briefs/t180_ui_refactor_spec.md):
+       ONE radius scale, four steps picked by an element's size, times ONE factor per look (Radix's model). r1 under 32 px tall (fields, small selects, list rows,
+       the camera hint, a label window); r2 controls (buttons, menu names), the HUD tag and the camera dock; r3 menus, popovers and the guide card; r4 dialogs,
+       the ceiling. SIGIL's factor is .5; a skin sets only its own --radius-factor (glass 0, aurora .75, aqua, skyline and skyline-night 1), never the steps.
+       The circles (the sigil dot, the dialog's dot, the camera keys) stay 50%, and what reaches the window's edge (the bar, its window buttons) stays square */
+    --radius-factor: .5;
+    --r1: calc(2px * var(--radius-factor)); --r2: calc(4px * var(--radius-factor)); --r3: calc(8px * var(--radius-factor)); --r4: calc(12px * var(--radius-factor));
+    /* the paddings a corner inside is measured against (concentric, spec §2: inner = outer - padding, never below 0): a menu's (.more-menu) and a dialog's top (.ask-card) */
+    --menu-pad: 8px; --dialog-pad: 22px;
+    /* L249, spec §6: Radix's step 4 (a hovered row) and step 10 (a solid accent fill, hovered), the two steps no look had. By default step 3 (--raise) 6% toward
+       the text and the accent 12% toward the text (SIGIL: about #1f1f1d and #bfaffb); a skin sets its own */
+    --hover: color-mix(in srgb, var(--raise) 94%, var(--text)); --accent-hover: color-mix(in srgb, var(--accent) 88%, var(--text));
     /* D399: each look's own texture, the top background layer of the header, the left panel and the menus (never the 3D view): one tile, drawn by
        scripts/texture_tiles.js. SIGIL's is a fine film grain; a skin sets its own --tex under [data-theme]. Its strengths keep every text where it reads
        today: none goes under 4.5:1 (app/test/texture-page.test.js). A fine tile is sized in DEVICE pixels (--dpx), so at Windows' fractional display
@@ -72,7 +84,7 @@
   /* the type scale: body 12, heading 16, display 24 (the values strip's numbers) and 18 (a road label's length); the 11 px small-caps labels beside the numbers are the one exception */
   html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font: 300 12px/1.45 var(--body); letter-spacing: .01em; }
   ::selection { background: var(--accent-dim); color: var(--text); }
-  :focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }   /* L249 (spec §5): focus is a ring, never a glow: 2 px solid in the look's accent, 1 px off the box */
   ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background: var(--line); } ::-webkit-scrollbar-track { background: transparent; }
   /* Two columns: the controls on the left, the preview takes the rest. The validation panel (design speed, CSP wall
      raycasting, the load graph) and the other side sections sit under the builder's controls in the left column (#left);
@@ -84,7 +96,7 @@
   /* D395, THE WORDMARK: the sigil dot leads (each skin draws its own), "T-180" in the text colour, a hairline rule, then the rest dimmed; tokens only, so it follows the theme.
      The rule sits in the old word space: the -8px takes back most of the h1's gap between the two spans, so the header is no wider than with one text (A's review 8) */
   header h1 .wm-rest { color: var(--dim); margin-left: -8px; padding-left: 5px; border-left: 1px solid var(--hair); }
-  header input, header select { background: transparent; color: var(--text); border: 1px solid var(--hair); border-radius: 2px; padding: 5px 8px; font: inherit; }
+  header input, header select { background: transparent; color: var(--text); border: 1px solid var(--hair); border-radius: var(--r1); padding: 5px 8px; font: inherit; }
   header label { color: var(--dim); white-space: nowrap; }
   /* THE TITLE BAR (2026-10-14): the Windows frame is off, so the header is the bar (app/titlebar.js). Hairline glyphs, no fills. */
   header { padding-right: 0; user-select: none; }
@@ -122,33 +134,36 @@
   #exportbanner.done, #exportbanner.failed { cursor: pointer; }
   /* A QUESTION IN THE PAGE (app/askdialog.js): the save-on-close prompt, in the same black, bone and violet. */
   .ask-veil { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: rgba(6, 6, 6, .62); backdrop-filter: blur(3px); }
-  .ask-card { width: min(380px, calc(100vw - 48px)); background: var(--bg); border: 1px solid var(--hair); border-top: 1px solid var(--accent); padding: 22px 24px 18px; box-shadow: 0 18px 60px rgba(0, 0, 0, .6); }
+  .ask-card { width: min(380px, calc(100vw - 48px)); background: var(--bg); border: 1px solid var(--hair); border-top: 1px solid var(--accent); padding: var(--dialog-pad) 24px 18px; border-radius: var(--r4);
+    box-shadow: inset 0 1px 0 var(--hair), 0 2px 3px rgba(0, 0, 0, .12), 0 8px 12px rgba(0, 0, 0, .12); }   /* L249: r4, and a shadow that says "this floats", small and neutral (it was 0 18px 60px at .6) */
+  .ask-card button { border-radius: max(0px, calc(var(--r4) - var(--dialog-pad))); }   /* L249, concentric: r4 less the dialog's padding is under 0 at every factor, so its buttons are square */
   .ask-card h2 { margin: 0 0 10px; font: 300 12px var(--display); display: flex; align-items: center; gap: 10px; }
   .ask-card h2::before { content: ""; width: 10px; height: 10px; border: 1px solid var(--text); border-radius: 50%; background: radial-gradient(circle, var(--accent) 0 18%, transparent 20%); flex: none; }
   .ask-card p { margin: 0 0 20px; color: var(--dim); }
   .ask-row { display: flex; gap: 8px; justify-content: flex-end; }
   .ask-row .ask-quiet { margin-right: auto; color: var(--dim); }
   .ask-row .ask-main { border-color: var(--accent); color: var(--accent); }
-  .ask-row button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+  .ask-row button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }   /* L249: the page's own ring (spec §5) */
   /* D361: File ▸ Export layouts… (app/menubar/layoutsdialog.js) */
   .author-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 4px 10px; }
-  .author-row input { min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--hair); border-radius: 2px; padding: 3px 5px; }
+  .author-row input { min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--hair); border-radius: var(--r1); padding: 3px 5px; }
   .apron-row .apron-help { grid-column: 1 / -1; font-size: 11px; color: var(--text); max-width: 260px; }   /* D572: Track ▸ Edge apron's help line, under the field */
   .ask-card.ask-layouts { width: min(680px, calc(100vw - 48px)); }
   .ask-layouts .lx-row { display: grid; grid-template-columns: 40px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr) 40px; align-items: center; gap: 8px; margin: 0 0 6px; }
   .ask-layouts label.lx-row { grid-template-columns: 110px minmax(0, 1fr); margin-bottom: 14px; }
   .ask-layouts .lx-head span { color: var(--dim); font-size: 12px; }
   .ask-layouts .lx-track { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ask-layouts input[type="text"] { min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--hair); border-radius: 2px; padding: 3px 5px; }
+  .ask-layouts input[type="text"] { min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--hair); border-radius: var(--r1); padding: 3px 5px; }
   .ask-layouts .lx-problem { min-height: 1.2em; color: var(--accent); margin: 10px 0 14px; }
   #banner { grid-column: 1 / -1; }
   #banner:empty { display: none; }
   /* D252: the drop-down menu (it was the ⋯ menu; D355: every menu on the top bar is one): it drops down over the page */
   .more { position: relative; }
-  .more > summary { list-style: none; cursor: pointer; background: transparent; border: 1px solid var(--hair); border-radius: 2px; padding: 5px 10px; }
+  .more > summary { list-style: none; cursor: pointer; background: transparent; border: 1px solid var(--hair); border-radius: var(--r2); padding: 5px 10px; }
   .more > summary::-webkit-details-marker { display: none; }
   .more[open] > summary { border-color: var(--accent); }
-  .more-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; min-width: 260px; background: var(--tex), var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+  .more-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: var(--menu-pad); min-width: 260px; background: var(--tex), var(--panel); border: 1px solid var(--line); border-radius: var(--r3);
+    box-shadow: inset 0 1px 0 var(--hair), 0 2px 3px rgba(0, 0, 0, .12), 0 6px 12px rgba(0, 0, 0, .10); }   /* L249: r3, and a small neutral shadow (spec §5) */
   .more-menu > span { display: flex; flex-direction: column; gap: 6px; }
   .pieces-menu .more-menu { width: 420px; max-height: 70vh; overflow-y: auto; }   /* D269: the saved pieces, a bin under the top bar (D355: it opens leftwards, as every menu at the top right does) */
   /* D355: THE MENUS (app/menubar/menubar.js), each the same <details class="more"> + .more-menu as Pieces ▾. Inside one: a heading is the page's h3, a hairline
@@ -162,7 +177,9 @@
   /* #install shrinks only as far as its button: the note's column has no minimum (minmax(0, max-content)), so the note gives way first and the button never runs under
      the window buttons (as a flex row, the note's whole one-line text counted toward the box's minimum width and pushed the bar 108 px past 1400) */
   header #install { flex: 0 1 auto; display: grid; grid-template-columns: auto minmax(0, max-content); align-items: center; column-gap: 8px; }
-  header #install > button { white-space: nowrap; flex: none; }
+  header #install > button { white-space: nowrap; flex: none; border-radius: max(var(--r2), calc((var(--radius-factor) * 100 - 99) * 999px)); }
+  /* L249 (spec §3): the one capsule in the UI is the standout action, and only in the looks at factor 1 (aqua, skyline, skyline-night): there the second term is
+     999 px; at any factor under 1 it is under 0, so the button takes r2 as every control does */
   /* D396: THE BAR FITS DOWN TO tauri.conf.json's minWidth (900). At 1400 it needs 1303 px with its grab strip, so below that the title gives way, never a menu, Export
      or the window's own buttons (#winctl, which an overflowing bar pushed out of the window first): under 1320 "TRACK BUILDER" folds away and the track name may
      narrow to 64 px; under 1100 the gaps and the menu names' padding tighten; under 1000 "T-180" folds too, the sigil dot stays and the name may narrow to 48 px.
@@ -183,13 +200,13 @@
   .more-menu .menu-check { display: flex; align-items: center; gap: 6px; padding: 2px 2px; color: var(--text); white-space: nowrap; cursor: pointer; }
   .more-menu .menu-slot, .more-menu .menu-panel-wrap, .more-menu .menu-panel { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
   .more-menu .menu-slot:empty { display: none; }
-  .pieces-menu .piece-row:hover { background: rgba(255,255,255,0.05); }
+  .pieces-menu .piece-row:hover { background: var(--hover); }   /* L249: step 4, each look's own (white at 5% was invisible on Skyline's white) */
   /* Open… and Previous versions…: lists the page draws (a native select's pop-up showed the menu behind it through its rows in this frameless window) */
   .more-menu .menu-list { display: flex; flex-direction: column; gap: 2px; }
   .more-menu .menu-rows { display: flex; flex-direction: column; max-height: 50vh; overflow-y: auto; margin-left: 6px; padding-left: 6px; border-left: 1px solid var(--line); }
   .more-menu .menu-rows[hidden] { display: none; }
-  .more-menu .menu-row { padding: 4px 8px; color: var(--text); white-space: nowrap; cursor: pointer; border-radius: 4px; outline: none; }
-  .more-menu .menu-row:hover, .more-menu .menu-row:focus { background: rgba(255,255,255,0.05); }
+  .more-menu .menu-row { padding: 4px 8px; color: var(--text); white-space: nowrap; cursor: pointer; outline: none; }
+  .more-menu .menu-row:hover, .more-menu .menu-row:focus { background: var(--hover); }   /* L249: step 4 */
   .more-menu .menu-row-none { padding: 4px 8px; color: var(--dim); white-space: nowrap; }
   /* a choice inside a menu (app/core/menupick.js): its head shows the chosen value, its rows unfold under it as Open…'s do */
   .more-menu .menu-pick { display: inline-flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 8ch; }
@@ -199,11 +216,11 @@
   /* D252 follow-up (C's finding 2): a long install note (the full Assetto Corsa path) pushed ⋯ right and its menu off the window; it is cut to a box, the whole text in its tooltip */
   .t-install-note { display: inline-block; vertical-align: middle; max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 0 1 auto; }   /* D355: in the bar it gives way before anything wraps */
   .bar { display: flex; gap: 10px; align-items: center; padding: 8px 12px; background: var(--raise); border-bottom: 1px solid var(--mine); }
-  button { background: transparent; color: var(--text); border: 1px solid var(--hair); border-radius: 2px; padding: 5px 11px; cursor: pointer; font: 400 12px var(--body); letter-spacing: .06em; transition: border-color .12s, color .12s; }
+  button { background: transparent; color: var(--text); border: 1px solid var(--hair); border-radius: var(--r2); padding: 5px 11px; cursor: pointer; font: 400 12px var(--body); letter-spacing: .06em; transition: border-color .12s, color .12s; }
   button:hover:not([disabled]) { border-color: var(--accent); color: var(--accent); }
   button:active:not([disabled]) { background: var(--accent-dim); }
   input, select, textarea { font: inherit; }
-  input[type="number"], input[type="text"], input:not([type]), textarea { background: transparent; color: var(--text); border: 1px solid var(--hair); border-radius: 2px; padding: 4px 7px; }
+  input[type="number"], input[type="text"], input:not([type]), textarea { background: transparent; color: var(--text); border: 1px solid var(--hair); border-radius: var(--r1); padding: 4px 7px; }
   input[type="number"] { font-family: var(--mono); font-size: 12px; }
   /* D513: the spin arrows are two chevrons in the look's colours, not the white native box; the browser still steps on click and press-and-hold.
      They stand inside the field's own content box, so the field keeps its size; each skin recolours them in app/themes/<look>.css. */
@@ -211,7 +228,10 @@
   input[type="number"]:hover::-webkit-inner-spin-button, input[type="number"]:focus::-webkit-inner-spin-button { opacity: 1; }
   input[type="number"]::-webkit-inner-spin-button:hover { background-color: var(--accent); }
   input[type="number"]::-webkit-inner-spin-button:active { background-color: var(--text); }
-  input:focus, select:focus, textarea:focus { border-color: var(--accent); outline: none; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  :is(button, input, select, textarea, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }   /* L249: the ring on every control, fields included (they had none) */
+  /* L249, concentric (spec §2): what sits inside a menu takes the menu's corner less its padding, never under 0; r3 - 8 px is 0 at every factor up to 1, so square rows */
+  .more-menu :is(button, .menu-row, .menu-list-head, input, select) { border-radius: max(0px, calc(var(--r3) - var(--menu-pad))); }
   input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color: var(--accent); }
   select { background: var(--bg); color: var(--text); }
   .sound-row { display: flex; align-items: center; gap: 10px; padding: 4px 2px; color: var(--dim); }
@@ -226,7 +246,7 @@
     header select { background: transparent; min-width: 150px; }
     header select::picker-icon { color: var(--dim); transition: rotate .15s; }
     header select:open::picker-icon { rotate: 180deg; color: var(--accent); }
-    header select::picker(select) { background: var(--bg); border: 1px solid var(--hair); border-top: 1px solid var(--accent); border-radius: 2px; padding: 4px 0;
+    header select::picker(select) { background: var(--bg); border: 1px solid var(--hair); border-top: 1px solid var(--accent); border-radius: var(--r3); padding: 4px 0;
       margin-top: 4px; max-height: min(70vh, 560px); min-width: max(anchor-size(width), 260px); box-shadow: none; }
     header select option { background: transparent; color: #fff; padding: 7px 14px; font: 300 12px var(--body); letter-spacing: .03em; border-left: 2px solid transparent; }
     header select option:first-of-type { color: var(--dim); font: 300 12px var(--display); letter-spacing: .3em; text-transform: uppercase; }
@@ -252,13 +272,13 @@
   /* the track line is the column's first line now, on the top of the panel, where Aqua's gloss is lightest: a shade over --dim keeps it at 4.5:1 there */
   #palette > .head:first-child { color: color-mix(in srgb, var(--dim) 55%, var(--text)); }
   /* the guide's card and its Show the guide button sit under the values band, which runs to the right at 1400 px */
-  #guide .guide-card { top: 64px; }   /* the tour card is wide and would meet the band's end; the Show the guide button keeps its own 12px: the band stops short of it (below) */
+  #guide .guide-card { top: 64px; border-radius: var(--r3); }   /* L249: r3, a popover (the onboarding's own block says 8 px, a class rule this outranks) */   /* the tour card is wide and would meet the band's end; the Show the guide button keeps its own 12px: the band stops short of it (below) */
   #preview { --preview-shift: 0px; }   /* the values strip centres on the window, the 3D picture's own centre (the camera is drawn across the whole window) */
   #stage { position: relative; display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
   #preview { position: relative; min-height: 0; overflow: hidden; }
   #camera { position: absolute; z-index: 9; left: 0; right: 0; bottom: 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
   #camera > * { pointer-events: auto; }
-  #camera [role="toolbar"] { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; padding: 5px 8px; background: rgba(8, 8, 7, .78); border: 1px solid var(--hair); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  #camera [role="toolbar"] { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; padding: 5px 8px; background: rgba(8, 8, 7, .78); border: 1px solid var(--hair); border-radius: var(--r2); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
   #camera [role="toolbar"] button { border-color: transparent; font-size: 12px; padding: 6px 10px; }
   #camera [role="toolbar"] button[aria-pressed="true"], #camera [role="toolbar"] button.on { color: var(--accent); box-shadow: 0 -1px 0 var(--accent) inset; }
   /* the depth behind the track, a soft vignette over the view, is the renderer's own last pass now (app/preview/renderer.js THE VIGNETTE): drawn here in CSS it
@@ -266,8 +286,8 @@
   /* D409: the camera label sits below the top readout (valuesoverlay.js: top 10px, about 56px tall), not under it; at 1400 px the readout reached over it */
   /* D581: its top is --hud-top (app/core/valuesoverlay.js): level with the column card where it clears the strip, else just under it */
   /* the view tag has a backing like the values strip's, so it never sits on the scene (a grid line at the horizon took it to 3.7 : 1) */
-  .preview-hud { z-index: 2; left: 274px !important; top: var(--hud-top, calc(var(--values-bottom, 66px) + 14px)); bottom: auto !important; background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent) !important; color: var(--on-ink-strong, #ffffff) !important; padding: 2px 6px !important; border-radius: 6px !important; font-family: var(--mono) !important; font-size: 12px !important; }
-  #camera p { margin: 0; color: var(--dim); font-size: 12px; letter-spacing: .04em; background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent); padding: 1px 6px; border-radius: 6px; }   /* a backing, not a glow, behind the words over the scene; padded, so the letters' own box stays on it (skyline's read 1.2 : 1 where they ran past its edge onto the ground) */
+  .preview-hud { z-index: 2; left: 274px !important; top: var(--hud-top, calc(var(--values-bottom, 66px) + 14px)); bottom: auto !important; background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent) !important; color: var(--on-ink-strong, #ffffff) !important; padding: 2px 6px !important; border-radius: var(--r2) !important; font-family: var(--mono) !important; font-size: 12px !important; }
+  #camera p { margin: 0; color: var(--dim); font-size: 12px; letter-spacing: .04em; background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent); padding: 1px 6px; border-radius: var(--r1); }   /* a backing, not a glow, behind the words over the scene; padded, so the letters' own box stays on it (skyline's read 1.2 : 1 where they ran past its edge onto the ground) */
   /* the camera keys: a small "?" at the foot; the line shows while it is hovered or focused, or after a press (app/camera/index.js) */
   #camera .camera-keys { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   #camera .camera-keys > button { width: 22px; height: 22px; padding: 0; border-radius: 50%; font-size: 12px; line-height: 20px; color: var(--on-ink-strong, #ffffff); background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent); }   /* the values strip's own pair (its ground and its text colour, which every look sets): on Sigil's dim button face the "?" read 2.2:1 */
@@ -289,7 +309,7 @@
      column's content box at 1818 px); and every field in a row is held to its track, whatever its own intrinsic width. */
   .picker { display: grid; grid-template-columns: 60px minmax(0, 1fr); align-items: center; gap: 6px; }
   .picker input:not([type="checkbox"]):not([type="radio"]), .picker select { min-width: 0; max-width: 100%; box-sizing: border-box; }
-  .picker select { background: var(--bg); color: var(--text); border: 1px solid var(--hair); border-radius: 2px; padding: 3px; }
+  .picker select { background: var(--bg); color: var(--text); border: 1px solid var(--hair); border-radius: var(--r1); padding: 3px; }
   .picker > span, .picker > label { color: var(--dim); font-size: 12px; }
   /* a field's row with its "start" box (and width like… / grip like…) at its end: one row, never wrapped; the column's rows keep a 12 px rhythm */
   #palette .pickers { gap: 4px; }
@@ -335,9 +355,9 @@
   .piece.suggested { border-color: var(--accent); }
   .next { color: var(--dim); margin-bottom: 8px; font-size: 12px; }
   .actions, .save-piece { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
-  .save-piece input { flex: 1; min-width: 0; background: transparent; color: var(--text); border: 1px solid var(--hair); border-radius: 2px; padding: 4px 6px; }
+  .save-piece input { flex: 1; min-width: 0; background: transparent; color: var(--text); border: 1px solid var(--hair); border-radius: var(--r1); padding: 4px 6px; }
   .track { list-style: none; padding: 0; margin: 0; max-height: 30vh; overflow: auto; font-family: var(--mono); font-size: 12px; }
-  .track li { padding: 2px 6px; border-radius: 3px; cursor: pointer; }
+  .track li { padding: 2px 6px; border-radius: var(--r1); cursor: pointer; }
   .track li.selected { background: var(--accent-dim); color: var(--accent); }
   .head { color: var(--dim); margin-bottom: 8px; }
   .message, .panel-error { color: var(--bad-text, var(--bad)); white-space: pre-wrap; }
