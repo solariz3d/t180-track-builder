@@ -178,8 +178,8 @@ function marksLayer({ from = 380, avoid = null, hudBottom = null, lit = false, m
   if (hudBottom !== null) doc.querySelectorAll = (sel) => (sel === '[aria-label="piece values"]' ? [{ getBoundingClientRect: () => ({ left: 300, top: 0, width: 300, height: hudBottom, bottom: hudBottom }) }] : []);
   const samples = []; for (let s = 0; s <= 1000; s += 2) samples.push({ s, pos: [0, 0, s], T: [0, 0, 1], L: [1, 0, 0], U: [0, 1, 0] });
   const ghost = { samples, s0: 0, jump: false }, pose = { eye: [0, 700, 500], target: [0, 0, 500], up: [0, 0, 1], fov: Math.PI / 3 };
-  doc.addEventListener('t180:ghost-request', (e) => e.detail.reply(ghost)); doc.addEventListener('t180:view', (e) => e.detail.reply({ pose }));
-  const state = { from };
+  const state = { from, ghost: true };
+  doc.addEventListener('t180:ghost-request', (e) => e.detail.reply(state.ghost ? ghost : null)); doc.addEventListener('t180:view', (e) => e.detail.reply({ pose }));
   const item = () => ({ field: 'bank', index: 0, from: state.from, to: 1000, half: 15, halfTo: 15, label: ST.markText('bank', 0, state.from, 1000, 1000), lit, ...ST.styleOf('bank') });
   const layer = ST.mount(stage, win, () => ({ marks: marks ? marks(state) : [item()], offers: [] }), { onMarkDrag: (m, f) => { state.from = f; }, ...(avoid ? { avoid } : {}) });
   layer.drawNow();
@@ -276,4 +276,15 @@ test('D5: the dot is grabbed as the tick was: a press on it and a drag move the 
   A.stage.fire('pointerdown', { clientX: dot.x, clientY: dot.y, pointerId: 1 }); A.stage.fire('pointermove', { clientX: to.x, clientY: to.y, pointerId: 1 });
   assert.equal(A.state.from, 520); assert.match(A.text(), /^Extra bank · 520\.00 m/, 'mid-drag, labelled');
   A.stage.fire('pointerup', { clientX: to.x, clientY: to.y, pointerId: 1 }); A.layer.unmount();
+});
+test('D6 (pane C\'s V4, L241 read): the ghost goes for a draw and comes back with the same marks: nothing was added, so no label shows', () => {
+  // a field with ONE mark read as "0 before, 1 now" after a draw with no ghost, and flashed for 2 s every time the panel cleared the ghost (Extend's hover with handles
+  // off, an Extend press, a refused value): C's read of 77ffe18
+  const marks = (st) => [twoMarks(st)[0], { ...twoMarks(st)[0], field: 'turn', index: 0, from: 300, to: 600, label: ST.markText('turn', 0, 300, 600, 1000), ...ST.styleOf('turn') }, { ...twoMarks(st)[0], field: 'turn', index: 1, from: 600, to: 1000, label: ST.markText('turn', 1, 600, 1000, 1000), ...ST.styleOf('turn') }];
+  const A = marksLayer({ marks });
+  assert.equal(A.ctx.rec.texts.length, 0, 'at rest');
+  A.state.ghost = false; A.layer.drawNow(); A.state.ghost = true; A.layer.drawNow();
+  assert.deepEqual(A.ctx.rec.texts.map((t) => t.s.slice(0, 12)), [], 'the ghost came back with the same three marks; none was added');
+  assert.equal(A.ctx.rec.arcs.length, 3, 'three dots');
+  A.layer.unmount();
 });

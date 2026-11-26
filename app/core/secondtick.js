@@ -146,7 +146,7 @@ function mount(stage, win, itemsNow, hooks = {}) {
       const was = prevByField[f] || [], now = byField[f];
       if (now.length === was.length + 1) { const fresh = now.filter((x) => !was.some((y) => Math.abs(x - y) < 1e-6)); if (fresh.length === 1) flashes.push({ field: f, from: fresh[0], until: nowMs + FLASH_MS }); }
     }
-    prevByField = byField; flashes = flashes.filter((x) => x.until > nowMs);
+    prevByField = pose ? byField : null;   // a draw with no ghost (the panel cleared it) saw no marks, which is not "none": the ghost's return is a first draw and flashes nothing (pane C, L241 read, V4) flashes = flashes.filter((x) => x.until > nowMs);
     drawnOffers = pose ? (items.offers || []).map((of) => { const d = markStroke(ghost, { ...of, nudgePx: of.nudgePx, sides: [of.sides[0]] }, pose, W, H); return d ? { ...d, item: of, at: { x: (d.strokes[0].a.x + d.strokes[0].b.x) / 2, y: (d.strokes[0].a.y + d.strokes[0].b.y) / 2 } } : null; }).filter(Boolean) : [];
     const ctx = canvas.getContext ? canvas.getContext('2d') : null;
     if (ctx) {
