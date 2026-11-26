@@ -52,7 +52,7 @@
 [data-theme="skyline"] #win-close:hover { background: #c42b3a; box-shadow: none; }
 
 /* the menus: white frosted panes (their corner, r3, and their small neutral shadow are the page's; what sits inside is concentric, also the page's) */
-[data-theme="skyline"] .more-menu { background: var(--tex), linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(236, 246, 255, .94)); border-color: #a9cdf0; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+[data-theme="skyline"] .more-menu, [data-theme="skyline"] .reference-panel { background: var(--tex), linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(236, 246, 255, .94)); border-color: #a9cdf0; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 [data-theme="skyline"] .pieces-menu .piece-row:hover, [data-theme="skyline"] .more-menu .menu-row:hover, [data-theme="skyline"] .more-menu .menu-row:focus { background: var(--hover); }
 
 /* fields */

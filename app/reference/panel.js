@@ -38,10 +38,12 @@ const NOTE = Object.freeze({
 // THE LOOK (L250 repair, pane E's read): one class, on the page's own pane tokens (index.html :root, each look's [data-theme] block): the ground is
 // --panel, the words --text and --dim (the pair every look checks for 4.5:1 on its own panel), the edge --line, the corner the radius scale's r3 (a
 // popover's, as the guide card's; 4 px, SIGIL's r3, until that scale is on the page). Nothing is inline, so a look's own rule reaches every part of it
-// ([data-theme="<look>"] .reference-panel …). Its fallbacks are SIGIL's own values.
+// ([data-theme="<look>"] .reference-panel …). Its fallbacks are SIGIL's own values. L256 (the landing, on L249): it wears the menus' ground, the page's
+// texture over its panel with their inner hairline, and each look styles it in its menus' own rule (app/themes/*.css: `.more-menu, .reference-panel`).
 const CSS = `
 .reference-panel { position: absolute; top: 44px; right: 10px; z-index: 6; width: 300px; padding: 8px 10px; font: 12px/1.4 var(--body, system-ui);
-  background: var(--panel, #0b0b0a); color: var(--text, #ebe6dc); border: 1px solid var(--line, #24221f); border-radius: var(--r3, 4px); }
+  background: var(--tex, none), var(--panel, #0b0b0a); color: var(--text, #ebe6dc); border: 1px solid var(--line, #24221f); border-radius: var(--r3, 4px);
+  box-shadow: inset 0 1px 0 var(--hair, transparent); }
 .reference-panel .rp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; }
 .reference-panel .rp-shut { background: none; border: 0; color: inherit; cursor: pointer; font: inherit; }
 .reference-panel .rp-pick { width: 100%; margin-bottom: 6px; }

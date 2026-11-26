@@ -435,13 +435,24 @@ test('L1: the panel\'s look is one class on the page\'s own pane tokens, with no
   assert.deepEqual(Object.keys(box.style).filter((k) => box.style[k] !== undefined && k !== 'display'), [], 'the panel itself only says whether it is open');
   assert.ok(style, 'the panel brings its class rule');
   const rule = (style.textContent.match(/\.reference-panel\s*\{([^}]*)\}/) || [])[1] || '';
-  assert.match(rule, /background:\s*var\(--panel\b/, 'its ground is the page\'s panel');
+  // L256, amended by name (the landing meets L249): its ground is the menus', the page's texture over its panel; was `background: var(--panel`
+  assert.match(rule, /background:\s*var\(--tex\b[^;]*,\s*var\(--panel\b/, 'its ground is the page\'s texture over its panel, as the menus\'');
   assert.match(rule, /(^|;)\s*color:\s*var\(--text\b/, 'its words the page\'s text on that panel');
   assert.match(rule, /border:\s*1px solid var\(--line\b/, 'its edge the page\'s line');
   assert.match(rule, /border-radius:\s*var\(--r3\b/, 'its corner a step of the page\'s radius scale (a popover\'s, r3)');
   const literals = style.textContent.replace(/var\(--[\w-]+(,[^()]*(\([^()]*\))?[^()]*)?\)/g, '');
   assert.doesNotMatch(literals, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(|color-mix\(/i, 'no colour of its own outside a token\'s fallback');
   assert.equal(panel.isOpen(), true);
+});
+
+test('L2 (L256, the landing on L249): every look styles the reference panel in its menus\' own rule, so it wears that look\'s pane ground, edge and blur', () => {
+  for (const look of ['aqua', 'aurora', 'glass', 'skyline', 'skyline-night']) {
+    const css = fs.readFileSync(path.join(REPO, 'app', 'themes', `${look}.css`), 'utf8');
+    const rules = css.match(new RegExp(`[^{}]*\\[data-theme="${look}"\\] \\.more-menu\\s*[,{][^{}]*\\{`, 'g')) || [];
+    const own = rules.filter((r) => !/\.more-menu\s+[\w.#:[]/.test(r));   // the menu's own rule, not one for something inside it
+    assert.equal(own.length, 1, `${look}: one rule styles the menu itself`);
+    assert.match(own[0], new RegExp(`\\[data-theme="${look}"\\] \\.reference-panel\\b`), `${look}: the reference panel is in it`);
+  }
 });
 
 // ── read only: the document, a save, an undo step and an export ──

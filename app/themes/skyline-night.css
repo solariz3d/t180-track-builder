@@ -50,7 +50,7 @@
 [data-theme="skyline-night"] #win-close:hover { background: #c42b3a; box-shadow: none; }
 
 /* the menus: navy frosted panes (their corner, r3, and their small neutral shadow are the page's; what sits inside is concentric, also the page's) */
-[data-theme="skyline-night"] .more-menu { background: var(--tex), linear-gradient(180deg, rgba(18, 36, 72, .97), rgba(11, 25, 54, .95)); border-color: #2f5590; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+[data-theme="skyline-night"] .more-menu, [data-theme="skyline-night"] .reference-panel { background: var(--tex), linear-gradient(180deg, rgba(18, 36, 72, .97), rgba(11, 25, 54, .95)); border-color: #2f5590; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 [data-theme="skyline-night"] .pieces-menu .piece-row:hover, [data-theme="skyline-night"] .more-menu .menu-row:hover, [data-theme="skyline-night"] .more-menu .menu-row:focus { background: var(--hover); }
 
 /* fields */

@@ -109,7 +109,7 @@
 [data-theme="aqua"] h3::after { background: linear-gradient(90deg, rgba(63, 224, 245, .95), rgba(63, 224, 245, .2) 60%, transparent); }
 
 /* THE MENUS: a water-glass pane dropping from the bar (index.html: r3, 8 px here, and the rows in it square by the concentric rule) */
-[data-theme="aqua"] .more-menu {
+[data-theme="aqua"] .more-menu, [data-theme="aqua"] .reference-panel {
   background: var(--tex),
     radial-gradient(110% 30px at 50% 0%, rgba(255, 255, 255, .22), transparent 100%),
     linear-gradient(180deg, rgba(8, 96, 118, .96) 0%, rgba(3, 52, 66, .97) 30%, rgba(2, 36, 46, .98) 100%);
