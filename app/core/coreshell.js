@@ -423,7 +423,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   // one but the removed: nothing is rebuilt). The preview draws a ghost only as an EXTENSION of the placed road, so an undo that changed a piece and removed none has none.
   const undoGhostOf = (was, now) => {
     if (was.closed || now.closed || was.pieces.length <= now.pieces.length || !now.pieces.every((P, i) => P.id === was.pieces[i].id)) return null;
-    try { return Object.freeze({ base: now, candidate: { segments: segmentsOf(was), closed: false, start: startOf(was) }, readout: RD.pieceReadout(was, was.pieces.length - 1), removed: was.pieces.length - now.pieces.length, shapeWords: () => SHPR.shapeWords(SHPR.readFromShape(was, was.pieces.length - 1)) }); } catch (e) { return null; }
+    try { return Object.freeze({ base: now, candidate: { segments: segmentsOf(was), closed: false, start: startOf(was), lift: liftFor(was) }, readout: RD.pieceReadout(was, was.pieces.length - 1), removed: was.pieces.length - now.pieces.length, shapeWords: () => SHPR.shapeWords(SHPR.readFromShape(was, was.pieces.length - 1)) }); } catch (e) { return null; }
   };
   const startOf = (d) => ({ pos: d.start.pos.slice(), theta: d.start.heading, p: d.start.pitch });
   const resolvedOf = (d) => { const segments = segmentsOf(d); return { resolved: Object.freeze({ segments, closed: !!d.closed, start: startOf(d), lift: offsetPath && segments.length ? (p) => offsetPath(d, segments, p) : undefined }), resolveError: null }; };
@@ -432,6 +432,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   // first grab on and drew the road there with NO offset, up to 2 m beside the placed one, as soon as Sculpt was off; and on any road (B's read 2.4, a flat one) whose head's middle a
   // grab or an Even moved, the copy-and-extend ghost began the next piece at the unoffset head, beside where placing lays it (1.94 m in B's read). Both now lift with it. The lift
   // reads the segments the ghost is built from (a drag's coarse ones when given); otherwise the document's own (the shell's segment cache), found the first time the preview lifts.
+  // Every ghost hands it on: the next piece's (candidate), the Jump's (candidateJump), the undone piece's (undoGhostOf) and a saved piece's (showPiece); ghost-offset.test.js rows 1-7.
   const liftFor = (d, segments) => (offsetPath ? (p) => offsetPath(d, segments || (segments = segmentsOf(d)), p) : undefined);
   /** Run an edit; a core error becomes the message, and nothing else changes. */
   // the worst roll rate (°/m) on the road over lap distance [s0, s1], read as the checker reads it (src/validate rollRates, its 20 m chord); a closed lap wraps
@@ -722,7 +723,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
      * JUMP_AFTER_JUMP, BAD_FLIGHT, ...) and the message is that refusal in plain words (app/core/jumpwords.js). candidateJump is the ghost of it for the preview (flagged `jump`, so the
      * Extend handles stay off it); it throws the core's CoreError, which the panel puts through the same words.
      */
-    candidateJump(extendOpts) { const d = jumpFor(extendOpts); return { segments: segmentsOf(d), closed: false, start: startOf(d), jump: true }; },
+    candidateJump(extendOpts) { const d = jumpFor(extendOpts); return { segments: segmentsOf(d), closed: false, start: startOf(d), jump: true, lift: liftFor(d) }; },
     jump(extendOpts) {
       let d; try { d = jumpFor(extendOpts); } catch (e) { if (e && e.name === 'CoreError') return set({ message: JW.jumpWords(e) }); throw e; }
       return commit('jump', () => d, { lastEdited: null, ...ok('Jump placed: move its landing by hand.') });
@@ -1316,7 +1317,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       try { text = await storage.openPiece(name); piece = PC.parse(text); } catch (e) { return set({ message: `could not open the piece "${name}": ${e && e.message || e}`, pieceGhost: null }); }
       const d = doc();
       let after, candidate;
-      try { after = PC.insert(d, piece, { mirror }); candidate = { segments: segmentsOf(after), closed: false, start: startOf(after) }; }
+      try { after = PC.insert(d, piece, { mirror }); candidate = { segments: segmentsOf(after), closed: false, start: startOf(after), lift: liftFor(after) }; }
       catch (e) { if (e.name !== 'CoreError') throw e; return set({ message: e.message, pieceGhost: null }); }
       let numbers = null, note = null;
       if (!mirror && typeof storage.openRecipe === 'function') {
