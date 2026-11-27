@@ -50,18 +50,13 @@ const GT = require('../../src/core/gridturn.js');   // 2026-10-12: Turn to grid
 const SH = require('../../src/core/sharp.js');
 const SC = require('../../src/core/sculpt.js');
 const { sculpt, pieceOffsets } = SC;
-/**
- * (the user, 18:24: "same for -360 if it banks the other way, instead of continuing another revolution past 360 it should reset back to 0"): a bank brush or a
- * Sculpt bank drag that would take the bank at its centre past one full turn wraps it back from 0, its sign kept (350 + 20 -> 10, -350 - 20 -> -10, 300 stays 300).
- * The bank there is read on the drag's BASE document (b.s0 is the piece's middle for Sculpt), and the delta sent on is the one that lands on the wrapped value.
- * The stored winding is not rewritten otherwise: a drag that stays inside one turn is applied exactly as given.
- */
-function bankWithinTurn(b, delta) {
-  const offs = pieceOffsets(b.base), i = offs.findIndex((o, k) => b.s0 >= o && (k === offs.length - 1 || b.s0 < offs[k + 1])), P = i >= 0 ? b.base.pieces[i] : null;
-  if (!P || P.type !== 'road' || !Number.isFinite(delta)) return delta;
-  const b0 = D.channelAt(P, 'phi', Math.min(P.length, Math.max(0, b.s0 - offs[i]))).v, TURN = 2 * Math.PI, w = (b0 + delta) % TURN;
-  return Math.abs(b0 + delta) < TURN ? delta : w - b0;
-}
+// A BANK DRAG IS APPLIED AS GIVEN, past a full turn too (D677 (2), his answer 6 of 2026-11-27 01:11: lighthouse exo_memory/briefs/t180_unmakeable_shapes.md:68).
+// Sculpt's bank handle and the bank brush both reach brushTo below. From his 2026-10-06 rule (entered by 89b1859) until D677 (2), a drag that would take the bank at
+// its centre past one turn was sent on as the delta landing back within it (bankWithinTurn), so a piece rolling -340 -> -392 dragged by -10 unwound to -16 at the
+// drag's first step. Now the road rolls on, as a typed bank does (panel.js inHeadTurn); the handle's label still shows the bank within one turn (handles.js format, D259).
+// The ghost's bank handle and the extra bank handle do not come through here: they write the bank field or its rows, which lay in the head's turn since 2067c88
+// (panel.js inHeadTurn). Two holds at one turn stay there, his to rule on: the ghost handle crossing a full turn from inside one writes the field within one
+// turn, and the extra bank handle holds at one turn of its field (D641 R1, handles.js).
 const { close } = require('../../src/core/close.js');
 // a preview's overlap check (the middle delete's; Close's preview went in the one-press Close) builds the track's mesh and validates it as the export does (src/export/fromwords.js). It lives in
 // app/core/overlapjob.js, ONE pure function that the shell runs on the page (no runner given: tests) or that a Web Worker runs (app/core/overlapworker.js), so a preview never freezes the page
@@ -911,8 +906,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     brushTo(delta0) {
       const b = st.brush; if (!b) return set({ message: 'no brush drag is open' });
       if (b.closing) return set({ message: 'the lap is being closed again after this drag: a moment' });
-      const wrapped = b.channel === 'phi' ? bankWithinTurn(b, delta0) : delta0;   // the bank at the drag's centre keeps within one turn, its sign kept
-      const delta = b.sculpt && (Number.isInteger(b.sculptPiece) || b.ratioAt) ? wrapped / sculptRatio(b) : wrapped;   // so the middle of a Sculpt piece reads the value asked for
+      const delta = b.sculpt && (Number.isInteger(b.sculptPiece) || b.ratioAt) ? delta0 / sculptRatio(b) : delta0;   // so the middle of a Sculpt piece reads the value asked for; a bank as given, past a turn too (D677 (2))
       return attempt(() => {
         const t0 = now(), res = brushed(b, delta), d = res.doc, r = resolvedOf(d), ms = now() - t0;
         // the exact, cheap guard at every step: nothing the path is made of may have moved (the drag stays at its last good step)

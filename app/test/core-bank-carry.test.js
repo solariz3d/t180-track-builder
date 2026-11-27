@@ -2,15 +2,26 @@
 // THE BANK PAST A FULL TURN, TYPED (D677; plan lighthouse exo_memory/loop/plan_t180_floors_and_wrap_2026-11-26.md (b), rows W1, W2, G6, G7).
 // The user, 2026-11-26 23:00 (lighthouse exo_memory/briefs/t180_unmakeable_shapes.md:49-50): past a full turn the bank shown resets to 0 while the road carries
 // the extra degrees into the next turn. The SHOWN bank keeps within one turn (D259); a TYPED bank is laid as typed, in the head's own turn, so the road
-// rolls on into the next turn instead of unwinding. The drags (the ghost's bank handle, Sculpt's bank handle, the bank brush) keep his 2026-10-06 rule, unchanged.
+// rolls on into the next turn instead of unwinding. EVERY BANK DRAG LAYS IN THE HEAD'S TURN, past a turn too: the ghost's bank handle and the extra bank handle since
+// 2067c88, because they write the field and its rows (W4, W5 here; core-pieces-ui's D677 ghost row); Sculpt's bank handle and the bank brush since D677 (2), his
+// answer 6 of 2026-11-27 01:11 (briefs/t180_unmakeable_shapes.md:68; rows S1 to S3). (Corrected at D677 (2): until then this header said the drags kept his
+// 2026-10-06 rule; E's read of 2067c88 measured the ghost and extra handles already carrying.) Two holds at one turn stay, his to rule on: the ghost handle,
+// crossing a full turn from inside one, writes the field within one turn (350 + 20 lays 10, core-pieces-ui D259), and the extra bank handle holds at one turn of
+// its field (D641 R1, core-extra-bank-wind).
 // Rows (W1 to W4 seen red on t180-fresh landing-1126-batch f3cd425 before the change; G6 G7 guard what must not move, green before and after):
 //   W1  from a head at −340 a typed −392 lays −340 → −392 one way, its steepest roll within 10% of the core's own for that target; the field then shows −32. And the mirror
 //   W2  an extra bank row past −360 (−392 after −360) is laid, not refused, and the road ends at −392
 //   W3  from a head past one turn (−392, shown −32) a typed −60 lays −392 → −420: the head's whole turns are carried, never unwound
 //   W4  from a head past one turn the unused extra bank handle offers the field value (−60, not −420), and a drag on it lays in the head's turn (on f3cd425 the
 //       change came out at −60, absolute); it is also the row that catches the offer read in the wrong turn (core-bank-carry-mutation.test.js B5)
+//   W5  (D677 (2), a guard) with the bank flowing through its marks, from a head past one turn the unused extra bank handle offers the field's value (−60), not
+//       the head's turn (−420): the offer's base in the flow branch (f3cd425 offers −60 too; E's mutant F1, B9 in the harness, removed it unseen by every row)
 //   G6  Close on a wound lap (the bank −392 at the head) gives the seam it gave on f3cd425: the same document bytes
 //   G7  a document wound to −4π (TEST 1's −720°), saved and opened, is the same bytes; and every test track in test/fixtures round-trips byte-identical
+// D677 (2) rows (S1 to S3 seen red on l-bankcarry-a 2067c88 before the change):
+//   S1  a Sculpt bank drag of −10 on a piece rolling −340 → −392 moves its middle −366 → −376, each step by its share (2067c88: −16, unwound at the first step); the handle shows −16. And the mirror
+//   S2  a Sculpt bank drag across a full turn on a piece inside one turn (350 by +20) rolls on to 370, no step jumping round a turn (2067c88: wrapped to 10); the handle shows 10
+//   S3  the bank brush: by ±370 on upright road its centre rolls on to about ±370 (2067c88: ±10), +300 stays; a brush of −10 moves a piece at −366 exactly as its twin one turn up
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -61,7 +72,8 @@ async function mountPanel() {
   const pieces = () => shell.getState().history.present.pieces.length;
   /** Extend by the panel with the bank typed: the message when nothing was laid, else null */
   const lay = (bank, length = 150) => { const n = pieces(); type('length m', length); type('bank °', bank); button('Extend').onclick(); return pieces() > n ? null : msgText() || 'nothing laid, no message'; };
-  return { shell, panel, field, type, lay, msgText, pieces, head: () => shell.headState().phi / DEG };
+  const byAria = (a) => root.all().find((e) => e.attrs && e.attrs['aria-label'] === a) || null;
+  return { shell, panel, field, type, lay, msgText, pieces, byAria, head: () => shell.headState().phi / DEG };
 }
 /** the last piece's bank in degrees, every metre */
 const bankAlong = (shell) => { const d = shell.getState().history.present, P = d.pieces[d.pieces.length - 1], out = []; for (let s = 0; s <= P.length + 1e-9; s += 1) out.push(D.channelAt(P, 'phi', Math.min(s, P.length)).v / DEG); return out; };
@@ -122,6 +134,17 @@ test('W4: from a head past one turn, the unused extra bank handle offers the fie
   assert.ok(c && c.length === 1 && Math.abs(c[0].target / DEG + 440) < 1e-6, `the change is laid at −440, in the head's turn: ${JSON.stringify(c)}`);
 });
 
+for (const dir of [-1, 1]) {
+  test(`W5 (${dir < 0 ? '−' : '+'}, a guard): with the bank flowing through its marks, from a head at ${392 * dir} (shown ${32 * dir}) the unused extra bank handle offers the field's ${60 * dir}, not ${420 * dir}`, async () => {
+    const p = await mountPanel();
+    p.shell.commitDoc(extend(p.shell.getState().history.present, { length: 400, targets: { phi: 392 * dir * DEG } }));
+    p.type('length m', 300); p.type('bank °', 60 * dir);
+    const box = p.byAria('bank flows through its marks'); assert.ok(box, 'control: the flow box'); box.checked = true; box.onchange();
+    const x = p.panel.extraHandles().find((e) => e.field === 'bank' && e.unused); assert.ok(x, 'control: the unused extra bank handle is offered');
+    assert.ok(Math.abs(x.value - 60 * dir) < 1e-9, `it offers the field's value, ${60 * dir}: ${x.value}`);
+  });
+}
+
 // G6: the wound lap of core_close_banks_lap's lap() shape, its bank rolled to −360 on one straight and on to −392 on another, laid by the core; Close (closejob
 // runCloseBest, as the press runs it) joins the seam modulo whole turns. The digest is the closed document's as f3cd425 gave it, before this change
 const G6_SHA = '031cf9ad781e8b170b4e021b30f4a0f50726b066cf45dde419ac1f5b5081a249';
@@ -144,4 +167,56 @@ test('G7 (guard): a document wound to −4π (−720°), saved and opened, is th
   const dir = path.join(__dirname, '../../test/fixtures'), files = fs.readdirSync(dir).filter((f) => /\.(core2\.json|t180track)$/.test(f));
   assert.ok(files.length >= 10, `the test tracks are there (${files.length})`);
   for (const f of files) { const s = D.serialize(D.parse(fs.readFileSync(path.join(dir, f), 'utf8'))); assert.equal(D.serialize(D.parse(s)), s, `${f} round-trips byte-identical`); }
+});
+
+// ── D677 (2): SCULPT'S BANK DRAG CARRIES PAST A TURN (his answer 6 of 2026-11-27 01:11, lighthouse exo_memory/briefs/t180_unmakeable_shapes.md:68: a
+// Sculpt bank drag on a piece wound past a turn carries on, as typing does, instead of unwinding). Sculpt's bank handle and the bank brush both go through
+// coreshell.js brushTo; until D677 (2) it sent on the delta that lands within one turn (his 2026-10-06 rule, 89b1859), so a piece rolling −340 → −392 dragged
+// by −10 unwound to −16. The handle's LABEL still shows the bank within one turn (D259, handles.js format).
+/** a shell whose third piece (index 2, 150 m) rolls from `a` to `b` degrees, selected in Sculpt; its middle bank in degrees */
+async function sculptOn(a, b) {
+  const s = await createCoreShell({ autosaveMs: 0 });
+  s.extend({ length: 100, family: 'bowl' }); s.extend({ length: 600, targets: { phi: a * DEG } }); s.extend({ length: 150, targets: { phi: b * DEG } });
+  assert.equal(s.getState().message, null, s.getState().message);
+  s.setSculpt(true); s.selectPiece(2);
+  return s;
+}
+const middle = (s) => s.sculptInfo().values.phi;
+/** a Sculpt bank drag of `by` degrees in 20 even steps, as a pointer moving: the middle after each step */
+const dragSculpt = (s, by) => { const out = []; s.beginSculpt({ channel: 'phi' }); for (let k = 1; k <= 20; k++) { s.sculptTo((by * k / 20) * DEG); out.push(middle(s)); } s.endSculpt(); return out; };
+const HDL = require('../core/handles.js');
+
+for (const dir of [-1, 1]) {
+  test(`S1 (${dir < 0 ? '−' : '+'}): a Sculpt bank drag of ${10 * dir} on a piece rolling ${340 * dir} → ${392 * dir} moves its middle ${366 * dir} → ${376 * dir}, every step by its own share, never round a turn; the handle shows ${16 * dir}`, async () => {
+    const s = await sculptOn(340 * dir, 392 * dir), b0 = middle(s);
+    assert.ok(Math.abs(b0 - 366 * dir) < 1e-6, `control: the middle is at ${366 * dir} (got ${b0})`);
+    const steps = dragSculpt(s, 10 * dir);
+    steps.forEach((v, k) => assert.ok(Math.abs(v - (b0 + 10 * dir * (k + 1) / 20)) < 1e-3, `step ${k + 1}: the middle is ${v}, want ${b0 + 10 * dir * (k + 1) / 20}`));
+    assert.equal(HDL.format('bank', middle(s)), `bank ${(16 * dir).toFixed(2)}°`, 'the handle shows the bank within one turn (D259)');
+  });
+}
+test('S2: a Sculpt bank drag across a full turn on a piece inside one turn (350 by +20, −350 by −20) rolls on to ±370, with no step jumping round a turn; the handle shows ±10', async () => {
+  for (const [at, by] of [[350, 20], [-350, -20]]) {
+    const s = await sculptOn(at, at), b0 = middle(s);
+    assert.ok(Math.abs(b0 - at) < 1e-6, `control: the middle is at ${at} (got ${b0})`);
+    const steps = dragSculpt(s, by);
+    steps.forEach((v, k) => assert.ok(Math.abs(v - (b0 + by * (k + 1) / 20)) < 1e-3, `${at} by ${by}, step ${k + 1}: the middle is ${v}, want ${b0 + by * (k + 1) / 20}`));
+    assert.equal(HDL.format('bank', middle(s)), `bank ${(Math.sign(by) * 10).toFixed(2)}°`, 'the handle shows the bank within one turn (D259)');
+  }
+});
+test('S3: the bank brush carries too: on upright road by +370 or −370 its centre rolls on to about ±370 (not ±10), +300 stays about 300; and on a piece wound to −366 a brush of −10 moves it exactly as it moves the same ramp one turn up (−6), on past −366', async () => {
+  // the brush fits its change into the control points: its gain at the centre is about 0.985 (core-sculpt.test.js), so each check is within 3% of the change sent
+  const centre = (s, piece, at) => D.channelAt(s.getState().history.present.pieces[piece], 'phi', at).v / DEG;
+  for (const by of [370, -370, 300]) {
+    const s = await createCoreShell({ autosaveMs: 0 }); s.extend({ length: 300, family: 'bowl' });
+    s.beginBrush({ mode: 'rate', channel: 'phi', s0: 150, r: 100 }); s.brushTo(by * DEG); s.endBrush();
+    const got = centre(s, 0, 150); assert.ok(Math.abs(got - by) <= 0.03 * Math.abs(by), `a brush by ${by} on upright road: its centre is ${got}, want about ${by}`);
+  }
+  // the wound ramp (−340 → −392, middle −366) against its twin one turn up (20 → −32, middle −6): the brush's own gain here is 0.94 on both (measured), so the
+  // row asks for the SAME change on both, to 1e-6, and the wound one on past −366; unwound (2067c88) it came out near −21
+  const brushed = async (a, b) => { const s = await sculptOn(a, b); s.setSculpt(false); const b0 = centre(s, 2, 75); s.beginBrush({ mode: 'rate', channel: 'phi', s0: 100 + 600 + 75, r: 60 }); s.brushTo(-10 * DEG); s.endBrush(); return { b0, got: centre(s, 2, 75) }; };
+  const wound = await brushed(-340, -392), twin = await brushed(20, -32);
+  assert.ok(Math.abs(wound.b0 + 366) < 1e-6 && Math.abs(twin.b0 + 6) < 1e-6, `control: the middles are at −366 and −6 (got ${wound.b0}, ${twin.b0})`);
+  assert.ok(Math.abs((wound.got - wound.b0) - (twin.got - twin.b0)) < 1e-6, `the wound piece moved ${wound.got - wound.b0}, its twin one turn up ${twin.got - twin.b0}`);
+  assert.ok(wound.got < -366 && twin.got - twin.b0 < -9, `the brush of −10 rolls the wound piece on (to ${wound.got})`);
 });

@@ -932,6 +932,23 @@ test('D259: dragging the bank handle from 350 by about +20 gives about 10 (not 3
   }
 });
 
+// D677 (2) (E's read of 2067c88, his E1): the ghost's bank handle writes the field within one turn (panel.js, the handles host's apply: show(HD.wrapTurn(value))),
+// and since 2067c88 the field is laid in the head's own turn (inHeadTurn), so from a head past a turn the handle's drag rolls on. Through the handle's own path
+// (a pointer drag on the fake stage). Red on f3cd425 (the road unwinds to the field's value), green since 2067c88; the head is laid by the core so both can run it
+test('D677 (ghost handle): from a head past one turn (−392, shown −32), a drag on the ghost\'s bank handle writes the field within one turn and Extend lays the road in the head\'s turn, one way, never back round', async () => {
+  const P1 = await handlePanel(), { shell } = P1, bank = fieldOf(P1, 'bank °');
+  shell.commitDoc(extend(shell.getState().history.present, { length: 400, targets: { phi: -392 * Math.PI / 180 } })); P1.frame(); P1.frame();
+  assert.ok(Math.abs(headBank(shell) + 392) < 1e-6, `control: the head at −392 (${headBank(shell)})`);
+  bank.value = '-32'; bank.oninput(); P1.frame();   // the field as it shows that head
+  dragBy(P1, 'bank:1', -10); P1.frame();
+  const v = Number(bank.value); assert.ok(v < -32 && v > -360, `the drag wrote the field within one turn, past −32: ${bank.value}`);
+  const n = shell.getState().history.present.pieces.length; P1.button('Extend').onclick(); P1.frame();
+  assert.equal(shell.getState().history.present.pieces.length, n + 1, `laid: ${shell.getState().message}`);
+  assert.ok(Math.abs(headBank(shell) - (v - 360)) < 0.11, `laid in the head's turn: the head is ${headBank(shell)} for the field's ${v}`);
+  const d = shell.getState().history.present, P = d.pieces[d.pieces.length - 1]; let prev = Infinity;
+  for (let s = 0; s <= P.length; s += 1) { const b = D.channelAt(P, 'phi', Math.min(s, P.length)).v * 180 / Math.PI; assert.ok(b <= prev + 1e-9, `one way, never back round: ${b} after ${prev} at ${s} m`); prev = b; }
+});
+
 // 2026-10-14 (stretching a long piece lagged): a piece is cut into equal chords of about 2 m, so a length that is not a whole 2 m changes every chord on every move and
 // the cheap ghost could reuse nothing. While the LENGTH handle is dragged the preview is built at the nearest whole 2 m; the release builds the exact length.
 test('row 18b: a length drag previews whole 2 m, and the release previews the exact length the field shows', async () => {

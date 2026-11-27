@@ -1,5 +1,5 @@
 // core-bank-carry-mutation.test.js: node --test app/test/core-bank-carry-mutation.test.js   (under the heavy-run lock, --max-old-space-size=4096)
-// D677, the bank past a full turn: each mutant changes app/core/panel.js in ONE way (one exact string replacement, in a temporary copy of src/, tools/, the
+// D677, the bank past a full turn: each mutant changes app/core/panel.js (B7, B8: app/core/coreshell.js) in ONE way (one exact string replacement, in a temporary copy of src/, tools/, the
 // app folders the panel loads and test/fixtures), and the rows run against the copy: app/test/core-bank-carry.test.js, and for B6 the amended D641 (f) row in
 // app/test/core-extra-bank-wind.test.js. "Applied" means the replaced string occurs EXACTLY once; "caught" means at least one test FAILED on the mutant.
 // The CONTROL runs the files whole on an unmutated copy, so a copy that is missing a file cannot make every mutant look caught. Built as
@@ -12,6 +12,11 @@ const IR = require('../../test/inner_run.js');   // D352: a crashed inner run re
 const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..', '..');
 const P = 'app/core/panel.js';
+// D677 (2): Sculpt's bank handle and the bank brush send the delta as given (coreshell.js brushTo); WRAP_BACK puts back the delta that lands within one turn,
+// bankWithinTurn as it was at 2067c88 (his 2026-10-06 rule), for the drags `when` names
+const C = 'app/core/coreshell.js';
+const CARRY = 'const delta = b.sculpt && (Number.isInteger(b.sculptPiece) || b.ratioAt) ? delta0 / sculptRatio(b) : delta0;';
+const WRAP_BACK = (when) => `const wrapped = ${when} ? ((d) => { const offs = SC.pieceOffsets(b.base), i = offs.findIndex((o, k) => b.s0 >= o && (k === offs.length - 1 || b.s0 < offs[k + 1])), P = i >= 0 ? b.base.pieces[i] : null; if (!P || P.type !== 'road' || !Number.isFinite(d)) return d; const b0 = D.channelAt(P, 'phi', Math.min(P.length, Math.max(0, b.s0 - offs[i]))).v, TURN = 2 * Math.PI, w = (b0 + d) % TURN; return Math.abs(b0 + d) < TURN ? d : w - b0; })(delta0) : delta0; const delta = b.sculpt && (Number.isInteger(b.sculptPiece) || b.ratioAt) ? wrapped / sculptRatio(b) : wrapped;`;
 
 const MUTANTS = [
   { id: 'B1 a typed bank is wrapped within one turn again (the rule before D677)', pattern: 'W1', edits: [[P, '!Number.isFinite(T) ? t : inHeadTurn(T); };', "!Number.isFinite(T) ? t : Math.abs(T) === 360 ? String(T) : String(HD.wrapTurn(T)); };"]] },
@@ -21,9 +26,14 @@ const MUTANTS = [
   { id: "B5 the extra bank's offer is read in absolute degrees, not the field's turn", pattern: 'W4', edits: [[P, "const base = corner ? 0 : f === 'bank' ? Number(last ? last.target / DEG : bankTarget()) - headTurns() : last", "const base = corner ? 0 : f === 'bank' ? Number(last ? last.target / DEG : bankTarget()) : last"]] },
   { id: 'B6 a bank typed past one turn is written back into the field wrapped again (D641 (f) before D677)', pattern: 'D641 \\(f\\)', edits: [[P, '  // (bankTarget), so the field keeps what was typed until Extend, and then shows the head within one turn',
     "  // (bankTarget), so the field keeps what was typed until Extend, and then shows the head within one turn\n  { const prev = bank.onchange; bank.onchange = (e) => { const T = Number(bank.value); if (bank.value !== '' && Number.isFinite(T) && Math.abs(T) > 360) bank.value = show(HD.wrapTurn(T)); return prev(e); }; }"]] },
+  { id: 'B7 a Sculpt bank drag past a turn is wrapped within one turn again (his 2026-10-06 rule, before D677 (2))', pattern: 'S1', edits: [[C, CARRY, WRAP_BACK("b.channel === 'phi'")]] },
+  { id: 'B8 the bank brush alone is wrapped within one turn again (Sculpt\'s handle carries)', pattern: 'S3', edits: [[C, CARRY, WRAP_BACK("b.channel === 'phi' && !b.sculpt")]] },
+  { id: "B9 the flowing bank's offer is read in absolute degrees (E's mutant F1 on 2067c88: the flow branch's - headTurns() removed)", pattern: 'W5', edits: [[P, 'bankTarget()) - headTurns(), ...ST.styleOf(f) });', 'bankTarget()), ...ST.styleOf(f) });']] },
 ];
-// LEFT OUT: the flowing bank's base (offersAt's flow branch, "- headTurns(), ...ST.styleOf(f) });"). No row lays a flowing bank from a head past one turn;
-// the D641 R1 hold and the drags (D259) are his 2026-10-06 rule, unchanged by D677, and their own rows (core-pieces-ui, core-sculpt, core-extra-bank-wind) guard them
+// (The flowing bank's base, offersAt's flow branch, was LEFT OUT here until D677 (2): no row caught it, E's F1. It is B9 now, caught by W5.)
+// From a head past a turn every bank drag lays in the head's turn: the ghost and extra handles since 2067c88 (they write the field and its rows; W4, W5 and
+// core-pieces-ui's D677 ghost row), Sculpt's bank handle and the bank brush since D677 (2) (B7, B8; core-sculpt's two D259 rows amended). Two holds at one
+// turn stay, guarded by their own rows: the ghost handle crossing a full turn from inside one (core-pieces-ui D259) and the extra handle's hold (D641 R1)
 const FILES = ['core-bank-carry.test.js', 'core-extra-bank-wind.test.js'];
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-bankcarry-mut-'));

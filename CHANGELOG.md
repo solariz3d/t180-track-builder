@@ -31,9 +31,18 @@ All notable changes to this project are recorded here. The format follows
   on to −392 and the field then shows −32; before, the panel wrapped the −392 to −32 and the road rolled 308° back the other way, at up to 2.2 °/m on a
   150 m piece where the core's own is 0.37 °/m. From there a typed −60 lays −420. A 400 typed from upright now rolls 400, not 40, and a −654.70 typed and
   committed stays −654.70 in the field. An extra bank row of −392 after −360 is laid; it was refused for room (`BAD_SECOND`) because it was sent as −32.
-  Within one turn nothing changes: from −340 a typed −32 still means −32. The drags (the ghost's bank handle, the extra bank's, Sculpt's and the bank
-  brush) keep his 2026-10-06 rule unchanged. Stored tracks are untouched: of his 26 saved tracks, every one opens byte-identical and only the one wound past
+  Within one turn nothing changes: from −340 a typed −32 still means −32. The ghost's bank handle and the extra bank handle write the field and its rows,
+  so they carry the same way: from a head at −392, the ghost handle's −42 lays −402, where it unwound to −42. (This entry first said those drags kept his
+  2026-10-06 rule; a read of the change measured them carrying, and the sentence is corrected here.) Stored tracks are untouched: of his 26 saved tracks, every one opens byte-identical and only the one wound past
   a turn types differently, rolling on where it used to unwind. To go back, revert the commit; the core and the file format are not changed.
+- **A Sculpt bank drag and the bank brush carry past a full turn too.** He answered on 2026-11-27 that they should, as typing does. Sculpt's bank
+  handle and the bank brush sent on the change that lands back within one turn (his 2026-10-06 rule), so a piece rolling −340 → −392 dragged by −10
+  unwound to −16 at the drag's first step, and a drag from 350 jumped to 0 as it crossed 360. They now send the change as given: −366 by −10 is −376,
+  350 by +20 rolls on to 370, and a brush by +370 rolls on to about 370. The handle's label still shows the bank within one turn (−376 shows −16). So
+  from a head past a turn every bank drag now lays in the head's turn: the ghost and extra handles since the change above, Sculpt's handle and the brush
+  since this one. Two holds at one turn are unchanged, for his ruling: the ghost handle, crossing a full turn from inside one, still writes the field
+  within one turn (350 + 20 lays 10), and the extra bank handle holds at one turn of its field. His saved tracks open, save and take the same Sculpt drags
+  and brushes as before (none is wound past a turn). To go back, revert the commit.
 
 ### Fixed
 - The File and Edit menus now open rightwards from their titles at every window width, as the leftmost menus of a bar usually do. They opened leftwards above
