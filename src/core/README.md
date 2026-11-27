@@ -173,7 +173,7 @@ Three more channels, each carried only by the pieces that use it (a flag on the 
 - **The cross-section** (adapter.js `baseProfileOf`): the middle profile at width w, its right-side knots (u < 0) moved out by (w + wd)/w with their angles kept; the left side and the driven line are untouched (the path is the same sample for sample). A split piece is built by `xsecSegments`.
 - **Refused by name:** a right side of 0 m or less at a control point (BAD_WIDTH), a split tube (BAD_TUBE: a tube's section is one circle), `split` anything but true or absent.
 - **Extend:** `targets.wd`, `first.wd`, `changes.wd` and `transition.wd` as for w (its change floor is w's, 40 m); a piece after a split one stays split while its wd is not 0; a wd brought back to 0 ends there exactly (its last two control points 0), so the next piece is not split. The panel's "right width m" is typed as the right side's own width and sent as its difference from the width in force.
-- **close()** joins wd round the seam when both ends are split, and refuses a split end against an unsplit one whose wd or slope is past 0.01 (`SPLIT_SEAM`). **A saved piece** (piece.js) cannot carry wd yet: a run with a split piece is refused (`SPLIT_RUN`).
+- **close()** joins wd round the seam when both ends are split, and refuses a split end against an unsplit one whose wd or slope is past 0.01 (`SPLIT_SEAM`). **A saved piece** (piece.js) cannot carry wd yet: a run with a split piece is refused (`SPLIT_RUN`), and a road run added at a head whose wd the joint would step is refused in the panel's words (`SPLIT_HEAD`, `onlyRightWidth`), not as the joint's "wd starts at 0".
 
 ## Extend's `transition`: one ramp for every channel, or one per channel (`extend.js`, D194b, ref 09 §9)
 

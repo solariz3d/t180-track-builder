@@ -48,6 +48,9 @@ const MUTANTS = [
   { id: 'R23 close joins a split end to an unsplit one', edits: [[CL, 'if (!!F.split !== !!L.split) {', 'if (false) {']] },
   { id: 'R24 a run with a right width is saved', edits: [[PI, 'if (roads.some(D.isWidthSplit)) throw', 'if (false) throw']] },
   { id: 'R25 Sharp probes a split head with its sides equal', edits: [[SH, 'if (from.wd && from.wd.v) first.wd = from.wd.v;', '']] },
+  // L258 F1 (pane O's read): a saved piece added at a split head, refused in his words
+  { id: 'R26 a saved piece at a split head is refused in the stored channel\'s name', edits: [[PI, "if (e.code === 'JOINT' && onlyRightWidth(doc, head, run))", 'if (false)']] },
+  { id: 'R27 any joint refused at a split head is said as the right width\'s', edits: [[PI, ' !== null && D.jointProblem({ ...head, wd: { v: D.OPT_DEFAULT.wd, m: 0 } }, P, kind) === null;', ' !== null;']] },
   // the panel and the shell
   { id: 'P1 the right width is sent as typed, not as its difference from the width', edits: [[PA, 'targets.wd = wR - ref;', 'targets.wd = wR;']] },
   { id: 'P2 a right width\'s change is sent against the head\'s width, not the width at its mark', edits: [[PA, 'return L.length ? L[L.length - 1].target : targets.w', 'return false ? 0 : targets.w']] },

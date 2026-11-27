@@ -176,6 +176,27 @@ test('a saved piece: a run with a right width is refused by name (SPLIT_RUN), ne
   assert.ok(!/"wd"/.test(PC.serialize(ok)), 'no wd in a plain saved piece');
 });
 
+// L258 F1 (pane O's read, handback/p-l258-read-right-width-O_2026-11-27.md:102): a saved piece added where the right side has its own width was refused in the
+// stored channel's name ("JOINT: piece 3 (p4): wd starts at 0, the previous piece ends at 3.5 ..."), where his field is "right width m". Nothing was laid wrong.
+test('a saved piece added at a head whose right side has its own width is refused in his words (SPLIT_HEAD), and is laid once the right width is back at the width', () => {
+  const plain = PC.saveRun(road(), 1, 1, { name: 'plain' });
+  const head = extend(road(), { length: 100, transition: { wd: 5 }, targets: { wd: STEP } });
+  for (const mirror of [false, true]) {
+    const e = refusal(() => PC.insert(head, plain, { mirror }));
+    assert.equal(e && e.code, 'SPLIT_HEAD', `${mirror ? 'mirrored: ' : ''}${e && e.message}`);
+    assert.match(e.message, /right width 22\.6 m, width 19\.1 m/, 'the head\'s two widths, in his field\'s name');
+    assert.match(e.message, /Extend with right width m set to the width \(19\.1\), then add the piece/, 'what lets the piece in');
+    assert.doesNotMatch(e.message, /\bwd\b/, 'not the stored channel\'s name');
+  }
+  const back = extend(head, { length: 100, transition: { wd: 5 }, targets: { wd: 0 } });
+  assert.equal(PC.insert(back, plain).pieces.length, back.pieces.length + 1, 'laid once the right width is back at the width');
+  // only the right width's own refusal is said this way: an edgeless piece at an edged split head is still refused on its edge, which the right width does not cure
+  const edged = extend(extend(D.createDoc('edged'), { length: 120, first: { w: W, e: 10 }, targets: { kh: 0 } }), { length: 100, transition: { wd: 5 }, targets: { wd: STEP } });
+  const e2 = refusal(() => PC.insert(edged, plain));
+  assert.equal(e2 && e2.code, 'JOINT', e2 && e2.message);
+  assert.match(e2.message, /: e starts at 0/);
+});
+
 test('the water: a stream poured at u -10.5 on the stepped side runs to the right side\'s own rim, -11.3 m, where it spills', () => {
   const d = stepped(), segs = A.toSegments(d), path = A.toPath(d).path;
   const F = WT.surfaceFrom({ samples: path.samples, profileAt: (m) => segs[m.seg].profile });

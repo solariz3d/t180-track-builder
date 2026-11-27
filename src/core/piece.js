@@ -231,6 +231,7 @@ function continued(p, head) {
  * The run added at the open end of `doc`: a NEW document (the old one is untouched), each piece through D.appendPiece so the document's own checks have the last word. `mirror`
  * adds the left/right mirror image. `keepStart` adds the pieces exactly as saved, with their own start values, instead of continuing from the head (refused by name, PIECE_START, when
  * they do not meet it). On an empty track the run goes in as saved. A legacy piece cannot follow a cup or a tube (Extend never makes that either): PIECE_KIND.
+ * A road run cannot follow a head whose right side has its own width (a saved piece has no right width yet): SPLIT_HEAD, in the panel's words (onlyRightWidth).
  */
 function insert(doc, piece, { mirror = false, keepStart = false } = {}) {
   const p0 = checkPiece(piece), p = mirror ? mirrored(p0) : p0, head = D.endState(doc);
@@ -240,7 +241,23 @@ function insert(doc, piece, { mirror = false, keepStart = false } = {}) {
   try { return add(absolute(p)); } catch (e) { if (e.code !== 'JOINT') throw e; }   // already joins the head (the same start): exactly as saved
   const first = p.pieces.find(isRoad);
   if (D.kindOf(first) === 'legacy' && D.endKind(doc) !== 'legacy') throw err('PIECE_KIND', `a legacy piece cannot be added after a ${D.endKind(doc)} piece (the track would have to change cross-section back, which Extend cannot do either); save the run as a ${D.endKind(doc)} piece`);
-  return add(continued(p, head));
+  const run = continued(p, head);
+  try { return add(run); } catch (e) {
+    if (e.code === 'JOINT' && onlyRightWidth(doc, head, run)) { const w = +head.w.v.toFixed(2); throw err('SPLIT_HEAD', `the road's right side has its own width at the head (right width ${+(head.w.v + head.wd.v).toFixed(2)} m, width ${w} m), which a saved piece cannot carry on yet; Extend with right width m set to the width (${w}), then add the piece`); }
+    throw e;
+  }
+}
+/**
+ * D677 (b), L258 F1 (pane O's read): a saved piece has no right width (its format, t180b.piece/1, predates wd), so a road run added straight onto a head whose right side has
+ * its own width starts at wd 0 against the head's, and the document's joint check names the stored channel ("wd starts at 0 ..."), where his field is "right width m". True when
+ * that is the joint's ONLY fault: the run's first piece meets the head (the track's last piece, a road) in every channel once the head's wd is the run's 0. A run that starts with
+ * a jump lands as a landing does, with no wd carried, and is laid. Carrying wd through the added piece, as Extend does, would change what is laid: not done (he has not been asked).
+ */
+function onlyRightWidth(doc, head, run) {
+  const last = doc.pieces[doc.pieces.length - 1], P = run[0];
+  if (!last || !isRoad(last) || !isRoad(P)) return false;
+  const kind = D.kindOf(last);
+  return D.jointProblem(head, P, kind) !== null && D.jointProblem({ ...head, wd: { v: D.OPT_DEFAULT.wd, m: 0 } }, P, kind) === null;
 }
 
 // ── delete ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
