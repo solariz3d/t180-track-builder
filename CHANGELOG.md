@@ -12,8 +12,10 @@ All notable changes to this project are recorded here. The format follows
   width brush); any other number is measured from the width in force, to the millimetre. It is a new optional
   channel, `wd` (the right side's width less the width), written only by a piece that uses it; a track with one is saved as `t180b.core/7`.
   **Every track made before opens and saves byte for byte** (his answer, 2026-11-26: "old tracks stay the same, it allows for new tracks to have
-  the individual sides of width"). An older builder refuses a core/7 file by name rather than open it wrong; to go back, set the right width back to
-  the width (the piece then writes no `wd`, and the file is core/4, /5 or /6 again). Not yet: a saved piece cannot carry a right width (a run with one
+  the individual sides of width"). An older builder refuses a core/7 file by name rather than open it wrong. To go back, Undo or delete every
+  piece whose right side has its own width; the file is then core/4, /5 or /6 again. Setting the right width back to the width ends the step, and
+  the pieces laid after that write no `wd`; but the piece that sets it back still writes `wd` (it ramps back), so the file stays core/7 while that
+  piece or any stepped one is in it (the panel cannot change a placed piece's right width). Not yet: a saved piece cannot carry a right width (a run with one
   is refused, `SPLIT_RUN`), and a tube cannot have one (BAD_TUBE). For the same reason a saved piece is not added where the road's right side has
   its own width (`SPLIT_HEAD`, which names the right width and the width there): Extend with right width m set to the width first, then add the
   piece. A saved piece that starts with a jump is still added there, its landing one width, as the landing after a Jump is.

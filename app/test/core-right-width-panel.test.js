@@ -93,16 +93,17 @@ function memStorage(seed) {
   const st = { docs: new Map(Object.entries(seed)), pieces: new Map() };
   return Object.assign(st, { saveDoc: async (n, t) => { st.docs.set(n, t); }, openDoc: async (n) => st.docs.get(n), listDocs: async () => [...st.docs.keys()], saveUndo: async () => {}, openUndo: async () => null,
     savePiece: async (n, t) => { st.pieces.set(n, t); }, openPiece: async (n) => st.pieces.get(n), listPieces: async () => [...st.pieces.keys()], saveRecipe: async () => {}, openRecipe: async () => null,
-    saveAutosave: async () => {}, openAutosave: async () => null, clearAutosave: async () => {} });
+    saveAutosave: async () => {}, openAutosave: async () => null, clearAutosave: async () => {}, backupDoc: async () => 'backup' });   // backupDoc: a middle delete copies the track first (L258 F3's row)
 }
 const roadAt = (w) => extend(extend(D.createDoc('f2'), { length: 120, first: { w }, targets: { kh: 0 } }), { length: 300, transition: 60, targets: { kh: 1 / 400, phi: 8 * Math.PI / 180 } });
-/** The two heads O's read names: a width typed with four decimals, and one the width brush left (19.1 brushed +1.37 at the head); `split` adds the right side's 3.5 m step first. */
+/** The two heads O's read names: a width typed with four decimals, and one the width brush left (19.1 brushed +1.37 at the head); `split` adds the right side's 3.5 m step first.
+ *  (L258 F3) 'round': a width of 19.1, which the field shows whole. */
 async function headOn(kind, { split }) {
   let d = roadAt(kind === 'typed' ? 19.1346 : 19.1);
   if (split) d = extend(d, { length: 100, transition: { wd: 5 }, targets: { wd: 3.5 } });
   const storage = memStorage({ 'eq-f2': D.serialize(d) }), s = await createCoreShell({ brushFn: null, storage, autosaveMs: 0 }); await s.open('f2');
   if (kind === 'brushed') { const L = s.getState().history.present.pieces.reduce((a, P) => a + P.length, 0); s.beginBrush({ mode: 'rate', channel: 'w', s0: L - 5, r: 20 }); s.brushTo(1.37); s.endBrush(); }
-  assert.notEqual(shown2(s.headState().w), s.headState().w, `${kind}: the head's width has more than two decimals (${s.headState().w})`);
+  if (kind !== 'round') assert.notEqual(shown2(s.headState().w), s.headState().w, `${kind}: the head's width has more than two decimals (${s.headState().w})`);
   await storage.savePiece('plain', PC.serialize(PC.saveRun(extend(D.createDoc('p'), { length: 60, first: { w: 19.1 }, targets: { kh: 1 / 300 } }), 0, 0, { name: 'plain' })));
   return s;
 }
@@ -133,7 +134,8 @@ test('L258 F2: SPLIT_HEAD\'s advice, typed as it is written, lays the piece, on 
   }
 });
 
-test('L258 F2: the CHANGELOG\'s way back holds on such a width: a piece laid with the right width set to the width as shown writes no wd, and the file keeps its schema, not core/7', async () => {
+// (L258 F3, pane O's read: this row's first name, "the CHANGELOG's way back holds on such a width", claimed more than it proves; its road never had a right width)
+test('L258 F2: a road that never had a right width keeps its schema: on such a width, a piece laid with the right width typed as the width is shown writes no wd, and the file is not core/7', async () => {
   for (const kind of ['typed', 'brushed']) {
     const s = await headOn(kind, { split: false }), before = JSON.parse(D.serialize(s.getState().history.present)).schema;
     s.extend(extendOptions({ ...BLANK, length: 100, widthR: String(shown2(s.headState().w)), head: s.headState() }));
@@ -141,5 +143,29 @@ test('L258 F2: the CHANGELOG\'s way back holds on such a width: a piece laid wit
     assert.equal(o.pieces[o.pieces.length - 1].channels.wd, undefined, `${kind}: the new piece writes no wd`);
     assert.equal(o.schema, before, `${kind}: the schema it had (${before})`);
     assert.notEqual(o.schema, 't180b.core/7');
+  }
+});
+
+// L258 F3 (pane O's read, handback/p-l258-read-right-width-O_2026-11-27.md:281): the CHANGELOG said "to go back, set the right width back to the width (the piece then
+// writes no wd, and the file is core/4, /5 or /6 again)". On a road with a step it is not so, at any width: the step and the piece that sets it back keep wd, so the
+// file stays core/7 until they are undone or deleted (the panel has no way to change a placed piece's right width).
+test('L258 F3: the way back on a road with a step: still core/7 after the right width is set back to the width, at any width; the old schema again once the stepped pieces are deleted, or undone', async () => {
+  for (const kind of ['round', 'typed', 'brushed']) {
+    const s = await headOn(kind, { split: false }), doc = () => s.getState().history.present, schemaOf = () => JSON.parse(D.serialize(doc())).schema;
+    const before = schemaOf(), n0 = piecesOf(s), shownNow = () => shown2(s.headState().w);   // the width as his field shows it at the head, at each press
+    assert.notEqual(before, 't180b.core/7', `${kind}: a road with no right width`);
+    s.extend(extendOptions({ ...BLANK, length: 100, widthR: String(shown2(shownNow() + 3.5)), head: s.headState() }));   // the step: the right side 3.5 m over the width
+    s.extend(extendOptions({ ...BLANK, length: 100, widthR: String(shownNow()), head: s.headState() }));   // the right width set back to the width
+    s.extend(extendOptions({ ...BLANK, length: 100, head: s.headState() }));   // and a piece after it
+    const o = JSON.parse(D.serialize(doc()));
+    assert.deepEqual(o.pieces.slice(n0).map((P) => P.channels.wd !== undefined), [true, true, false], `${kind}: the step and the piece that sets it back write wd, the piece after them none`);
+    assert.equal(o.schema, 't180b.core/7', `${kind}: set back, the file is still core/7`);
+    s.selectPiece(n0); s.selectPiece(n0 + 1, { extend: true }); s.deleteSelection(); await s.applyDelete();
+    assert.equal(piecesOf(s), n0 + 1, `${kind}: the two stepped pieces deleted: ${s.getState().message}`);
+    assert.equal(schemaOf(), before, `${kind}: deleted, ${before} again`);
+    s.undo(); assert.equal(schemaOf(), 't180b.core/7', `${kind}: the delete undone, core/7 again`);
+    s.undo(); s.undo(); s.undo();
+    assert.equal(piecesOf(s), n0, `${kind}: the three pieces undone`);
+    assert.equal(schemaOf(), before, `${kind}: undone, ${before} again`);
   }
 });
