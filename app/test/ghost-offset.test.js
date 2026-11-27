@@ -10,6 +10,10 @@
 //   3  a road that ends at rest (no re-laid tail) with a sideways grab: the copy-and-extend ghost, which placing matches, as before (a control; green before the mend too)
 //   4  (the chair's addition, from B's read 2.4: 1.94 m after an Even to the head) a FLAT road with a sideways grab whose window reaches the head, so the head's middle moved:
 //      placing lays the next piece from the offset head (the new piece carries the head's l), and its ghost, a copy-and-extend one with no re-laid tail, lies there too
+// The other ghost senders, the same missing lift (the chair's ruling on this pane's hand-back section 8, packet "Added 16:3x"), each on row 4's road (the head moved 1.66 m sideways):
+//   5  the Jump ghost (candidateJump) lies where jump() places the jump
+//   6  the undo ghost: Extend, then Undo; the undone piece's ghost lies where the piece was
+//   7  the saved piece's ghost (showPiece, a piece in a storage held in memory) lies where placePiece lays it
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -86,5 +90,50 @@ test('N5 4: on a flat road with a sideways grab that moves the head\'s middle, t
   s.extend({ family: 'bowl', ...NEXT });
   const after = modelOf(s.getState().resolved).path, f = farthest(ghost, after, n);
   assert.ok(f.worst <= 1e-9, `the new piece's ghost lies where it is placed: ${f.worst.toFixed(4)} m off at s ${f.at.toFixed(0)}`);
+  assert.ok(f.head <= 1e-9, `the ghost's head is where placing puts it: ${f.head.toFixed(4)} m off`);
+});
+
+// ---- the other ghost senders, on row 4's road
+const FLAT_HEAD = [[{ length: 1000 }, { length: 1000 }], { channel: 'lateral', s0: 1980, r: 60, delta: 2 }];
+/** A storage held in memory with one saved piece, `name`: a 100 m straight cut from a plain road (piece.js saveRun, as Save as piece writes it). Only what showPiece and placePiece read. */
+async function storeWithPiece(name) {
+  const PC = require('../../src/core/piece.js'), src = await createCoreShell({ autosaveMs: 0 });
+  src.extend({ family: 'bowl', length: 300 }); src.extend({ family: 'bowl', length: 100 });
+  const pieces = new Map([[name, PC.serialize(PC.saveRun(src.getState().history.present, 1, 1, { name }))]]);
+  return {
+    listPieces: async () => [...pieces.keys()],
+    openPiece: async (n) => { if (!pieces.has(n)) throw new Error(`could not read the piece "${n}": not found`); return pieces.get(n); },
+    backupDoc: async () => 'b', saveUndo: async () => {}, openUndo: async () => null, saveAutosave: async () => {}, clearAutosave: async () => {}, openAutosave: async () => null,
+  };
+}
+
+test('N5 5: on a road whose head a grab moved, the Jump ghost lies where Jump places the jump', async () => {
+  const s = await placed(...FLAT_HEAD), st = s.getState(), n = st.resolved.segments.length;
+  const ghost = modelOf(st.resolved).ghostFor(s.candidateJump(NEXT));
+  s.jump(NEXT); assert.ok(s.getState().resolved.segments.length > n, `the jump is placed: ${s.getState().message}`);
+  const after = modelOf(s.getState().resolved).path, f = farthest(ghost, after, n);
+  assert.ok(f.worst <= 1e-9, `the jump's ghost lies where it is placed: ${f.worst.toFixed(4)} m off at s ${f.at.toFixed(0)}`);
+  assert.ok(f.head <= 1e-9, `the ghost's head is where placing puts it: ${f.head.toFixed(4)} m off`);
+});
+
+test('N5 6: on a road whose head a grab moved, Extend then Undo: the undone piece\'s ghost lies where the piece was', async () => {
+  const s = await placed(...FLAT_HEAD), n = s.getState().resolved.segments.length;
+  s.extend({ family: 'bowl', ...NEXT }); const was = modelOf(s.getState().resolved).path;
+  s.undo(); const ug = s.getState().undoGhost; assert.ok(ug, `undo leaves the removed piece as the ghost: ${s.getState().message}`);
+  const ghost = modelOf(s.getState().resolved).ghostFor(ug.candidate), f = farthest(ghost, was, n);
+  assert.ok(f.worst <= 1e-9, `the undone piece's ghost lies where it was: ${f.worst.toFixed(4)} m off at s ${f.at.toFixed(0)}`);
+  assert.ok(f.head <= 1e-9, `the ghost's head is where the piece ended: ${f.head.toFixed(4)} m off`);
+});
+
+test('N5 7: on a road whose head a grab moved, a saved piece\'s ghost lies where Place lays the piece', async () => {
+  const storage = await storeWithPiece('straight'), s = await createCoreShell({ storage, autosaveMs: 0 });
+  for (const o of FLAT_HEAD[0]) s.extend({ family: 'bowl', ...o });
+  const g0 = FLAT_HEAD[1]; s.beginBrush({ mode: 'local', channel: g0.channel, s0: g0.s0, r: g0.r }); s.brushTo(g0.delta); s.endBrush(); assert.ok(!s.getState().message, `the grab is taken: ${s.getState().message}`);
+  const n = s.getState().resolved.segments.length;
+  await s.showPiece('straight'); const pg = s.getState().pieceGhost; assert.ok(pg, `the piece is shown as a ghost: ${s.getState().message}`);
+  const ghost = modelOf(s.getState().resolved).ghostFor(pg.candidate);
+  await s.placePiece(); assert.ok(s.getState().resolved.segments.length > n, `the piece is laid: ${s.getState().message}`);
+  const after = modelOf(s.getState().resolved).path, f = farthest(ghost, after, n);
+  assert.ok(f.worst <= 1e-9, `the piece's ghost lies where it is laid: ${f.worst.toFixed(4)} m off at s ${f.at.toFixed(0)}`);
   assert.ok(f.head <= 1e-9, `the ghost's head is where placing puts it: ${f.head.toFixed(4)} m off`);
 });
