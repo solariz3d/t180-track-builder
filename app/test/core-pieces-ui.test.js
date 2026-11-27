@@ -1114,6 +1114,55 @@ test('D677 (2): a steady bank drag on the Sculpt mark of a piece wound past a tu
   P1.panel.unmount();
 });
 
+// D677 (2), completed after E's read of 7b3926e (lighthouse exo_memory/handback/p-l260-read-sculpt-carry-E_2026-11-27.md; packet
+// exo_memory/loop/packet_t180_overlay_and_sculpt_carry_2026-11-27.md, Amendment 02:38): Sculpt's bank mark stopped at ±720, the bank kind's range
+// (app/core/handles.js KINDS.bank), while the panel measures its drag from the piece's unwrapped middle; so on a piece past ±720 the first step moved the
+// road AGAINST the drag by the overshoot (730 → 720), and a drag out across ±720 stopped there. Rows 720a to 720e drive the mark through the panel's own
+// handle host, as a hand does. A drag row fails if the first step moves the road against the drag, or if any step is not one pixel's share of the drag
+// (0.45 a degree at this speed: a jump, a hold or a step back). Row 720g guards the ghost's bank handle, which shares the kind and keeps its range
+/** a piece the core rolls from `a` to `b` degrees after a 900 m lead (E's cases), selected in Sculpt: its middle bank is (a + b) / 2 */
+async function woundSculpt(a, b) {
+  const P1 = await handlePanel(), { shell } = P1, R = Math.PI / 180;
+  let w = extend(shell.getState().history.present, { length: 900, targets: { phi: a * R } }); w = extend(w, { length: 150, targets: { phi: b * R } }); shell.commitDoc(w);
+  const last = w.pieces.length - 1, at = require('../../src/core/sculpt.js').pieceOffsets(w)[last] + w.pieces[last].length / 2, mid = (a + b) / 2;
+  shell.setSculpt(true); P1.frame(); P1.click(at); P1.frame(); P1.frame();
+  const si = shell.sculptInfo(); assert.ok(si && si.index === last && Math.abs(si.values.phi - mid) < 1e-6, `control: the wound piece is selected, its middle at ${mid} (${si && si.index}, ${si && si.values.phi})`);
+  const h = handleOf(P1, 'bank:1'); assert.ok(h && h.screen, 'control: its bank mark is on the stage');
+  return { P1, mid };
+}
+for (const [row, name, a, b, dir] of [
+  ['720a', 'held at 710, dragged up 30 px across 720, rises on past 720 (710 → 723.5; 7b3926e: stopped at 720)', 710, 710, 1],
+  ['720b', 'wound 700 → 760 (its middle 730), dragged up 30 px, rises from 730 (730 → 743.5; 7b3926e: −10 on the first step, then held at 720)', 700, 760, 1],
+  ['720c', 'wound 700 → 760 (its middle 730), dragged down 30 px, comes down from 730 (730 → 716.5; 7b3926e: −10 on the first step, then held at 720)', 700, 760, -1],
+  ['720d', 'the mirror, wound −700 → −760 (its middle −730), dragged down 30 px, goes on down from −730 (−730 → −743.5; 7b3926e: +10 on the first step, then held at −720)', -700, -760, -1],
+]) {
+  test(`D677 (2) row ${row}: a steady bank drag on the Sculpt mark of a piece ${name}`, async () => {
+    const { P1, mid } = await woundSculpt(a, b), v = followMark(P1, 'bank:1', 30, dir, 1), steps = v.map((x) => x.toFixed(2)).join(' ');   // 30 px at 1 px a millisecond
+    assert.ok(dir * (v[0] - mid) > 0, `the first step moves the road with the drag: ${mid} → ${v[0]} (${steps})`);
+    // each step, the first from the middle too, is one pixel's share (0.45 degree) the way of the drag: no jump (7b3926e's 720c: 730 → 720 at once, the drag's own
+    // way), no hold (then 21 steps at 720) and no step back; so the drag ends where its travel takes it, 13.5 degrees on
+    const moved = v.map((x, i) => dir * (x - (i ? v[i - 1] : mid))), off = moved.findIndex((d) => Math.abs(d - 0.45) > 0.01);
+    assert.equal(off, -1, `step ${off + 1} moved ${moved[off] !== undefined ? moved[off].toFixed(3) : '?'}, not 0.45: ${mid} → ${steps}`);
+    P1.panel.unmount();
+  });
+}
+test('D677 (2) row 720e: a wheel notch over the Sculpt bank mark of a piece whose middle is 730 is one step (0.01) either way, never a jump to 720 (7b3926e: 720)', async () => {
+  const { P1, mid } = await woundSculpt(700, 760), phi = () => P1.shell.sculptInfo().values.phi;
+  const notch = (deltaY) => { const s = handleOf(P1, 'bank:1').screen; fire(P1, 'wheel', s.x, s.y, { deltaY }); P1.frame(); return phi(); };
+  const up = notch(-100); assert.ok(Math.abs(up - (mid + 0.01)) < 1e-6, `a notch up is ${mid + 0.01}: ${mid} → ${up}`);
+  const down = notch(100); assert.ok(Math.abs(down - mid) < 1e-6, `and a notch down is ${mid} again: ${down}`);
+  P1.panel.unmount();
+});
+test('D677 (2) row 720g, a guard: the ghost\'s bank handle keeps the bank kind\'s range (±720), unchanged by row 720a\'s fix: from a typed 710 a drag up 30 px stops at 720, which it writes into the field within one turn (0). Whether it carries is his to rule on', async () => {
+  const P1 = await handlePanel(), bank = fieldOf(P1, 'bank °'); bank.value = '710'; bank.oninput(); P1.frame(); P1.frame();
+  const h = handleOf(P1, 'bank:1'); assert.ok(h && h.screen && !P1.shell.getState().sculpt, 'control: the ghost\'s bank mark is on the stage');
+  const steps = []; P1.doc.addEventListener('t180:handle-step', (e) => steps.push(e.detail.value));
+  dragBy(P1, 'bank:1', 30);
+  assert.equal(steps[steps.length - 1], 720, `the handle's value stops at 720 (values ${steps.join(' ')}); the field reads ${bank.value}`);
+  assert.equal(bank.value, '0', 'and the field shows it within one turn');
+  P1.panel.unmount();
+});
+
 // A review found: the closed-tube sweep refusal in plain words. The panel replaces src/core/document.js:412's "must stay within 0 to 360" by matching its
 // text, so a rename there would silently bring back the words that read as a fault; this row holds the coupling (nobody sees it until a closed tube is on the table)
 test('row 21: in Sculpt, a Tube sweep drag on a closed tube is refused in plain words: "Sculpt can\'t change the sweep of a closed tube…", not the core\'s', async () => {

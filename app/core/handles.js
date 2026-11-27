@@ -322,8 +322,14 @@ function targetFor(kind, base, px, ctx = {}, mods = {}) {
   // catches only a drag that CROSSES it). ctx.snapTo lists values a drag lands on once it comes within SNAP_PX of one (the extra handles give level and the field's start value).
   // Not with the precise modifier (one pixel, one step) or Ctrl (round numbers)
   if (!precise && !mods.ctrl && Array.isArray(ctx.snapTo)) for (const t of ctx.snapTo) if (Number.isFinite(t) && Math.abs(v - t) <= SNAP_PX * K.perPx + 1e-9) { v = t; break; }
-  return clamp(v, K.min, K.max);
+  return clamp(v, ...rangeOf(K, ctx));
 }
+// THE RANGE a handle's value is held in (D677 (2), completed after E's read of 7b3926e: lighthouse exo_memory/loop/packet_t180_overlay_and_sculpt_carry_2026-11-27.md,
+// Amendment 02:38): the kind's, unless the model lifts it for that handle with ctx.range === false. Sculpt's bank handle does (app/core/panel.js sculptModel): it is
+// measured from the piece's unwrapped middle and the core lays any bank, as the brush has no range, so its mark rolls on past ±720 as it does past ±360 (held at
+// ±720 it stopped there, and on a piece past ±720 its first step moved the road against the drag). Every other handle keeps its kind's range, the ghost's bank
+// handle with it (his to rule on). The drag (targetFor, the arrows through it) and the wheel read it here
+function rangeOf(K, ctx) { return ctx && ctx.range === false ? [-Infinity, Infinity] : [K.min, K.max]; }
 
 /** What a double-click on a handle sets: 0 for bank, turn and climb, else `pre` (the value before the drag), or null when there is none. */
 function resetValue(kind, pre) { const K = KINDS[kind]; if (!K) throw new Error(`handles: no kind "${kind}"`); return K.zero ? 0 : (Number.isFinite(pre) ? pre : null); }
@@ -619,7 +625,7 @@ function mount(stage, win, host) {
     if (drag || !e.deltaY) return;
     const [x, y] = rel(e), h = hitTest(drawn, x, y), m = model; if (!h || !m) return;
     e.preventDefault(); e.stopImmediatePropagation();
-    const K = KINDS[h.kind], now = m.base(h.kind), v = clamp(round(now + (e.deltaY < 0 ? 1 : -1) * K.step, K.step), K.min, K.max);
+    const K = KINDS[h.kind], now = m.base(h.kind), v = clamp(round(now + (e.deltaY < 0 ? 1 : -1) * K.step, K.step), ...rangeOf(K, m.ctx(h.kind)));
     if (v === now) return;
     host.begin(h); host.apply(h, v, {}, true); host.end(h); stepped(h.kind, now, v, true); pre = { kind: h.kind, from: now, to: v }; lastClick = null;
   };
