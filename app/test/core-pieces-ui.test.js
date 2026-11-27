@@ -915,10 +915,12 @@ test('row 15: the preview\'s ghostInfo says whether the ghost is a jump\'s and c
 // brush; no nearest-equivalent rewrite; the stored winding of existing tracks and the core are untouched.
 const headBank = (shell) => shell.headState().phi * 180 / Math.PI;
 const extendWithBank = (P1, v) => { const b = fieldOf(P1, 'bank °'); b.value = String(v); b.oninput(); P1.frame(); P1.button('Extend').onclick(); P1.frame(); };
-test('D259: a typed 300 stays 300 (one full turn either way is allowed), and a typed 400 becomes 40; the field shows them so', async () => {
+// AMENDED BY NAME (D677; the user, 2026-11-26 23:00, lighthouse exo_memory/briefs/t180_unmakeable_shapes.md:49-50: past a full turn the bank shown resets to 0 while the road carries the extra degrees into the next turn): it was "a typed 300 stays 300 (one full turn either way is allowed), and a typed 400 becomes 40; the field shows them so".
+// The field still SHOWS the bank within one turn (40); the road now rolls on to 400 instead of back to 40. The drag row below is unchanged
+test('D259 (amended D677): a typed 300 stays 300, and a typed 400 rolls on to 400 while the field shows 40', async () => {
   const P1 = await handlePanel(), { shell } = P1, bank = fieldOf(P1, 'bank °'); assert.ok(Math.abs(headBank(shell)) < 1e-6, 'control: the track starts upright');
   extendWithBank(P1, 300); assert.ok(Math.abs(headBank(shell) - 300) < 1e-6, `300 rolls 300: ${headBank(shell)}`); assert.equal(bank.value, '300');
-  extendWithBank(P1, 400); assert.ok(Math.abs(headBank(shell) - 40) < 1e-6, `400 becomes 40: ${headBank(shell)}`); assert.equal(bank.value, '40');
+  extendWithBank(P1, 400); assert.ok(Math.abs(headBank(shell) - 400) < 1e-6, `400 rolls on to 400: ${headBank(shell)}`); assert.equal(bank.value, '40', 'the field shows it within one turn');
 });
 test('D259: dragging the bank handle from 350 by about +20 gives about 10 (not 370), and from -350 by about -20 gives about -10; Extend applies what the field shows', async () => {
   for (const [from, dir] of [[350, 1], [-350, -1]]) {

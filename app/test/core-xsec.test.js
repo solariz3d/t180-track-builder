@@ -277,14 +277,16 @@ test('xsec panel: a refusal the REAL core makes on Extend is shown in the panel 
 // AMENDED AGAIN BY NAME (the user, 2026-11-02: "when you make the track go all the way around say -360 degrees, it only hits 359.99 and then glitches out, so if you
 // make a spiral it wont go all the way around without glitching"): exactly one turn is a FULL TURN of roll, not none. 360 rolls the road all the way round, and the
 // field reads the bank as it is, 360 (stored to six places, a full turn is 359.99998°, which the one-turn rule keeps); past one turn it still wraps (-540 is -180).
-test('xsec panel: the bank field takes any number and keeps it within one turn, its sign kept: 360 is a full turn of roll, and -540 is -180 (D259)', async () => {
+// AMENDED A THIRD TIME BY NAME (D677; the user, 2026-11-26 23:00, lighthouse exo_memory/briefs/t180_unmakeable_shapes.md:49-50: past a full turn the bank shown resets to 0 while the road carries the extra degrees into the next turn): it was "... 360 is a full turn of roll, and -540 is -180 (D259)". The field still shows the bank within one
+// turn, its sign kept (-180); a typed -540 is now laid as typed, so the road rolls to -540 instead of -180
+test('xsec panel: the bank field takes any number and shows it within one turn, its sign kept: 360 is a full turn of roll, and -540 rolls to -540 and shows -180 (D259, D677)', async () => {
   const p = await mountPanel();
   const bank = p.field('bank °'), head = () => p.shell.headState().phi * 180 / Math.PI;
   assert.ok(!('max' in bank.attrs) && !('min' in bank.attrs), 'the bank input has no min or max');
   p.type('length m', 300); p.type('bank °', 360); p.button('Extend').onclick();
   assert.equal(p.field('bank °').value, '360'); assert.ok(Math.abs(head() - 360) < 1e-4, `360 is a full turn of roll: ${head()}`);
   p.type('length m', 300); p.type('bank °', -540); p.button('Extend').onclick();
-  assert.equal(p.field('bank °').value, '-180'); assert.ok(Math.abs(head() + 180) < 1e-6, `-540 is -180: ${head()}`);
+  assert.equal(p.field('bank °').value, '-180'); assert.ok(Math.abs(head() + 540) < 1e-6, `-540 rolls to -540: ${head()}`);
 });
 // The spiral he laid on RIBBON CORKSCREW TEST: 250 m pieces banking -90° each. Typed -360 after -270, the last piece rolls on the same way to a full turn; before, the
 // field sent 0 (-360 kept within one turn), so that piece rolled 270° BACK to upright: the glitch at "359.99".

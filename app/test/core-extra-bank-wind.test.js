@@ -111,10 +111,12 @@ for (const [dir, way] of [[1, 'down'], [-1, 'up']]) {
 // D641 (f), E's N2 (lighthouse exo_memory/handback/p-d641-l140r2-review-E_2026-11-05.md): "typed −654.70 ... laid as −294.70 while the field still says −654.70": the field
 // and the road disagree. A bank typed past one turn is laid within it (HD.wrapTurn, panel.js bankTarget); once the value is committed (Enter, or leaving the field: its change
 // event), the field shows what is laid
-test('D641 (f): a bank typed as −654.70 and committed reads −294.70 in the field, the value the road is laid with', async () => {
+// AMENDED BY NAME (D677; the user, 2026-11-26 23:00, lighthouse exo_memory/briefs/t180_unmakeable_shapes.md:49-50: past a full turn the bank shown resets to 0 while the road carries the extra degrees into the next turn): it was "a bank typed as −654.70 and committed reads −294.70 in the field, the value the road is laid with". A typed bank is
+// now laid as typed, in the head's own turn, so the road is laid at −654.70 and the field keeps it. What the row guards stays: the field and the road agree
+test('D641 (f): a bank typed as −654.70 and committed keeps −654.70 in the field, the value the road is laid with (D677)', async () => {
   const p = await mount(); p.type('length m', 2040.48);
   const f = p.field('bank °'); f.value = '-654.7'; f.oninput(); f.onchange(); p.tick();
-  const laid = p.panel.options().targets.phi / DEG; assert.ok(Math.abs(laid + 294.7) < 1e-9, `the road is laid at −294.70 (${laid})`);
-  assert.equal(f.value, '-294.7', `the field says what is laid (it reads ${f.value})`);
+  const laid = p.panel.options().targets.phi / DEG; assert.ok(Math.abs(laid + 654.7) < 1e-9, `the road is laid at −654.70 (${laid})`);
+  assert.equal(f.value, '-654.7', `the field says what is laid (it reads ${f.value})`);
   p.panel.unmount();
 });

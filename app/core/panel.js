@@ -431,12 +431,16 @@ function mount(root, shell, mountOpts = {}) {
   const ZERO_WHEN_EMPTIED = new Set(['turn', 'climb', 'bank', 'cup', 'edge', 'tube']);
   const emptied = (k) => ZERO_WHEN_EMPTIED.has(k) && HEAD[k][0].value === '' && shown[k] !== '';
   const asTyped = (k) => (emptied(k) ? '0' : HEAD[k][0].value === shown[k] ? '' : HEAD[k][0].value);   // untouched = blank = continue
-  // (the user, 18:21-18:24: the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way"). The bank keeps
-  // within ONE turn and keeps its sign, shown AND applied (HD.wrapTurn: 370 -> 10, -370 -> -10, 300 stays 300, 400 -> 40): the field shows it (HEAD above), a drag
-  // writes it, and a typed value is sent wrapped and otherwise as typed (absolute, as the core keeps its winding; extendOptions unchanged). No nearest-equivalent rewrite.
-  // (the user, 2026-11-02: "when you make the track go all the way around say -360 degrees, it only hits 359.99 and then glitches out"): exactly one turn is
-  // a full turn of roll, sent as typed; wrapTurn read it as 0, so after -270 the piece rolled 270° back to upright. Past one turn it wraps as above.
-  const bankTarget = () => { const t = asTyped('bank'); if (t === '') return t; const T = Number(t); return !Number.isFinite(T) ? t : Math.abs(T) === 360 ? String(T) : String(HD.wrapTurn(T)); };
+  // (the user, 18:21-18:24: the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way"). The bank SHOWN keeps
+  // within ONE turn and keeps its sign (HD.wrapTurn: 370 -> 10, -370 -> -10, 300 stays 300): the field shows the head so (HEAD above), and a drag writes it so.
+  // (the user, 2026-11-02: "when you make the track go all the way around say -360 degrees, it only hits 359.99 and then glitches out"): exactly one turn is a full turn.
+  // (the user, 2026-11-26 23:00, lighthouse exo_memory/briefs/t180_unmakeable_shapes.md:49-50: past a full turn the bank shown resets to 0 while the road carries the extra degrees into the next turn; D677): a TYPED bank
+  // (the field, an extra row, a flowing bank's mark) is laid as typed IN THE HEAD'S OWN TURN: the head's whole turns (headTurns: 0 within one turn) plus the value, never
+  // wrapped. From -340 a typed -392 rolls on to -392, and the field then shows -32; from there a typed -60 lays -420. Before D677 the typed value was wrapped, and the
+  // road unwound a turn (-340 -> -32). No nearest-equivalent rewrite: from upright a typed 300 is 300, and from -340 a typed -32 is -32 (extendOptions unchanged).
+  const headTurns = () => { const h = shell.headState().phi / DEG; return 360 * Math.round((h - HD.wrapTurn(h)) / 360); };
+  const inHeadTurn = (T) => String(T + headTurns());
+  const bankTarget = () => { const t = asTyped('bank'); if (t === '') return t; const T = Number(t); return !Number.isFinite(T) ? t : inHeadTurn(T); };
   // THE LATER CHANGES IN THE PANEL (L139; plan_l139…, amended a third time: changes are made in the 3D view by dragging an OFFER, and these rows mirror them). Under each
   // field, one row per change: "then" (the field's value from the mark on, in the field's own unit), "from m" (the mark, metres from the piece's start) and a remove. A change
   // made by a drag keeps its mark's SHARE of the piece, so lengthening the piece spreads the marks apart (the user, 06:53Z: "they get like inflated in between each
@@ -477,7 +481,7 @@ function mount(root, shell, mountOpts = {}) {
   const SEC = Object.fromEntries(SECOND_FIELDS.map((f) => [f, { list: [], box: el('div', { class: 'then-list', 'aria-label': `${SECOND_NAME[f]} changes` }) }]));
   const secUnit = (f) => (f === 'turn' || f === 'climb' ? (cornerMode() ? '°' : '°/100m') : f === 'width' ? 'm' : '°');
   const secHasTarget = (f) => (f === 'bank' ? bankTarget() !== '' : f === 'edgeR' ? rightTarget() !== '' : asTyped(f) !== '');
-  const secThen = (f, x) => { const v = x.then.value, T = Number(v); return f !== 'bank' || v === '' || !Number.isFinite(T) || Math.abs(T) === 360 ? v : String(HD.wrapTurn(T)); };   // the bank within one turn
+  const secThen = (f, x) => { const v = x.then.value, T = Number(v); return f !== 'bank' || v === '' || !Number.isFinite(T) ? v : inHeadTurn(T); };   // a bank row in the head's own turn (D677)
   const secLive = (f) => SEC[f].list.filter((x) => x.then.value !== '' && Number.isFinite(Number(x.then.value)));   // the changes the options carry, in order
   // (L140, the user: "it adds something called extra turn"): a row reads "extra turn °" ("extra turn 2 °" for the second), as its handle is labelled, and is named so
   const secName = (f, k) => `extra ${SECOND_NAME[f]}${k ? ` ${k + 1}` : ''}`;
@@ -669,9 +673,8 @@ function mount(root, shell, mountOpts = {}) {
   for (const f of FIELDS) { const prev = f.oninput; f.oninput = f.onchange = (e) => { lastTouched = f; return prev ? prev(e) : undefined; }; }
   // an emptied field shows the 0 it sends once the change is committed (on change, not while typing, so clearing a box to type a new number is not interrupted)
   for (const k of ZERO_WHEN_EMPTIED) { const f = HEAD[k][0], prev = f.onchange; f.onchange = (e) => { if (emptied(k)) f.value = '0'; return prev(e); }; }
-  // D641 (f), E's N2: a bank typed past one turn is laid within it (bankTarget), so once committed the field shows that value, the same way (−654.70 reads −294.70; exactly
-  // ±360 stays, a full turn of roll); never while typing
-  { const prev = bank.onchange; bank.onchange = (e) => { const T = Number(bank.value); if (bank.value !== '' && Number.isFinite(T) && Math.abs(T) > 360) bank.value = show(HD.wrapTurn(T)); return prev(e); }; }
+  // D641 (f), E's N2, wrote a bank typed past one turn back into the field wrapped (−654.70 read −294.70), because it was laid wrapped. D677 lays it as typed
+  // (bankTarget), so the field keeps what was typed until Extend, and then shows the head within one turn
   const onUndoGuard = (e) => {
     if (lastTouched && typeof lastTouched.secUndo === 'function') {   // the last thing done was a drag on the ghost (L139): one Ctrl+Z undoes that whole drag
       const u = lastTouched; lastTouched = null; u.secUndo();
@@ -1480,7 +1483,7 @@ function mount(root, shell, mountOpts = {}) {
         const end = arr.length ? arr[arr.length - 1].from : o.transition && Number.isFinite(o.transition.phi) ? o.transition.phi : 0, R = L - end;
         if (!(R >= 2 * floor - 1e-9)) continue;
         const from = Number.isFinite(secPending[f]) && secPending[f] > end ? secPending[f] : near2(end + R / 2), last = arr.length ? arr[arr.length - 1] : null;
-        out.push({ field: f, index: arr.length, from, slid: Number.isFinite(secPending[f]) && secPending[f] > end, half: halfAt(from), offer: true, base: Number(last ? last.target / DEG : bankTarget()), ...ST.styleOf(f) });
+        out.push({ field: f, index: arr.length, from, slid: Number.isFinite(secPending[f]) && secPending[f] > end, half: halfAt(from), offer: true, base: Number(last ? last.target / DEG : bankTarget()) - headTurns(), ...ST.styleOf(f) });
         continue;
       }
       // D641 (E's item 3; the user on c42f985: "perhaps we should only do two per action on the piece"): a field with no extra handle (the left and right edge) is offered
@@ -1499,7 +1502,7 @@ function mount(root, shell, mountOpts = {}) {
       const turnArr = f === 'bank' && !arr.length && o.changes && o.changes.turnDeg ? o.changes.turnDeg : [];
       const drawn = turnArr.length ? Math.min(L - need, Math.max(end, floor, turnArr[0].from - EXTRA_BANK_LEAD_SHARE * L)) : Number.isFinite(EXTRA_AT[f]) ? Math.min(L - need, Math.max(end, EXTRA_FROM_SHARE * L)) : end + R / 2;
       const from = Number.isFinite(secPending[f]) && secPending[f] > end ? secPending[f] : near2(drawn), st = ST.styleOf(f), last = arr.length ? arr[arr.length - 1] : null;
-      const base = corner ? 0 : f === 'bank' ? Number(last ? last.target / DEG : bankTarget()) : last ? (f === 'turn' || f === 'climb' ? last.target * 100 / DEG : last.target) : Number(f === 'edgeR' ? rightTarget() : asTyped(f));
+      const base = corner ? 0 : f === 'bank' ? Number(last ? last.target / DEG : bankTarget()) - headTurns() : last ? (f === 'turn' || f === 'climb' ? last.target * 100 / DEG : last.target) : Number(f === 'edgeR' ? rightTarget() : asTyped(f));
       out.push({ field: f, index: arr.length, from, slid: Number.isFinite(secPending[f]) && secPending[f] > end, half: halfAt(from), offer: true, base, ...st, kind: corner ? key : st.kind });
     }
     return out;
