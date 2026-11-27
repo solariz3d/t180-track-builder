@@ -145,3 +145,71 @@ test('L268: a held width beside a typed bank, cup or edge on a short piece keeps
     assert.ok(worst <= most, `${ch} to ${ch === 'phi' ? '20°' : target} over ${L} m beside a held width: ${worst.toFixed(4)} from its quintic, over ${most.toFixed(4)}`);
   }
 });
+
+// D678 (E's read of L268, handback/p-d678-ripple-read-E_2026-11-27.md §5 F4; the librarian's ruling: the path a Turn or a Sharp lays must not depend on whether the
+// width was still changing at the head). The hold's extra knots were the whole piece's, and Turn by's ease, the corner list's and Sharp's turn ramp were laid on them:
+// after a width brush, Turn by -90 over 200 ended 31.7 cm from where it ends from a level head, a corner of 30 with an extra 20 from 50 1.9 cm, Sharp -60 R40 ramp 8
+// 13.9 cm. The path's measure: the new pieces' count and lengths, the turn and climb every 0.05 m to one step of their stored decimals (1e-9 rad per m), and the
+// end point (the adapter's path, its last sample) to one step of a length (1e-4 m). The head is E's E4, the app's brush +5 at 30 m before the end, r 40.
+const A = require('../../src/core/adapter.js');
+const endPoint = (d) => A.toPath(d, { step: 0.25 }).path.samples.at(-1).pos;
+async function pathFrom(call) {
+  const out = [];
+  for (const make of [appShell, brushAt(30, 40, 5)]) {
+    const s = await make(), n = piecesOf(s), head = D.endState(s.getState().history.present).w; call(s);
+    const d = s.getState().history.present; out.push({ head, n, pieces: d.pieces.slice(n), end: endPoint(d), message: s.getState().message });
+  }
+  return out;
+}
+function samePath([level, held], what) {
+  assert.ok(level.head.m === 0 && held.head.m !== 0, `${what}: the level head is level and the brushed one is still changing (${held.head.m})`);
+  assert.ok(held.pieces.length > 0 && held.pieces.length === level.pieces.length, `${what}: laid the same number of pieces (${level.pieces.length}, ${held.pieces.length}: ${held.message})`);
+  held.pieces.forEach((P, i) => {
+    const Q = level.pieces[i];
+    assert.equal(P.length, Q.length, `${what}, piece ${i + 1}: the same length`);
+    for (const ch of ['kh', 'kv']) { let worst = 0; for (let x = 0; x <= P.length; x += 0.05) worst = Math.max(worst, Math.abs(D.channelValue(P, ch, x) - D.channelValue(Q, ch, x))); assert.ok(worst <= 1e-9, `${what}, piece ${i + 1}: ${ch} is ${worst.toExponential(2)} from the level head's, over one step`); }
+  });
+  const apart = Math.hypot(...held.end.map((v, k) => v - level.end[k]));
+  assert.ok(apart <= 1e-4, `${what}: ends ${apart.toFixed(4)} m from where it ends from a level head`);
+}
+const asShownOpts = (s, length = 100) => extendOptions({ ...BLANK, length, head: s.headState() });
+
+test('D678: after a width brush, Turn by -90 over 200 lays the same path as from a level head (the hold does not move the turn)', async () => {
+  samePath(await pathFrom((s) => s.extendTurnBy(asShownOpts(s, 200), -90)), 'Turn by -90 over 200');
+});
+
+// the extra from 10 m starts inside the hold's first 20 m: laying the hold before the corner list's knots went in moved that path 6.7 cm (pane B's scratch
+// d9check678.js, the width-hold harness's D9); an extra from 50 m does not reach the hold and could not see it
+test('D678: after a width brush, a corner of 30 with an extra 20 from 50, or from 10 (inside the hold), lays the same path as from a level head', async () => {
+  for (const from of [50, 10]) samePath(await pathFrom((s) => s.extend({ ...asShownOpts(s), turnDeg: 30, changes: { turnDeg: [{ from, deg: 20 }] } })), `the corner list, its extra from ${from} m`);
+});
+
+test('D678: after a width brush, Sharp -60 R40 ramp 8 lays the same path as from a level head', async () => {
+  samePath(await pathFrom((s) => s.extendSharp(asShownOpts(s), { deg: -60, R: 40, ramp: 8 })), 'Sharp -60 R40 ramp 8');
+});
+
+test('D678: after a width brush, Turn by and the corner list still hold the width: within 1 mm of the head\'s from 20 m on, ending there level, the joint smooth', async () => {
+  for (const [what, call] of [['Turn by 45', (s) => s.extendTurnBy(asShownOpts(s), 45)], ['the corner list', (s) => s.extend({ ...asShownOpts(s), turnDeg: 30, changes: { turnDeg: [{ from: 50, deg: 20 }] } })]]) {
+    const s = await brushAt(30, 40, 5)(), prev = lastOf(s), head = D.pieceEnd(prev).w; call(s); const P = lastOf(s);
+    assert.notEqual(P, prev, `${what} laid: ${s.getState().message}`);
+    let off = 0; for (let k = 0; k <= 1000; k++) { const x = (P.length * k) / 1000; if (Math.abs(D.channelValue(P, 'w', x) - head.v) > 1e-3) off = x; }
+    assert.ok(off <= 20, `${what}: the width is more than 1 mm off the head's until ${off} m`);
+    assert.deepEqual(D.pieceEnd(P).w, { v: head.v, m: 0 }, `${what}: ends at the head's width, level`);
+    assert.equal(D.jointProblem(D.pieceEnd(prev), P, D.kindOf(prev)), null, `${what}: the joint is smooth`);
+  }
+});
+
+// D678 (pane B), the held pair: the hold leaves the head at the head's own width slope, as near as a stored width allows. A width is stored to one step (1e-4 m), so
+// its second control point can be half a step off, and the slope it leaves with half a step over a third of the first knot span (1.5e-4 / the first knot, per m).
+// Set from the head on the piece's first knot it is within that; carried there by the knot insertion it is rounded twice and was not: after the grab below, Sharp
+// ramp 1 (its first knot 0.74 m) left 3.2e-4 per m off the head's slope, where the bound is 2.0e-4 (pane B's scratch resetstep678.js).
+test('D678: after a steep grab or a brush, Sharp ramp 1 leaves the head at the head\'s width slope, within half a stored step of width over a third of its first knot span', async () => {
+  for (const [what, make] of [['the grab, w +4 at the end, r 5', grabAt(0, 5, 4)], ['the brush, +1.37 at end-5, r 20', brushAt(5, 20, 1.37)]]) {
+    const s = await make(), prev = lastOf(s), n = piecesOf(s), head = D.pieceEnd(prev).w; s.extendSharp(asShownOpts(s), { deg: -60, R: 40, ramp: 1 });
+    const P = s.getState().history.present.pieces[n];   // Sharp lays its held piece first (and an exit after it)
+    assert.ok(P && P.knots.length > 0, `${what}: Sharp laid: ${s.getState().message}`);
+    assert.ok(head.m !== 0, `${what}: the head's width is still changing`);
+    const h = 1e-6, leaving = (D.channelValue(P, 'w', h) - D.channelValue(P, 'w', 0)) / h, bound = 1.5e-4 / P.knots[0];
+    assert.ok(Math.abs(leaving - head.m) <= bound + 1e-6, `${what}: leaves at ${leaving.toExponential(4)} per m, ${Math.abs(leaving - head.m).toExponential(2)} off the head's ${head.m.toExponential(4)}, over the bound ${bound.toExponential(2)}`);
+  }
+});

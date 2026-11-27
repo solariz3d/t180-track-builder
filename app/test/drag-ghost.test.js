@@ -119,10 +119,15 @@ test('row 5: the documents are byte for byte what they were: pieces placed and c
   // piece's channels share its knots, so the corners' other channels are fitted on those too and their bytes moved (eb3501a2c3eec581 became 5e302d1023e4f078). As
   // curves, sampled every metre against e112a14 (pane B's scratch dg5curves.js): the turn moves at most 3.2e-5 per m (the 400 m corner), the climb 9.3e-7, the bank
   // 1.8e-8 rad, the rest float noise. What is not a corner is held as strictly as before: the placed pieces, wd out, are c522ea6's to the byte (24bcdf657190c0cd)
+  // AMENDED, D678, pane B (E's read of L268, F4; the ruling: the path a turn lays must not depend on whether the width was still changing at the head): every
+  // channel is laid on the piece's own knots as from a level head and the hold's knots are inserted after (src/core/extend.js layHold, turnby.js withHold), so the
+  // corners' other channels are c522ea6's again as curves: sampled every 0.05 m, every channel but w within 0.685 of a step of its stored decimals and each corner's
+  // end within 6.3e-6 m of c522ea6's and e112a14's (L268's moved the 400 m corner's end 12.5 cm). The bytes are not c522ea6's: each corner keeps the hold's 3
+  // inserted knots (77/22/112 against 74/19/109), and their re-rounded points (5e302d1023e4f078 became 015881f53acdbc5f; pane B's scratch dg5curves678.js)
   const noW = (P) => { const { w, ...channels } = noWd(P).channels; return { ...P, channels }; };
   const hashOf = (x) => crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex').slice(0, 16);
   assert.equal(hashOf(parts[0].map(noWd)), '24bcdf657190c0cd', 'the placed pieces, as c522ea6 made them (c2d7cb5\'s, re-pinned at D459 and D677 (b))');
-  assert.equal(hashOf([parts[0].map(noWd), ...parts.slice(1).map(noW)]), '5e302d1023e4f078', 'the placed pieces and three solved corners but the corners\' width, as L268 lays them');
+  assert.equal(hashOf([parts[0].map(noWd), ...parts.slice(1).map(noW)]), '015881f53acdbc5f', 'the placed pieces and three solved corners but the corners\' width, as D678 lays them (the hold\'s knots inserted after each corner is laid)');
   for (const P of parts.slice(1)) assert.deepEqual(D.pieceEnd(P).w, { v: D.pieceEnd(doc0.pieces.at(-1)).w.v, m: 0 }, 'each corner holds the head\'s width (L264)');
   let n = 0;
   for (let t = 0; t < 120; t++) {
