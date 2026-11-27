@@ -119,8 +119,18 @@ function edgeFrame(base, s, nE) {
   u.forEach((x, i) => { const h = x < 0 ? hr : hl, r = h > 0 ? Math.abs(x) / h : 0; R[i] = r; mid[i] = psiAt(P, x); });
   return { P, u, R, mid };
 }
-/** The middle cross-section of piece P at the channel values x: the legacy profileAt, the cup, or the tube. */
-function baseProfileOf(P, x) { return P.tube ? tubeProfile(x.w, x.t) : P.cup ? cupProfile(P.family, x.w, x.c) : profileAt(P.family, x.w, x.r); }
+/** The middle cross-section of piece P at the channel values x: the legacy profileAt, the cup, or the tube; on a split piece (D677 (b), document.js wd) with its right side
+ *  widened to (w + wd)/2, each right-side knot moved out by (w + wd)/w and its angle kept, so the rim reaches the same angle further out and the left side is untouched. */
+function baseProfileOf(P, x) {
+  const b = P.tube ? tubeProfile(x.w, x.t) : P.cup ? cupProfile(P.family, x.w, x.c) : profileAt(P.family, x.w, x.r);
+  return P.split && x.wd ? rightWidened(b, x.w, x.wd) : b;
+}
+/** Profile b with its right side (u < 0) at the width w + wd instead of w (a new frozen object; b is a kept one). */
+function rightWidened(b, w, wd) {
+  const k = (w + wd) / w;
+  if (!(k > 0)) throw new D.CoreError('BAD_WIDTH', `the road's right side must be wider than 0 m, got ${w + wd} m (w ${w}, wd ${wd})`);
+  return deepFreeze({ font: b.font, u: b.u.map((v) => (v < 0 ? v * k : v)), psi: b.psi.slice(), material: b.material });
+}
 /** The heartline (m) a tube's roll turns about at channel values x: R = w/2π once the tube is closed, 0 while it is open, a smoothstep between (ref 09 §10). */
 const heartlineOf = (P, x) => (P.tube ? (x.w / (2 * Math.PI)) * smooth((x.t - HEARTLINE_FROM) / (D.TUBE_MAX - HEARTLINE_FROM)) : 0);
 
@@ -585,7 +595,7 @@ function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpe
     const rollRates = (s0, s1) => { if (!rolls) return {}; const r0 = rateAt(s0), r1 = rateAt(s1); return Math.abs(r0) > 1e-12 || Math.abs(r1) > 1e-12 ? { rollRate0: r0, rollRate1: r1 } : {}; };
     let a = at(0);
     if (pi === 0 || doc.pieces[pi - 1].type === 'flight') roll = a.phi;
-    const kind = D.kindOf(P), xs = kind === 'tube' || !!P.edge || (kind === 'cup' && lastKind === 'tube');   // a tube, an edge, or a cup entering from a tube is built by xsecSegments
+    const kind = D.kindOf(P), xs = kind === 'tube' || !!P.edge || (kind === 'cup' && lastKind === 'tube') || D.isWidthSplit(P);   // a tube, an edge, a cup entering from a tube, or a piece whose right side has its own width (D677 (b), read from its values, not its flag, so a reloaded piece builds alike) is built by xsecSegments
     let join = P.cup && !xs && lastLegacy && lastProfile ? { profile: lastPlain || lastProfile } : null;   // a cup handed over from a legacy cross-section
     if (seam && pi === firstRoad && P.cup) join = { profile: legacyLast(doc.pieces[lastRoad]) };   // the lap's start is a cup that follows the legacy END round the seam
     // a cup piece followed by a LEGACY road piece (a file can hold one; Extend never makes one) fades into that piece's first profile, and so does the

@@ -83,9 +83,9 @@ function linkable(ch, A, B) { const f = D.OPTIONAL[ch]; if (!f) return true; if 
 /** The seam's kinds: which optional channels continue round the lap (both end pieces carry them). */
 function seamOf(doc) {
   const road = doc.pieces.filter((P) => P.type === 'road'), F = road[0], L = road[road.length - 1];
-  return { F, L, cupBoth: !!(F.cup && L.cup), edgeBoth: !!(F.edge && L.edge), tubeBoth: !!(F.tube && L.tube) };
+  return { F, L, cupBoth: !!(F.cup && L.cup), edgeBoth: !!(F.edge && L.edge), tubeBoth: !!(F.tube && L.tube), splitBoth: !!(F.split && L.split) };
 }
-const seamJoined = (ch, sm) => !D.OPTIONAL[ch] || (ch === 'c' ? sm.cupBoth : ch === 't' ? sm.tubeBoth : sm.edgeBoth);
+const seamJoined = (ch, sm) => !D.OPTIONAL[ch] || (ch === 'c' ? sm.cupBoth : ch === 't' ? sm.tubeBoth : ch === 'wd' ? sm.splitBoth : sm.edgeBoth);
 /**
  * A seam that joins an edge or a tube to something that cannot match it is REFUSED BY NAME, never solved around (seal E4 iii, T2): a tube against a different cross-section (TUBE_SEAM),
  * or an edge that is still active at one end of the lap against a piece with none (EDGE_SEAM: the unflagged end has e = 0 with slope 0, so the flagged end must end there too).
@@ -96,6 +96,11 @@ function checkSeamKinds(doc) {
   if (!!F.edge !== !!L.edge) {
     const Fh = F.knots.length ? F.knots[0] : F.length, E = F.edge ? [F.channels.e[0], (3 * (F.channels.e[1] - F.channels.e[0])) / Fh] : [D.pieceEnd(L).e.v, D.pieceEnd(L).e.m];   // the flagged end of the seam: its e and slope there
     if (Math.abs(E[0]) > EDGE_SEAM_TOL || Math.abs(E[1]) > EDGE_SEAM_TOL) throw new D.CoreError('EDGE_SEAM', `close: the lap would join an edge (e ${E[0]}°, slope ${E[1]}) to a piece with none at the seam; bring the edge back to 0 before the end of the lap, or give both ends an edge`);
+  }
+  // D677 (b): a right side with its own width at one end of the lap against a piece whose sides are one width, the same way (SPLIT_SEAM): the unsplit end has wd 0 with slope 0
+  if (!!F.split !== !!L.split) {
+    const Fh = F.knots.length ? F.knots[0] : F.length, W = F.split ? [F.channels.wd[0], (3 * (F.channels.wd[1] - F.channels.wd[0])) / Fh] : [D.pieceEnd(L).wd.v, D.pieceEnd(L).wd.m];
+    if (Math.abs(W[0]) > EDGE_SEAM_TOL || Math.abs(W[1]) > EDGE_SEAM_TOL) throw new D.CoreError('SPLIT_SEAM', `close: the lap would join a right side of its own width (wd ${W[0]} m, slope ${W[1]}) to a piece whose sides are one width at the seam; bring the right width back to the width before the end of the lap, or give both ends a right width`);
   }
 }
 function parameters(doc, edited, free = null) {
@@ -260,7 +265,7 @@ function heldCup(F, L) {
 
 /** The residual, measured on the adapter's path and the document itself (ref 10 §3). */
 /** The channels whose VALUE must meet round the seam: heading, pitch, width and rise always; the cup, the edge pair and the tube sweep where both ends carry them. */
-const valueChannels = (sm) => ['kh', 'kv', 'w', 'r', ...(sm.cupBoth ? ['c'] : []), ...(sm.edgeBoth ? ['e', 's', 'er'] : []), ...(sm.tubeBoth ? ['t'] : [])];
+const valueChannels = (sm) => ['kh', 'kv', 'w', 'r', ...(sm.cupBoth ? ['c'] : []), ...(sm.edgeBoth ? ['e', 's', 'er'] : []), ...(sm.tubeBoth ? ['t'] : []), ...(sm.splitBoth ? ['wd'] : [])];
 // a document is immutable (frozen, src/core/document.js), so its residual is computed once and remembered: one press asked it of the same open track four
 // times (finish.js isNear, its gap, and twice inside finishToStart), each building the whole path again (about 2 s apiece on a 25 km track). The remembered
 // answer is frozen, so no reader can change what the next one gets. A document that is not frozen is computed every time, as before.

@@ -115,7 +115,7 @@ function channelFn({ v, m }, target, Lt, ch, shape = null) {
   if (!Number.isFinite(target)) throw new D.CoreError('BAD_TARGET', `a target must be a finite number, got ${target}`);
   const a = ch === 'phi' && (shape === 'rounded' || shape === 'swell') ? roundingOf(shape, Lt) / Lt : null;   // the bank's rounded-linear ramp, asked for; the swell's
   const blend = C2_CHANNELS.has(ch) ? smoother : bloss;
-  const S0 = (C2_CHANNELS.has(ch) || ch === 'w') && isShares(shape) ? (u) => rampShape(u, shape.rise, shape.fall) : a !== null ? (u) => roundedLinear(u, a) : blend;   // the two-share ramp, asked for by its shares
+  const S0 = (C2_CHANNELS.has(ch) || ch === 'w' || ch === 'wd') && isShares(shape) ? (u) => rampShape(u, shape.rise, shape.fall) : a !== null ? (u) => roundedLinear(u, a) : blend;   // the two-share ramp, asked for by its shares
   return (s) => { const u = s / Lt, S = S0(u); return u >= 1 ? target : (1 - S) * cont(s) + S * target; };
 }
 
@@ -337,8 +337,9 @@ function secondRamp(piece, plan) {
  * the climb to change more than once per piece, the same with turns?"). The fields a change may move, in the ONE order they are laid (so the same `changes` with its keys in
  * any order is the same document: pane E's registration, addendum A1).
  */
-const CHANGE_CHANNELS = ['kh', 'kv', 'phi', 'w', 'c', 'e', 'er'];
-const FIELD_NAMES = { kh: 'turn', kv: 'climb', phi: 'bank', w: 'width', c: 'cup', e: 'edge', er: 'right edge' };
+// wd (the right side's width less the width, D677 (b)) is last, so a document with no right width lays its changes in the order and bytes it always did
+const CHANGE_CHANNELS = ['kh', 'kv', 'phi', 'w', 'c', 'e', 'er', 'wd'];
+const FIELD_NAMES = { kh: 'turn', kv: 'climb', phi: 'bank', w: 'width', c: 'cup', e: 'edge', er: 'right edge', wd: 'right width' };
 const NTH = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'];
 /** "change 1 (its second bank)": which change, by its number and by the field's own count (the first is the target). */
 const changeName = (ch, k) => `change ${k + 1} (its ${NTH[k + 1] || `${k + 2}th`} ${FIELD_NAMES[ch]})`;
@@ -354,11 +355,11 @@ const SECOND_FLOOR_M = 20;
  * the width 40 m for every change measured (1 to 25 m; shorter, the fit overshoots the target by up to 0.2 m at 37 to 39 m), the cup and the edges 26 m (20 m for a 1° change;
  * shorter, the fit moves the road before the mark, 0.15° a degree of change at 25 m). Neither grows with the change. test/core_extra_change.test.js row 6 re-reads them.
  */
-const CHANGE_FLOOR_M = Object.freeze({ w: 40, c: 26, e: 26, er: 26 });
+const CHANGE_FLOOR_M = Object.freeze({ w: 40, c: 26, e: 26, er: 26, wd: 40 });   // wd: the right side's edge line moves as the width's does (half its change), so the width's floor, not measured apart
 /** The width's, cup's and edges' comfort length before 2026-11-10 (the change's own peak under the route's bar, a cube: the smooth-all-around law), at least
  *  SECOND_FLOOR_M. A change it passes is never refused: the floor is the shorter of the two, so a tiny change keeps today's 20 m. */
 const WHEEL_M = 8.4;
-const comfortOf = (ch, d) => Math.max(SECOND_FLOOR_M, ch === 'w' ? Math.cbrt((30 * d) / (0.9 * ROUTE_BAR)) : Math.cbrt((60 * WHEEL_M * d * (Math.PI / 180)) / ROUTE_BAR));
+const comfortOf = (ch, d) => Math.max(SECOND_FLOOR_M, ch === 'w' || ch === 'wd' ? Math.cbrt((30 * d) / (0.9 * ROUTE_BAR)) : Math.cbrt((60 * WHEEL_M * d * (Math.PI / 180)) / ROUTE_BAR));
 const floorOf = (ch, a, b) => Math.min(CHANGE_FLOOR_M[ch], comfortOf(ch, Math.abs(b - a)));
 /** The bank's fit has the same floor as the cup's, read on the document (it is a C2 channel too): 26 m (20 m for 1°, 23 m for 2°; shorter, the fit moves the bank before the
  *  mark, 0.15° a degree of change at 25 m). Its built road is read apart (bankAsBuilt). */
@@ -906,7 +907,7 @@ function flowBuiltWrong(doc, piece, marks, v0) {
 // cross-section typed in `first` is the landing's START, as on an empty track; nothing morphs across the air (src/core/adapter.js) and the document asks the landing
 // only to start level at the flight's bank (document.js landingProblem), so the format already holds it. Only these channels: a turn, climb, offset or bank in
 // `first` would break that level start, so they are not read here (the start is endState's, document.js afterFlight). A blank channel carries the take-off's, as before.
-const LANDING_FIRST = Object.freeze(['w', 'c', 'e', 'er', 's']);
+const LANDING_FIRST = Object.freeze(['w', 'c', 'e', 'er', 's', 'wd']);
 const endsInFlight = (doc) => doc.pieces.length > 0 && doc.pieces[doc.pieces.length - 1].type === 'flight';
 /** The state a new piece starts from (D.endState), with the typed cross-section as the start of a landing after a bare flight (null on an empty track, as endState). */
 function landingStart(doc, first) {
@@ -944,11 +945,12 @@ function extend(doc, opts = {}) {
   if (startShapes !== undefined && startShapes !== null) {
     if (typeof startShapes !== 'object' || Array.isArray(startShapes)) throw new D.CoreError('BAD_SHAPE', `startShapes maps c, e, er and w to { rise, fall }, got ${startShapes}`);
     for (const [ch, sh] of Object.entries(startShapes)) {
-      if (!['c', 'e', 'er', 'w'].includes(ch)) throw new D.CoreError('BAD_SHAPE', `startShapes takes c, e, er and w (the bank's is bankShape), got "${ch}"`);
+      if (!['c', 'e', 'er', 'w', 'wd'].includes(ch)) throw new D.CoreError('BAD_SHAPE', `startShapes takes c, e, er, w and wd (the bank's is bankShape), got "${ch}"`);
       if (!isShares(sh)) throw new D.CoreError('BAD_SHAPE', `the start shape of ${ch} is { rise, fall }, got ${sh}`);
       rampShape(0.5, sh.rise, sh.fall);   // the shares are checked before anything is laid
     }
     if (startShapes.e && !startShapes.er) startShapes = { ...startShapes, er: startShapes.e };
+    if (startShapes.w && !startShapes.wd) startShapes = { ...startShapes, wd: startShapes.w };   // a right width with no shape of its own follows the width's
   }
   if (!(length > 0)) throw new D.CoreError('BAD_LENGTH', `extend needs a positive length, got ${length}`);
   // er, the RIGHT edge angle (document.js): an edge angle typed without a right one sets both sides, as before er existed; a right one typed alone
@@ -999,12 +1001,18 @@ function extend(doc, opts = {}) {
   const lastEnd = last && last.edge ? D.pieceEnd(last) : null, lastE = lastEnd && lastEnd.e, lastER = lastEnd && lastEnd.er;
   const live = (x) => !!(x && (Math.abs(x.v) > 1e-9 || Math.abs(x.m) > 1e-9));   // a side still turning its edge
   const edge = given(targets.e) || given(targets.er) || given(targets.s) || (startTyped && (given(f0.e) || given(f0.er) || given(f0.s))) || live(lastE) || live(lastER);
+  // D677 (b): the right side has its own width on this piece when one is typed (the target, the at-start first, a change) or the road before still has one; a track
+  // that never had one lays a piece with none, so its bytes do not move
+  const lastWd = last && last.split ? D.pieceEnd(last).wd : null;
+  const split = given(targets.wd) || (startTyped && given(f0.wd)) || !!(changes && changes.wd) || live(lastWd);
+  if (split && tube) throw new D.CoreError('BAD_TUBE', "a tube's sides are one width (its section is one circle): the right side's own width is for a road that is not a tube");
   if (!from) {   // an empty track: the start state, and nothing held
     const f = { kh: 0, kv: 0, phi: 0, w: WIDTHS[fam], r: RATES[fam], h: 0, l: 0, ...(first || {}) };
     if (f.c === undefined) f.c = D.legacyEdgeDeg(fam, f.w, f.r);   // a cup asked for on an empty track starts at the edge the family renders
     if (f.e === undefined) f.e = 0;
     if (f.er === undefined) f.er = f.e;
     if (f.s === undefined) f.s = D.S_DEFAULT;
+    if (f.wd === undefined) f.wd = 0;
     if (f.t === undefined) f.t = 2 * f.c;   // a tube asked for on an empty track starts at twice that edge (its own edge is t/2)
     from = Object.fromEntries(D.CHANNELS.map((ch) => [ch, { v: f[ch], m: 0 }])); held = false;
   }
@@ -1012,10 +1020,10 @@ function extend(doc, opts = {}) {
   const channels = Object.fromEntries(D.CHANNELS.map((ch) => [ch, channelFn(from[ch], targets[ch], Lof(ch), ch, shapeOf(ch))]));
   const c2Targets = [...C2_CHANNELS].filter((ch) => given(targets[ch]));
   // a shaped width at start is laid as the cross-section's are, in three quarters of its ramp (8 subdivisions), so F's 20 m rise is 20 m as laid
-  const sub = shortRamps.some((ch) => C2_CHANNELS.has(ch) || (ch === 'w' && shapeOf(ch))) ? RAMP_KNOTS_C2 : RAMP_KNOTS;   // the short-ramp subdivisions, 8 when a cross-section channel ramps short
+  const sub = shortRamps.some((ch) => C2_CHANNELS.has(ch) || ((ch === 'w' || ch === 'wd') && shapeOf(ch))) ? RAMP_KNOTS_C2 : RAMP_KNOTS;   // the short-ramp subdivisions, 8 when a cross-section channel ramps short
   // extra knots only where a ramp is short; a piece with a bank, cup or edge target has at least three interior knots, so c2Ends has a free point at each end and one is left for the shape
   const knots = shortRamps.length ? rampKnots(length, shortRamps.map((ch) => ramp[ch]), knotM, sub) : c2Targets.length && D.evenKnots(length, knotM === undefined ? D.KNOT_M : knotM).length < 3 ? D.evenKnots(length, length / 4) : undefined;
-  const piece = D.roadPiece({ length, family: fam, from: held ? from : null, channels, knotM, knots, cup, edge, tube, grip: grip === undefined ? D.gripOf(last) : grip });
+  const piece = D.roadPiece({ length, family: fam, from: held ? from : null, channels, knotM, knots, cup, edge, tube, split, grip: grip === undefined ? D.gripOf(last) : grip });
   for (const ch of shortRamps) rampControl(piece, ch, from[ch], targets[ch], ramp[ch], held, sub, shapeOf(ch));   // not fitted: see rampControl
   for (const ch of c2Targets) if (!shortRamps.includes(ch)) fitWithHold(piece, ch, channels[ch], Lof(ch), targets[ch]);   // the fitted quintic, its hold and end pinned (fitWithHold)
   // the clamps below may move a channel's last two points ("an edge that ends at 0 ends flat"), so the ends are pinned to zero curvature AFTER them (c2Ends moves
@@ -1074,7 +1082,7 @@ function extend(doc, opts = {}) {
   // a box-off ramp, a whole-piece one (below) and a bank at start with no shape never come here, so their bytes do not move
   // and a SHAPED cup or edge at start the same way (startShapes): the knots of every shaped short ramp in one insertion, then each of those channels read again
   let laid = piece;
-  const shapedShort = shortRamps.filter((ch) => (C2_CHANNELS.has(ch) || ch === 'w') && shapeOf(ch));
+  const shapedShort = shortRamps.filter((ch) => (C2_CHANNELS.has(ch) || ch === 'w' || ch === 'wd') && shapeOf(ch));
   if (shapedShort.length) {
     const ts = shapedShort.flatMap((ch) => shapeKnots(shapeOf(ch), Math.max(ramp[ch] - (2 * ramp[ch]) / sub, ramp[ch] / sub))).map((k) => +k.toFixed(4))
       .filter((k) => k > 0.5 && k < length - 0.5 && piece.knots.every((h) => Math.abs(h - k) > 1e-3));
@@ -1121,6 +1129,12 @@ function extend(doc, opts = {}) {
     // piece after, turnby.js, checks the piece it returns instead: checkBankAsBuilt)
     const w = opts.bankCheck !== false && flowBuiltWrong(doc, laid, marks, from.phi.v);
     if (w) throw flowRefusal(w, marks, length, trial);
+  }
+  // D677 (b): a right width brought back to the width ENDS there, flat (its last two control points 0), as an edge that ends at 0 does: the width's fit ends a hair off
+  // its target (-0.0109 m measured on a 40 m ramp), and a right width left that far off would split every piece after it, and write wd and core/7, for good
+  if (split) {
+    const li = lists.wd, endAsked = li && li.items.length ? li.items[li.items.length - 1].target : targets.wd, wd = laid.channels.wd, n = wd.length;
+    if (endAsked === 0 && (wd[n - 1] !== 0 || wd[n - 2] !== 0)) { const z = wd.slice(); z[n - 1] = 0; z[n - 2] = 0; laid = { ...laid, channels: { ...laid.channels, wd: z } }; }
   }
   if (opts.bankCheck !== false) bankAsBuilt(doc, laid, deferred);   // a caller that reshapes the piece after (turnby.js) checks the piece it returns instead
   return D.appendPiece(doc, laid);

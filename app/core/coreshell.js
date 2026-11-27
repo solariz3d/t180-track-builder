@@ -659,7 +659,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       message: null,
     }));
   };
-  const withRight = (h, end) => ({ ...h, er: end && end.er && Number.isFinite(end.er.v) ? end.er.v : h[XS.CHANNEL.edge] });
+  // and the right side's width less the width, wd (D677 (b)): 0 where the document has none, so the panel's "right width m" shows the width there
+  const withRight = (h, end) => ({ ...h, er: end && end.er && Number.isFinite(end.er.v) ? end.er.v : h[XS.CHANNEL.edge], wd: end && end.wd && Number.isFinite(end.wd.v) ? end.wd.v : 0 });
   const api = {
     getState: () => st,
     /** the values that made a step: the panel notes { before, made } for the document its Extend made; madeFor(doc) gives them back ({ before, made } or undefined). Saved in the undo file. */

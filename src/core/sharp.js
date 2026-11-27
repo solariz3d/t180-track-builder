@@ -98,6 +98,7 @@ function probe(doc, opts, sharp) {
     // its KIND too, and both edges: a cup typed after a bare flight probes as a cup (extend.js landingKind), and the right edge is its own (A's read of C1, F1 and F2)
     const kind = landingKind(doc, opts.first), first = { kh: 0, kv: 0, phi: from.phi.v, w: from.w.v, r: from.r.v, e: from.e.v, er: from.er.v, s: from.s.v };
     if (kind === 'cup') first.c = from.c.v; else if (kind === 'tube') first.t = from.tNext ? from.tNext.v : from.t.v;
+    if (from.wd && from.wd.v) first.wd = from.wd.v;   // D677 (b): a right side of its own width probes with it (none: the probe is as before)
     start = extend(start, { length: PROBE_IN, family: last ? last.family : 'bowl', first });
   } else start = extend(start, { length: PROBE_IN, family: opts.family || 'bowl' });
   const c = corner(start, opts, sharp), s0 = PROBE_IN, s1 = c.pieces.slice(1).reduce((a, P) => a + P.length, PROBE_IN);

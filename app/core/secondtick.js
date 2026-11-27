@@ -44,6 +44,7 @@ const STYLE = Object.freeze({
   cup: { kind: 'cup', lat: HD.KINDS.cup.lat, sides: [1, -1], nudgePx: 0 },
   edge: { kind: 'cup', lat: 0.65, sides: [1], nudgePx: 0, colour: EDGE_COLOUR },   // dragged with the cup's maths: degrees across, as the cup's handle
   edgeR: { kind: 'cup', lat: 0.65, sides: [-1], nudgePx: 0, colour: EDGE_COLOUR },
+  widthR: { kind: 'width', lat: HD.KINDS.width.lat, sides: [-1], nudgePx: -NUDGE_PX },   // D677 (b): the right side's width, on the right side only
 });
 function styleOf(field) {
   const s = STYLE[field]; if (!s) throw new Error(`secondtick: no field "${field}"`);

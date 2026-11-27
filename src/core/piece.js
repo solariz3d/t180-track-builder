@@ -75,12 +75,14 @@ function saveRun(doc, from, to = from, { name } = {}) {
   if (!roads.length) throw err('NO_ROAD', 'a run of flights alone has no road to save: a jump is saved with the road around it');
   const sig = signature(roads[0]);
   if (roads.some((P) => signature(P) !== sig)) throw err('MIXED_RUN', `the run mixes cross-sections (${[...new Set(roads.map(signature))].join(', ')}): a saved run is one kind, legacy, cup or tube (with or without an edge); save each kind's run on its own`);
+  // D677 (b): a saved piece has no right width yet (its format, t180b.piece/1, predates wd), so a run with one is refused by name rather than saved with both sides at the width
+  if (roads.some(D.isWidthSplit)) throw err('SPLIT_RUN', 'this run has a road whose right side has its own width, which a saved piece cannot keep yet; save a run whose sides are one width');
   const first = roads[0], start = {};
   for (const ch of STATE) if (hasChannel(first, ch)) start[ch] = q(first.channels[ch][0], D.DEC[ch]);
   const pieces = run.map((P) => {
     if (!isRoad(P)) return flightOut(P, -(start.phi || 0));
     const channels = {};
-    for (const ch of D.CHANNELS) { if (!hasChannel(P, ch)) continue; channels[ch] = STATE.includes(ch) ? P.channels[ch].map((v) => q(v - start[ch], D.DEC[ch])) : P.channels[ch].slice(); }
+    for (const ch of D.CHANNELS) { if (!hasChannel(P, ch) || ch === 'wd') continue; channels[ch] = STATE.includes(ch) ? P.channels[ch].map((v) => q(v - start[ch], D.DEC[ch])) : P.channels[ch].slice(); }
     return { type: 'road', length: P.length, family: P.family, ...(P.grip !== undefined ? { grip: P.grip } : {}), knots: P.knots.slice(), channels, ...(P.cup ? { cup: true } : {}), ...(P.edge ? { edge: true } : {}), ...(P.tube ? { tube: true } : {}) };
   });
   try { return freeze(checkPiece({ schema: SCHEMA, generator: GENERATOR, name, start, pieces })); } catch (e) {
