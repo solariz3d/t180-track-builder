@@ -37,6 +37,16 @@ All notable changes to this project are recorded here. The format follows
 - **A saved piece keeps the numbers that made it, in a `.t180recipe` file beside it.** Written by Save as piece when one Extend laid exactly the selected pieces; the piece file itself is unchanged, so older builds open the piece as before and ignore the recipe. Rename carries it, Delete removes it, and a recipe left beside a different file of the same name is not used (it names the piece file by a hash).
 
 ### Changed
+- **After a width brush, Extend with the width left as shown holds the width.** A brush near the open end leaves the end on the brush's falloff, the
+  width still changing there, and Extend carried that on: after a +1.37 m brush the road narrowed about 10 cm every 100 m, although the width field
+  says that left as shown it keeps the width. (So could a width ramp given to the core as one number transition for every channel, which the fit can
+  end off level: 25 typed over 30 m of a 75 m piece ended widening 8.4 cm per metre, and three corners laid after it ran the road out to 59 to 210 m
+  wide. The panel's own width ramps end level.) Now a width with no target, at a head where it is still changing, is brought to rest at the head's own
+  width within the new piece's first knot span (at most 20 m), by the blend a typed width takes, and the piece ends there, level. The joint stays
+  smooth (value and slope continuous), and the width moves a few millimetres inside that span (3.7 mm after that brush) before it holds. A level head
+  lays exactly as before, and a typed width still goes where it is typed. Only the width: the turn and climb keep going as they go, as their fields
+  say, and the bank, cup, edges and right width still carry a brush's slope on as before (measured after the same kind of brush: 0.42° of bank,
+  0.73° of cup or edge and 7.35 cm of right width every 100 m).
 - **A typed bank past a full turn rolls on into the next turn instead of unwinding.** He asked for it on 2026-11-26: past a full turn the bank
   shown resets to 0, and the road carries the extra degrees into the next turn. The bank field still shows the bank within one turn, its sign kept, but a
   typed bank (the field, an extra bank row, a flowing bank's mark) is now laid as typed, in the head's own turn. From a head at −340, a typed −392 rolls

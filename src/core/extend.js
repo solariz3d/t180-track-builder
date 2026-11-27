@@ -1,6 +1,7 @@
 // extend.js: grow the track from its open end (the spec's GO §2). The new piece's channels START at the previous piece's
 // end value and slope and CONTINUE it (ref 09 §2: v + m·s), so with no handle touched a circle stays a circle and a
-// clothoid stays a clothoid. A handle sets a TARGET for one channel, reached over a transition by a blend
+// clothoid stays a clothoid (L264: one exception, the WIDTH: with no target, at a head where it is still changing, it is brought to rest at the head's width, holdW
+// below). A handle sets a TARGET for one channel, reached over a transition by a blend
 // (1 − S(u))·cont(s) + S(u)·T. For the ROUTE channels (kh, kv, w, r, …) S is the Bloss cubic 3u² − 2u³ (ref 02 §4, ref 09 §2): zero slope change at
 // both ends. For the CROSS-SECTION channels the car's wheels ride on (the bank phi, the cup c, the edges e and er) S is the C2 quintic 6u⁵ − 15u⁴ + 10u³
 // (since 2026-10-25): zero slope AND zero curvature at both ends. The cubic's curvature is 6·Δ/L² at its ends, so under a wheel 8.4 m out a bank of 30° over
@@ -1017,7 +1018,13 @@ function extend(doc, opts = {}) {
     from = Object.fromEntries(D.CHANNELS.map((ch) => [ch, { v: f[ch], m: 0 }])); held = false;
   }
   if (from.tNext) from = { ...from, t: from.tNext };   // the tube this piece may start continues from tNext (endState reports t only at a tube head)
-  const channels = Object.fromEntries(D.CHANNELS.map((ch) => [ch, channelFn(from[ch], targets[ch], Lof(ch), ch, shapeOf(ch))]));
+  // L264, THE WIDTH HOLDS (his choice, 2026-11-27: after Sculpt's width brush, Extend with the width left as shown holds the width, as the width field says): a
+  // width with no target, at a head where the width is still changing (a brush ends the open end on its falloff; a piece Extend lays ends level), is brought to
+  // rest at the head's own width by the blend a typed width takes (bloss: the head's value and slope at the joint, so it is C1; level at its end), and the pieces
+  // after it keep it. The width only: the turn and climb keep going as they go (ref 09 §2), and the bank, cup, edges and right width are as before (L264 measured
+  // them, and changed none). A level head is not touched, so every Extend from one lays as before, to the byte.
+  const holdW = held && !given(targets.w) && from.w.m !== 0 ? from.w.v : undefined;
+  const channels = Object.fromEntries(D.CHANNELS.map((ch) => [ch, ch === 'w' && holdW !== undefined ? channelFn(from.w, holdW, startRampM(length, knotM), 'w') : channelFn(from[ch], targets[ch], Lof(ch), ch, shapeOf(ch))]));
   const c2Targets = [...C2_CHANNELS].filter((ch) => given(targets[ch]));
   // a shaped width at start is laid as the cross-section's are, in three quarters of its ramp (8 subdivisions), so F's 20 m rise is 20 m as laid
   const sub = shortRamps.some((ch) => C2_CHANNELS.has(ch) || ((ch === 'w' || ch === 'wd') && shapeOf(ch))) ? RAMP_KNOTS_C2 : RAMP_KNOTS;   // the short-ramp subdivisions, 8 when a cross-section channel ramps short
@@ -1136,6 +1143,9 @@ function extend(doc, opts = {}) {
     const li = lists.wd, endAsked = li && li.items.length ? li.items[li.items.length - 1].target : targets.wd, wd = laid.channels.wd, n = wd.length;
     if (endAsked === 0 && (wd[n - 1] !== 0 || wd[n - 2] !== 0)) { const z = wd.slice(); z[n - 1] = 0; z[n - 2] = 0; laid = { ...laid, channels: { ...laid.channels, wd: z } }; }
   }
+  // L264: a held width ENDS at the head's width, level (its last two control points), as a right width brought back to the width does: on a piece with no inner knot
+  // the fit cannot end level by itself (+0.00093 /m measured on 10 m), and a slope left at the end would carry on into the next piece
+  if (holdW !== undefined) { const w = laid.channels.w, n = w.length; if (w[n - 1] !== holdW || w[n - 2] !== holdW) { const z = w.slice(); z[n - 1] = holdW; z[n - 2] = holdW; laid = { ...laid, channels: { ...laid.channels, w: z } }; } }
   if (opts.bankCheck !== false) bankAsBuilt(doc, laid, deferred);   // a caller that reshapes the piece after (turnby.js) checks the piece it returns instead
   return D.appendPiece(doc, laid);
 }
