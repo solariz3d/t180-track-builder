@@ -975,7 +975,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       // the direct check when a Sculpt drag ends: both centrelines built and compared bit for bit; a drag that moved it is dropped whole
       if (b.sculpt) { const moved = CL.pathMoved(CL.snapshot(b.baseResolved), st.resolved); if (moved) return set({ history: b.baseHistory, ...resolvedOf(b.baseHistory.present), brush: null, message: 'SCULPT_MOVES_CENTRELINE: Sculpt dropped this drag: when it ended, the track\'s centreline had moved (checked point by point), so the track is as it was.' }); }
       // EVEN's release: one undo step, and what it did said in plain words (app/core/evenwords.js), with where the car now leaves the road on the new middle
-      if (b.mode === 'even') return attempt(() => { const words = b.evenRes && doc() !== b.base ? EVW.evenWords(b.base, b.evenRes) : null; return set({ history: D.endDrag(st.history), brush: null, lastEdited: b.pieces, ...(words ? ok(words.message) : {}), evenLeaves: words ? words.leaves : null }); });
+      if (b.mode === 'even') return attempt(() => { const words = b.evenRes && doc() !== b.base ? EVW.evenWords(b.base, b.evenRes) : null; return set({ brush: null, history: D.endDrag(st.history), lastEdited: b.pieces, ...(words ? ok(words.message) : {}), evenLeaves: words ? words.leaves : null }); });
       // the brushed pieces are what close() goes round (the brush's window)
       // (endDrag keeps the same present, so a Sculpt selection, re-based at each step, still belongs to it)
       return attempt(() => set({ history: D.endDrag(st.history), brush: null, lastEdited: piecesIn(doc(), b.s0 - b.r, b.s0 + b.r) }));

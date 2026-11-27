@@ -46,7 +46,8 @@ const ROWS = ['core-bank-carry.test.js', 'core-extra-bank-wind.test.js'];   // t
 const FILES = [...ROWS, 'core-pieces-ui.test.js'];                           // every file a mutant names; the CONTROL runs them all whole on the copy
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-bankcarry-mut-'));
-  for (const d of ['src', 'tools', 'app/core', 'app/camera', 'app/lib', 'app/validate-ui', 'app/preview', 'app/export', 'app/share', 'app/testhook', 'app/settings.js', 'app/index.html', 'test/fixtures']) if (fs.existsSync(path.join(ROOT, d))) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });
+  // D678 (amended by name): test/even_fixtures.js, which core-pieces-ui.test.js's Even rows require; without it the CONTROL fails and every mutant reads caught
+  for (const d of ['src', 'tools', 'app/core', 'app/camera', 'app/lib', 'app/validate-ui', 'app/preview', 'app/export', 'app/share', 'app/testhook', 'app/settings.js', 'app/index.html', 'test/fixtures', 'test/even_fixtures.js']) if (fs.existsSync(path.join(ROOT, d))) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });
   fs.mkdirSync(path.join(dir, 'app', 'test'), { recursive: true }); for (const f of FILES) fs.copyFileSync(path.join(__dirname, f), path.join(dir, 'app', 'test', f));
   return dir;
 }
