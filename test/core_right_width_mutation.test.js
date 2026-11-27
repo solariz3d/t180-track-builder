@@ -21,7 +21,11 @@ const MUTANTS = [
   { id: 'R4 a text with wd reads back without its split flag', edits: [[DOC, "...(has('wd') ? { split: true } : {})", '']] },
   { id: 'R5 roadPiece drops the split flag', edits: [[DOC, '...(tube ? { tube: true } : {}), ...(split ? { split: true } : {})', '...(tube ? { tube: true } : {})']] },
   { id: 'R6 an unspecified wd on a split piece does not continue from the piece before', edits: [[DOC, "(OFFSETS.includes(ch) || ch === 'wd')", 'OFFSETS.includes(ch)']] },
-  { id: 'R7 a piece with no split has no wd at its end', edits: [[DOC, '  if (!P.split) out.wd = { v: 0, m: 0 };', '']] },
+  // LEFT OUT (L258, pane B): R7 'a piece with no split has no wd at its end' (pieceEnd's `if (!P.split) out.wd = { v: 0, m: 0 };` removed) is EQUIVALENT
+  // on every road piece the core makes: roadPiece, parse (parseChannel: an optional channel the text lacks takes its default) and a placed saved piece
+  // (piece.js, the defaults filled) each give a piece with no split a wd of 0s, from which pieceEnd reads { v: 0, m: 0 } itself. It differs only on a road
+  // object made by hand with no wd array (pane B's scratch survivors.js), which none of pieceEnd's callers is given. The other six survivors of the first run
+  // (R6, R18 to R22) each have a row now, seen red against it
   // the document's own domain
   { id: 'R8 a split piece is not checked at all', edits: [[DOC, '    if (P.split) checkSplit(P, at);', '']] },
   { id: 'R9 a right side of 0 m or less is not refused', edits: [[DOC, "  if (!(worst > 0)) throw new CoreError('BAD_WIDTH'", "  if (false) throw new CoreError('BAD_WIDTH'"]] },

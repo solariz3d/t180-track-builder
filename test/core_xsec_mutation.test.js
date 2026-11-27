@@ -36,7 +36,7 @@ const MUTANTS = [
   { id: 'KE2-7 a legacy piece\'s total cap ignores its own edge angle (e alone against 150)', file: 'core', pattern: 'DOMAIN', edits: [[C + 'document.js', 'const mid = legacyEdgeDeg(P.family, Math.max(...P.channels.w), Math.max(...P.channels.r)) + Math.max(...e);', 'const mid = Math.max(...e);']] },
   // ── E3: the schema and the identity ──
   { id: 'KE3-3 the schema is still /3', file: 'core', pattern: 'SCHEMA', edits: [[C + 'document.js', "const SCHEMA = 't180b.core/4',", "const SCHEMA = 't180b.core/3',"]] },
-  { id: 'KE3-4 every piece\'s text carries e, s and t', file: 'core', pattern: 'SCHEMA: new documents', edits: [[C + 'document.js', "CHANNELS.filter((ch) => (!OPTIONAL[ch] || P[OPTIONAL[ch]]) && (ch !== 'er' || isSplit(P))).map(", 'CHANNELS.map(']] },
+  { id: 'KE3-4 every piece\'s text carries e, s and t', file: 'core', pattern: 'SCHEMA: new documents', edits: [[C + 'document.js', "CHANNELS.filter((ch) => (!OPTIONAL[ch] || P[OPTIONAL[ch]]) && (ch !== 'er' || isSplit(P)) && (ch !== 'wd' || isWidthSplit(P))).map(", 'CHANNELS.map(']] },   // AMENDED (L258, pane B): the right width (D677 b) changed this string; the mutant is the same
   { id: 'KE3-5 a /3 file is not read', file: 'core', pattern: 'SCHEMA: new documents', edits: [[C + 'document.js', "OLD_SCHEMAS = Object.freeze(['t180b.core/1', 't180b.core/2', 't180b.core/3'])", "OLD_SCHEMAS = Object.freeze(['t180b.core/1', 't180b.core/2'])"]] },
   { id: 'KE3-6 a text with an edge array is not read as an edge piece', file: 'core', pattern: 'SCHEMA: an edge piece', edits: [[C + 'document.js', "...(has('e', 's', 'er') ? { edge: true } : {})", '']] },
   // ── E4: along the road (KE4-*) ──

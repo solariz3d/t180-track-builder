@@ -192,3 +192,49 @@ test('Extend: a right width brought back to the width over a numeric transition 
   assert.ok(!next.pieces[4].split, 'the next piece is not split');
   assert.equal(JSON.parse(D.serialize(next)).pieces[4].channels.wd, undefined, 'and writes no wd');
 });
+
+// ── L258 (pane B, continuing D's build on L): rows for the six mutants the harness's first run left alive (R6, R18 to R22), each seen red against its mutant
+// (test/core_right_width_mutation.test.js). R7 is left out there as equivalent, and the harness says why ──
+
+test('the document: a split piece made with its wd left out carries the right width on from the end before it, value and slope, as an offset does', () => {
+  const d = extend(road(), { length: 100, targets: { wd: STEP } }), P = d.pieces[2], end = D.pieceEnd(P);
+  const { wd, ...rest } = P.channels;
+  const Q = D.roadPiece({ length: P.length, family: P.family, from: end, channels: rest, knots: P.knots, split: true });
+  for (const s of [0, 50, 100]) assert.ok(Math.abs(D.channelValue(Q, 'wd', s) - (end.wd.v + end.wd.m * s)) < 1e-3, `at ${s} m: ${D.channelValue(Q, 'wd', s)} (the end before it: ${end.wd.v}, slope ${end.wd.m})`);
+});
+
+test('Extend: a right width\'s change has the width\'s floor: its shortest is the width\'s for the same change, and one asked shorter is refused by name (BAD_SECOND)', () => {
+  const { secondMinM } = require('../src/core/extend.js');
+  assert.equal(secondMinM('wd', 0, STEP), secondMinM('w', W, WR), 'the same shortest as the width for the same 3.5 m');
+  const e = refusal(() => extend(road(), { length: 200, targets: { wd: STEP }, changes: { wd: [{ from: 190, target: 0 }] } }));
+  assert.equal(e && e.code, 'BAD_SECOND', e && e.message);
+  assert.match(e.message, /right width/);
+});
+
+test('Extend: a right width with no start shape of its own follows the width\'s two-share ramp, and one given the same shares lays the same ramp', () => {
+  const sh = { rise: 0.2, fall: 0.8 };
+  const ramp = (startShapes) => { const P = extend(road(), { length: 200, targets: { w: WR, wd: STEP }, transition: { w: 'start', wd: 'start' }, startShapes }).pieces[2];
+    return [5, 10, 15].map((s) => [s, (D.channelValue(P, 'w', s) - W) / (WR - W), D.channelValue(P, 'wd', s) / STEP]); };
+  for (const [label, shapes] of [['the width\'s shape only', { w: sh }], ['both given', { w: sh, wd: sh }]]) {
+    for (const [s, w, wd] of ramp(shapes)) assert.ok(Math.abs(w - wd) < 1e-4, `${label}, at ${s} m: the width ${w.toFixed(4)} of its change, the right width ${wd.toFixed(4)}`);
+  }
+});
+
+test('Extend refuses a right width on a tube in its own words (BAD_TUBE), not the document\'s', () => {
+  const t = extend(D.createDoc('tube'), { length: 120, first: { w: W, t: 200 }, targets: { kh: 0 } });
+  const e = refusal(() => extend(t, { length: 100, targets: { wd: STEP } }));
+  assert.equal(e && e.code, 'BAD_TUBE', e && e.message);
+  assert.match(e.message, /: the right side's own width is for a road that is not a tube/, 'Extend\'s words (the document\'s are "; a right side of its own is for a road that is not a tube", after the piece)');
+});
+
+test('close: a lap whose first and last pieces both have a right width closes with the right width joined at the seam (the end meets the start)', () => {
+  const Q = (Math.PI * 180) / 2;
+  let d = extend(D.createDoc('lap'), { length: 300, first: { w: W }, targets: { kh: 0, wd: STEP } });
+  for (let i = 0; i < 4; i++) d = extend(d, { length: Q, transition: 40, targets: { kh: 1 / 180 } });
+  d = extend(d, { length: 60, transition: 40, targets: { kh: 0, wd: 2 } });
+  const r = close(d, { edited: [0] }), last = r.doc.pieces[r.doc.pieces.length - 1];
+  assert.equal(r.converged, true, r.report);
+  assert.ok(r.doc.pieces[0].split && last.split, 'both ends are split');
+  const a = D.channelValue(r.doc.pieces[0], 'wd', 0), b = D.pieceEnd(last).wd.v;
+  assert.ok(Math.abs(a - b) < 1e-6, `the right width at the seam: the start ${a}, the end ${b}`);
+});

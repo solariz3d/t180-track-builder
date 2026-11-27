@@ -73,7 +73,7 @@ const MUTANTS = [
   // row 5: legacy stays legacy
   { id: 'M21 a legacy piece is rendered as a cup piece at c = 0', pattern: 'row 5', edits: [[C + 'adapter.js', 'cup[j].profile : L.profile;   // a legacy piece', 'cup[j].profile : cupProfile(P.family, mid.w, mid.c);   // a legacy piece']] },
   { id: 'M22 a /2 piece is read as a cup piece', pattern: 'row 5', edits: [[C + 'document.js', "...(has('c') ? { cup: true } : {}),", 'cup: true,']] },
-  { id: 'M23 a legacy piece\'s text carries a c array', pattern: 'row 5', edits: [[C + 'document.js', "CHANNELS.filter((ch) => (!OPTIONAL[ch] || P[OPTIONAL[ch]]) && (ch !== 'er' || isSplit(P))).map(", 'CHANNELS.map(']] },
+  { id: 'M23 a legacy piece\'s text carries a c array', pattern: 'row 5', edits: [[C + 'document.js', "CHANNELS.filter((ch) => (!OPTIONAL[ch] || P[OPTIONAL[ch]]) && (ch !== 'er' || isSplit(P)) && (ch !== 'wd' || isWidthSplit(P))).map(", 'CHANNELS.map(']] },   // AMENDED (L258, pane B): the right width (D677 b) changed this string; the mutant is the same
   { id: 'M24 (K5-2) the schema is still core/2', pattern: 'row 5', edits: [[C + 'document.js', "const SCHEMA = 't180b.core/4',", "const SCHEMA = 't180b.core/2',"]] },
   { id: 'M25 a cup brush is allowed to reach a legacy piece', pattern: 'row 5e', edits: [[C + 'sculpt.js', "if (channel === 'c' && !P.cup) throw new D.CoreError('NOT_CUP'", "if (false) throw new D.CoreError('NOT_CUP'"]] },
   // row 6: cup then roll

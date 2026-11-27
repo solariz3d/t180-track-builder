@@ -7,7 +7,7 @@
 //      document past it is refused by checkDoc too
 //   3  a symmetric negative edge: both rims turn down alike, the text carries no er, and it round-trips
 //   4  core/6 is written exactly when a negative edge appears (a positive split stays core/5, a plain edge core/4); the builder of 0.4.7 refuses a core/6
-//      file by name, and this one refuses the next (core/7)
+//      file by name, and this one refuses the next (core/8 since D677 b made core/7 the right width)
 //   5  every file made before reads and saves byte for byte: the fixtures and core/4 and core/5 documents (edge, split, cup, tube) written by this builder
 //      equal what the 0.4.7 builder writes; a fit between two positive edges never rings below 0 (so it stays core/4)
 //   5b a fit down to an edge of 0 never rings below 0, though the raw fit ends a hair under it (the shape of core_piece.test.js row 8b)
@@ -82,7 +82,8 @@ test('row 4: core/6 exactly when a negative edge appears; the 0.4.7 builder refu
   const neg = extend(extend(cup(10), { length: 200, targets: { e: 0, er: -5 } }), { length: 200, targets: { e: 0, er: 0 } }), text = D.serialize(neg);
   assert.equal(JSON.parse(text).schema, 't180b.core/6', 'one negative piece anywhere makes the file core/6');
   assert.throws(() => OLD.parse(text), (e) => e.code === 'BAD_DOC' && /a newer file needs a newer builder/.test(e.message) && /core\/6/.test(e.message), 'the 0.4.7 builder refuses it by name');
-  assert.throws(() => D.parse(text.replace('t180b.core/6', 't180b.core/7')), (e) => e.code === 'BAD_DOC' && /a newer file needs a newer builder/.test(e.message));
+  // AMENDED, D677 (b), pane B (L258): core/7 is the right side's own width now, so "the next" one, the unknown newer file this builder refuses, is core/8
+  assert.throws(() => D.parse(text.replace('t180b.core/6', 't180b.core/8')), (e) => e.code === 'BAD_DOC' && /a newer file needs a newer builder/.test(e.message));
   assert.equal(D.serialize(D.parse(text)), text, 'and it round-trips');
 });
 
