@@ -59,8 +59,10 @@ All notable changes to this project are recorded here. The format follows
   Turn by, a corner list, Sharp, Jump and Level lay the same turn and climb as from the same head with its width level (to within a step of their
   stored decimals) and end in the same place (within 0.003 mm). Finish is the exception: its first new piece plans its bank with the hold's knots in it, so
   after a brush that piece's bank can differ from a level head's by up to about 1° (0.97° measured, on a piece banked to 64°), its turn by under
-  2e-7 rad per metre, and the closed lap's pieces end within 0.1 mm of a level head's. The app has no right-width brush (Sculpt's brushes refuse
-  the right width), so nothing there is left changing by a brush.
+  2e-7 rad per metre, and the closed lap's pieces end within 0.1 mm of a level head's. One try at laying that hold only once the lap is closed
+  (D678) was measured against the bar set for it beforehand and missed it (after a grab with Sculpt, by more than a step of bank, as Finish from the
+  same head with its width level also does), so it was not kept and Finish stays as described here. The app has no right-width brush (Sculpt's brushes
+  refuse the right width), so nothing there is left changing by a brush.
 - **A typed bank past a full turn rolls on into the next turn instead of unwinding.** He asked for it on 2026-11-26: past a full turn the bank
   shown resets to 0, and the road carries the extra degrees into the next turn. The bank field still shows the bank within one turn, its sign kept, but a
   typed bank (the field, an extra bank row, a flowing bank's mark) is now laid as typed, in the head's own turn. From a head at −340, a typed −392 rolls
