@@ -33,7 +33,8 @@
 // edge that piece renders (D.pieceEnd), held. The fit of a short transition can ring past its target (measured: 174.65° for a 150° target
 // over 10 m), so the cup's control points are clamped to [0, 150] after the fit: the document never holds a cup outside that range. `transition` (m, default the piece's length) is where each target is
 // reached; past it the channel holds the target. On an EMPTY track the first piece starts from `first` (default: level,
-// straight, the family's measured width and rate, src/geom/fonts.js), since there is nothing to continue.
+// straight, the family's measured width and rate, src/geom/fonts.js), since there is nothing to continue. AFTER A BARE FLIGHT (D677 C1) the landing's
+// cross-section starts from `first` the same way (w, c, e, er and s only: landingStart); it still starts level at the flight's bank, and a blank carries the take-off's.
 'use strict';
 
 const D = require('./document.js');
@@ -901,6 +902,25 @@ function flowBuiltWrong(doc, piece, marks, v0) {
   return flowWrong(at, all, piece.length) ? { kind: 'built', k: flowSteepest(all) } : null;
 }
 
+// D677 C1, THE LANDING'S CROSS-SECTION (the plan: lighthouse exo_memory/loop/plan_t180_cross_section_2026-11-26.md (c)): when the track ends in a flight, the
+// cross-section typed in `first` is the landing's START, as on an empty track; nothing morphs across the air (src/core/adapter.js) and the document asks the landing
+// only to start level at the flight's bank (document.js landingProblem), so the format already holds it. Only these channels: a turn, climb, offset or bank in
+// `first` would break that level start, so they are not read here (the start is endState's, document.js afterFlight). A blank channel carries the take-off's, as before.
+const LANDING_FIRST = Object.freeze(['w', 'c', 'e', 'er', 's']);
+const endsInFlight = (doc) => doc.pieces.length > 0 && doc.pieces[doc.pieces.length - 1].type === 'flight';
+/** The state a new piece starts from (D.endState), with the typed cross-section as the start of a landing after a bare flight (null on an empty track, as endState). */
+function landingStart(doc, first) {
+  const e = D.endState(doc);
+  if (!e || !first || !endsInFlight(doc)) return e;
+  const typed = LANDING_FIRST.filter((ch) => first[ch] !== undefined && first[ch] !== null);
+  return typed.length ? { ...e, ...Object.fromEntries(typed.map((ch) => [ch, { v: first[ch], m: 0 }])) } : e;
+}
+/** The KIND a new piece with no cup or tube target starts as on a track that is not empty: a cup when a cup is typed as a landing's start after a bare flight,
+ *  else the head's (D.endKind). It is extend's own rule below (`kind`, startTyped && given(f0.c)), for a reader that builds the same start elsewhere (sharp.js probe; A's read, F1). */
+function landingKind(doc, first) {
+  return endsInFlight(doc) && first && first.c !== undefined && first.c !== null ? 'cup' : D.endKind(doc);
+}
+
 function extend(doc, opts = {}) {
   let { length, transition, targets = {}, family, knotM, first, grip, bankShape, startShapes, second, changes } = opts;
   if (bankShape !== undefined && bankShape !== null && bankShape !== 'rounded' && bankShape !== 'swell' && bankShape !== 'flow' && !isShares(bankShape)) throw new D.CoreError('BAD_SHAPE', `bankShape is 'rounded', 'swell', 'flow', { rise, fall } or left out, got ${bankShape}`);
@@ -965,19 +985,20 @@ function extend(doc, opts = {}) {
   const Lof0 = (ch) => (perChannel ? (ramp[ch] === undefined ? length : ramp[ch]) : transition === undefined ? length : transition);
   // L135 THE SECOND BANK, L139 ANY NUMBER OF CHANGES ON EVERY FIELD: checked here, where each first ramp's end is known. D642: every first ramp keeps its own length (a
   // whole-piece one is no longer squeezed into [0, its first mark]: the keeper, 19:54Z, "it makes it more sharp and takes the original shape away"). See changeLists.
-  const deferred = [], head0 = D.endState(doc), lists = changeLists(changes, second, targets, opts.targets, length, Lof0, (ch) => (head0 && head0[ch] ? head0[ch].v : first && Number.isFinite(first[ch]) ? first[ch] : null), (ch) => (ch === 'phi' ? shape : null), deferred);   // the bank's own shape, named (null: the quintic)
+  const deferred = [], head0 = landingStart(doc, first), lists = changeLists(changes, second, targets, opts.targets, length, Lof0, (ch) => (head0 && head0[ch] ? head0[ch].v : first && Number.isFinite(first[ch]) ? first[ch] : null), (ch) => (ch === 'phi' ? shape : null), deferred);   // the bank's own shape, named (null: the quintic)
   if (opts.bankCheck === 'list') return deferred;   // checkBankAsBuilt's question: which bank changes the built road must decide
   const Lof = Lof0;
   const shortRamps = Object.keys(ramp).filter((ch) => ramp[ch] < length - 1e-9 && targets[ch] !== undefined && targets[ch] !== null);
   const shapeOf = (ch) => (ch === 'phi' ? shape : (startShapes && shortRamps.includes(ch) && startShapes[ch]) || null);   // the bank's shape, or a cup's or edge's at start
   const last = [...doc.pieces].reverse().find((P) => P.type === 'road');
   const fam = family || (last ? last.family : 'bowl');
-  let from = D.endState(doc), held = true; const from0 = from;   // from0: null on an empty track (the at-start `first` applies)
-  const f0 = first || {}, kind = given(targets.c) ? 'cup' : given(targets.t) ? 'tube' : !from && given(f0.c) ? 'cup' : !from && given(f0.t) ? 'tube' : D.endKind(doc), cup = kind === 'cup', tube = kind === 'tube';
+  let from = landingStart(doc, first), held = true; const from0 = from;   // from0: null on an empty track (the at-start `first` applies)
+  const startTyped = !from0 || endsInFlight(doc);   // `first` starts the piece: on an empty track, and (its cross-section) after a bare flight (D677 C1)
+  const f0 = first || {}, kind = given(targets.c) ? 'cup' : given(targets.t) ? 'tube' : startTyped && given(f0.c) ? 'cup' : !from && given(f0.t) ? 'tube' : D.endKind(doc), cup = kind === 'cup', tube = kind === 'tube';
   if (cup && from && from.c.v > D.CUP_MAX + 1e-6) throw new D.CoreError('BAD_CUP', `a cup cannot start where the tube before it ends: its edge is ${from.c.v.toFixed(2)}° (t/2), past the cup's ${D.CUP_MAX}°; open the tube to a sweep of ${2 * D.CUP_MAX}° or less first (t <= ${2 * D.CUP_MAX}), then switch to a cup`);
   const lastEnd = last && last.edge ? D.pieceEnd(last) : null, lastE = lastEnd && lastEnd.e, lastER = lastEnd && lastEnd.er;
   const live = (x) => !!(x && (Math.abs(x.v) > 1e-9 || Math.abs(x.m) > 1e-9));   // a side still turning its edge
-  const edge = given(targets.e) || given(targets.er) || given(targets.s) || (!from && (given(f0.e) || given(f0.er) || given(f0.s))) || live(lastE) || live(lastER);
+  const edge = given(targets.e) || given(targets.er) || given(targets.s) || (startTyped && (given(f0.e) || given(f0.er) || given(f0.s))) || live(lastE) || live(lastER);
   if (!from) {   // an empty track: the start state, and nothing held
     const f = { kh: 0, kv: 0, phi: 0, w: WIDTHS[fam], r: RATES[fam], h: 0, l: 0, ...(first || {}) };
     if (f.c === undefined) f.c = D.legacyEdgeDeg(fam, f.w, f.r);   // a cup asked for on an empty track starts at the edge the family renders
@@ -1019,12 +1040,12 @@ function extend(doc, opts = {}) {
     // a TARGET the cap cannot hold is refused by name (only the fit's ringing is clamped, below): the typed e, or the at-start first.e, against what the total cap leaves there
     const what = tube ? 'tube (180°, t/2 + e)' : 'cup/bowl (150°, c + e)';
     if (given(targets.e) && targets.e > cap(C.e.length - 1) + 1e-6) throw new D.CoreError('BAD_EDGE', `the edge target ${targets.e}° is past what the ${what} cap leaves at the end of this piece (${Math.max(0, cap(C.e.length - 1)).toFixed(3)}°)`);
-    if (!from0 && given(f0.e) && f0.e > cap(0) + 1e-6) throw new D.CoreError('BAD_EDGE', `the first piece's edge ${f0.e}° is past what the ${what} cap leaves at its start (${Math.max(0, cap(0)).toFixed(3)}°)`);
+    if (startTyped && given(f0.e) && f0.e > cap(0) + 1e-6) throw new D.CoreError('BAD_EDGE', `the first piece's edge ${f0.e}° is past what the ${what} cap leaves at its start (${Math.max(0, cap(0)).toFixed(3)}°)`);
     if (given(targets.er) && targets.er > cap(C.er.length - 1) + 1e-6) throw new D.CoreError('BAD_EDGE', `the right edge target ${targets.er}° is past what the ${what} cap leaves at the end of this piece (${Math.max(0, cap(C.er.length - 1)).toFixed(3)}°)`);
-    if (!from0 && given(f0.er) && f0.er > cap(0) + 1e-6) throw new D.CoreError('BAD_EDGE', `the first piece's right edge ${f0.er}° is past what the ${what} cap leaves at its start (${Math.max(0, cap(0)).toFixed(3)}°)`);
+    if (startTyped && given(f0.er) && f0.er > cap(0) + 1e-6) throw new D.CoreError('BAD_EDGE', `the first piece's right edge ${f0.er}° is past what the ${what} cap leaves at its start (${Math.max(0, cap(0)).toFixed(3)}°)`);
     const under = (side, v, i, where) => { if (given(v) && v < floor(i) - 1e-6) throw new D.CoreError('BAD_EDGE', `the ${side} ${v}° ${where} takes the rim to ${+(v - floor(i) + D.EDGE_FLOOR).toFixed(6)}°, under the floor of ${D.EDGE_FLOOR}° (30° past flat, a lip): the least it may be there is ${+floor(i).toFixed(6)}°`); };
     under('edge target', targets.e, C.e.length - 1, 'at the end of this piece'); under('right edge target', targets.er, C.er.length - 1, 'at the end of this piece');
-    if (!from0) { under("first piece's edge", f0.e, 0, 'at its start'); under("first piece's right edge", f0.er, 0, 'at its start'); }
+    if (startTyped) { under("first piece's edge", f0.e, 0, 'at its start'); under("first piece's right edge", f0.er, 0, 'at its start'); }
     for (const ch of ['e', 'er']) {
       // the fit's ringing never leaves [0, cap], as before, unless the side is asked below 0: then it may ring down to the lower of the value it starts at and its target,
       // never under the floor. The asked values, not the fitted end: a fit to a target of 0 can end a hair under it (-0.0069 measured), which must still clamp to 0
@@ -1157,4 +1178,4 @@ function checkBankAsBuilt(doc, opts, out, relay) {
   bankAsBuilt(doc, out.pieces[out.pieces.length - 1], extend(doc, { ...opts, bankCheck: 'list' }));
 }
 
-module.exports = { extend, checkBankAsBuilt, flowInside, secondMinM, spanHolds, CHANGE_FLOOR_M, BANK_FIT_FLOOR_M, SECOND_MIN_K, SECOND_FLOOR_M, CHANGE_CHANNELS, roundedLinear, rampShape, BANK_ROUND_M, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, sampleBasis, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };
+module.exports = { extend, landingStart, landingKind, checkBankAsBuilt, flowInside, secondMinM, spanHolds, CHANGE_FLOOR_M, BANK_FIT_FLOOR_M, SECOND_MIN_K, SECOND_FLOOR_M, CHANGE_CHANNELS, roundedLinear, rampShape, BANK_ROUND_M, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, sampleBasis, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };
