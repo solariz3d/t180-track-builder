@@ -106,7 +106,11 @@ test('row 4: the cheap ghost: at most 64 stations on its new piece, the same end
 test('row 5: the documents are byte for byte what they were: pieces placed and corners solved, hashed (taken at c2d7cb5), and basisN is basis, channelValue is channelAt(...).v, and extendCorner answers the same fields with the same object', async () => {
   const sh0 = await bowl(); sh0.extend({ length: 1000, targets: { kh: 1 / 700, kv: 0.0004, phi: 0.2, w: 40, c: 20 } }); sh0.extend({ length: 75, transition: 30, targets: { w: 25 } });
   const doc0 = sh0.exportDoc(), parts = [doc0.pieces, TB.extendCorner(doc0, { length: 1500, turnDeg: 33, targets: { phi: 0.1 } }).pieces.at(-1), TB.extendCorner(doc0, { length: 400, turnDeg: -75, climbDeg: 4 }).pieces.at(-1), TB.extendCorner(doc0, { length: 2200 }).pieces.at(-1)];
-  assert.equal(crypto.createHash('sha256').update(JSON.stringify(parts)).digest('hex').slice(0, 16), 'e79334c4029711ec', 'the placed pieces and three solved corners, as c2d7cb5 made them (re-pinned at D459, 2026-10-25: the pieces carry a bank target, laid by the C2 quintic now, src/core/extend.js)');
+  // AMENDED, D677 (b), pane B: every road piece now carries the right width's channel wd in memory, all 0 where it is not used (as it carries c, e, s, t and er), so the
+  // hash of the pieces as objects moved (to c1db95d19d372697). The rule kept is the same: with wd taken out, the pieces are c2d7cb5's (D459's pin) to the byte, and wd is 0
+  const noWd = (P) => { const { wd, ...channels } = P.channels; return { ...P, channels }; }, each = [...parts[0], ...parts.slice(1)];
+  assert.ok(each.every((P) => P.channels.wd && P.channels.wd.every((v) => v === 0)), 'wd is 0 on every piece here (none has a right width)');
+  assert.equal(crypto.createHash('sha256').update(JSON.stringify([parts[0].map(noWd), ...parts.slice(1).map(noWd)])).digest('hex').slice(0, 16), 'e79334c4029711ec', 'the placed pieces and three solved corners, as c2d7cb5 made them (re-pinned at D459, 2026-10-25: the pieces carry a bank target, laid by the C2 quintic now, src/core/extend.js)');
   let n = 0;
   for (let t = 0; t < 120; t++) {
     const L = 10 + ((t * 7919) % 3000), m = 1 + (t % 90), kn = []; for (let j = 1; j < m; j++) kn.push((j * L) / m);

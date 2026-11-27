@@ -68,8 +68,9 @@ const SECOND_FROM_SHARE = 0.85;
 // as degrees, the panel's default and his S) leads the bank; a turn read as a rate keeps the marks it had
 // DEFAULT_FLOOR_M: extend.js SECOND_FLOOR_M, used only when no shell passes the floor in (extendOptions called on its own)
 const EXTRA_BANK_LEAD_SHARE = 0.12, DEFAULT_FLOOR_M = 20;
-const SECOND_FIELDS = Object.freeze(['turn', 'climb', 'bank', 'width', 'cup', 'edge', 'edgeR']);
-const SECOND_NAME = Object.freeze({ turn: 'turn', climb: 'climb', bank: 'bank', width: 'width', cup: 'cup', edge: 'left edge', edgeR: 'right edge' });
+// widthR (D677 (b), the right side's own width) is last: its changes are typed as the right side's width and sent as its difference from the width in force at each mark, so the width's list is laid first
+const SECOND_FIELDS = Object.freeze(['turn', 'climb', 'bank', 'width', 'cup', 'edge', 'edgeR', 'widthR']);
+const SECOND_NAME = Object.freeze({ turn: 'turn', climb: 'climb', bank: 'bank', width: 'width', cup: 'cup', edge: 'left edge', edgeR: 'right edge', widthR: 'right width' });
 /** the core's shortest segment for a change of channel ch from a to b, in metres, by the function given (the shell's secondMinM); 0 where none is given or it says nothing */
 // D642 (pane B's additive model, its hand-back §3): a field's first ramp still moving under its later changes, as extend.js secondMinM takes it: { step, length } in the
 // core's units when the ramp runs the whole piece (no early transition); null otherwise (a ramp done early has stopped before any change), and null with no step. `from` is
@@ -77,7 +78,7 @@ const SECOND_NAME = Object.freeze({ turn: 'turn', climb: 'climb', bank: 'bank', 
 // ramp; else the head's value, 0 when no head is given (as extendOptions' fromDeg reads it)
 // D677 C1, THE LANDING'S CROSS-SECTION: after a bare flight (`afterFlight`) the typed width, cup, edges and edge start are the landing's START, as every typed value is on
 // an empty track; the turn, climb and bank are not (the landing starts level at its flight's bank, src/core/extend.js landingStart, which reads only these channels)
-const LANDING_FIRST = Object.freeze(['w', 'c', 'e', 'er', 's']);
+const LANDING_FIRST = Object.freeze(['w', 'c', 'e', 'er', 's', 'wd']);
 const landingFirst = (targets) => Object.fromEntries(LANDING_FIRST.filter((ch) => targets[ch] !== undefined).map((ch) => [ch, targets[ch]]));
 const rampStart = (first, head, ch) => (first && Number.isFinite(first[ch]) ? first[ch] : head && Number.isFinite(head[ch]) ? head[ch] : 0);
 const baseOfRamp = (tr, target, from, L) => { if (tr !== undefined || !Number.isFinite(target) || !Number.isFinite(from) || !(L > 0) || target === from) return null; return { step: target - from, length: L }; };
@@ -174,7 +175,7 @@ function routeStartM(from, to, length) {
   const want = Math.max(AT_START_M, (ROUTE_SPREAD * Math.abs(to - from)) / ROUTE_BAR), cap = Math.max(Math.min(AT_START_M, length), length / 2);
   return Math.min(Math.ceil(want * 10 - 1e-9) / 10, cap);
 }
-const FIELD_CHANNEL = Object.freeze({ turn: 'kh', climb: 'kv', bank: 'phi', width: 'w', cup: 'c', edge: XS.CHANNEL.edge, edgeR: 'er', start: XS.CHANNEL.start, tube: XS.CHANNEL.tube });
+const FIELD_CHANNEL = Object.freeze({ turn: 'kh', climb: 'kv', bank: 'phi', width: 'w', cup: 'c', edge: XS.CHANNEL.edge, edgeR: 'er', widthR: 'wd', start: XS.CHANNEL.start, tube: XS.CHANNEL.tube });
 // THE "EARLY" BOX'S WORDS, ONE PER ROW, each what extendOptions does with that field ticked:
 //   bank, cup, left and right edge: F (crossStartM): F_RAMP_M laid in three quarters, 225 m, done by 234.5 m on the user's piece (the comment above), so "about 235 m";
 //     longer for a big change (the roll bar), within half the piece, which the bank's alone may pass;
@@ -191,6 +192,7 @@ const EARLY_TITLE = Object.freeze({
   edge: `Reach this left edge early: ${EARLY_F}. A big change takes longer, so it never changes faster than the checker's roll limit. Unticked, the change spreads over the whole piece.`,
   edgeR: `Reach this right edge early: ${EARLY_F}. A big change takes longer, so it never changes faster than the checker's roll limit. Unticked, the change spreads over the whole piece.`,
   width: `Reach this width early: ${EARLY_F}. Unticked, the change spreads over the whole piece.`,
+  widthR: `Reach this right width early: ${EARLY_F}. Unticked, the change spreads over the whole piece.`,
   start: `Reach this edge start early: the edge moves to where you typed ${EARLY_SHORT}, then stays there. Unticked, it moves there over the whole piece.`,
   tube: `Reach this tube sweep early: the sweep you typed is reached ${EARLY_SHORT}, then held. Unticked, it changes over the whole piece.`,
 });
@@ -206,7 +208,7 @@ const EARLY_TITLE = Object.freeze({
 // with today's bank on one layout, 2026-11-24, it was the better). Ticked, with a bank target, the bank PASSES THROUGH its marks as one curve (src/core/extend.js
 // bankShape 'flow'): the bank field's target at `bankAt` (transition.phi; blank: the early ramp's end when "early" is ticked, else laid by flowAts), then each
 // extra bank row's then at its from (through.phi). Left out or false, nothing here changes, to the byte
-function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, afterFlight = false, atStart = {}, turnAs = 'rate', head = null, changes = null, secondMinM = null, cornerChangeMinM = null, secondFloorM = null, bankFloorM = null, bankRefusal = null, bankFlow = false, bankAt = null, dragging = false }) {
+function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, widthR = null, start, tube, grip, empty = false, afterFlight = false, atStart = {}, turnAs = 'rate', head = null, changes = null, secondMinM = null, cornerChangeMinM = null, secondFloorM = null, bankFloorM = null, bankRefusal = null, bankFlow = false, bankAt = null, dragging = false }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
   // a corner of 0 with extra turn rows is still a first corner (the S he drove: turn 0, then +92 from 80 and -91 from 200; pane O, 2026-11-24): it sends turnDeg 0 so the rows have one to follow
   const turnRows = turnAs === 'corner' && ((changes && changes.turn) || []).some((x) => num(x.then) !== null && Number.isFinite(num(x.then)));
@@ -218,6 +220,11 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
   // the core's φ channel winds continuously, and a wrap here would turn a 360° spiral into no roll at all)
   if (b !== null) targets.phi = b * DEG;
   if (w !== null) targets.w = w;                        // m
+  // THE RIGHT WIDTH (D677 (b); the user, 2026-11-26 23:00: "it allows for new tracks to have the individual sides of width"): typed as the right side's own width in m, sent as
+  // wd, its difference from the width (src/core/document.js), so blank follows the width and the width typed alone moves both sides. The width it is measured from is
+  // the typed one, else the head's: an empty track's head is its start (the shell's headState)
+  const wR = num(widthR);
+  if (wR !== null) { const ref = w !== null ? w : head && Number.isFinite(head.w) ? head.w : null; if (ref === null) throw new Error('BAD_RIGHT_WIDTH: the right width is measured from the width: type the width too, or give the head'); targets.wd = wR - ref; }
   // the CUP: the channel c holds DEGREES, so the typed value goes in as it is. It is NOT clamped here: the core's guard
   // binds the DOCUMENT to [0, 150] and refuses by name, and a clamp here would hide that guard
   if (k !== null) targets.c = k;
@@ -240,9 +247,9 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
   const fromDeg = (ch) => { const v = head && Number.isFinite(head[ch]) ? head[ch] : 0; return ch === 'phi' ? v / DEG : v; };
   for (const [f, ch] of Object.entries(FIELD_CHANNEL)) if (atStart[f] && targets[ch] !== undefined) {
     transition[ch] = XS_START.has(ch) ? crossStartM(fromDeg(ch), ch === 'phi' ? targets.phi / DEG : targets[ch], out.length, SWELL_SPREAD, ch === 'phi')
-      : ch === 'w' ? Math.min(F_RAMP_M, Math.max(Math.min(AT_START_M, out.length), out.length / 2))
+      : ch === 'w' || ch === 'wd' ? Math.min(F_RAMP_M, Math.max(Math.min(AT_START_M, out.length), out.length / 2))
       : ch === 'kh' || ch === 'kv' ? routeStartM(fromDeg(ch), targets[ch], out.length) : Math.min(AT_START_M, out.length);
-    if (!XS_START.has(ch) && ch !== 'w') continue;
+    if (!XS_START.has(ch) && ch !== 'w' && ch !== 'wd') continue;
     if (ch === 'phi') out.bankShape = startShapeOf(transition.phi);
     else (out.startShapes = out.startShapes || {})[ch] = startShapeOf(transition[ch]);
   }
@@ -265,7 +272,9 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
       continue;
     }
     const ch = FIELD_CHANNEL[f]; if (targets[ch] === undefined || (flow && ch === 'phi')) continue;
-    const per = f === 'turn' || f === 'climb' ? DEG / 100 : f === 'bank' ? DEG : 1, list = items.map((x) => ({ from: x.from, target: x.then * per }));
+    // the right width's changes are typed as the right side's width: each is sent as its difference from the width in force at its mark (the width's own list, laid above, else its target or the head's)
+    const wAt = (s) => { const L = (later.w || []).filter((x) => x.from <= s); return L.length ? L[L.length - 1].target : targets.w !== undefined ? targets.w : head && Number.isFinite(head.w) ? head.w : 0; };
+    const per = f === 'turn' || f === 'climb' ? DEG / 100 : f === 'bank' ? DEG : 1, list = items.map((x) => ({ from: x.from, target: f === 'widthR' ? x.then - wAt(x.from === null ? 0 : x.from) : x.then * per }));
     // D642 (pane B's additive model): a first ramp over the whole piece (no early transition) is still moving under the change, so the change's shortest is asked with it
     const base = baseOfRamp(transition[ch], targets[ch], rampStart(empty ? targets : afterFlight ? landingFirst(targets) : null, head, ch), out.length), minM = base && typeof secondMinM === 'function' ? (c, a, b) => secondMinM(c, a, b, base) : secondMinM;
     // Way 1: the extra bank behind the piece's first extra turn (its list was laid above: turn comes before bank in SECOND_FIELDS)
@@ -275,7 +284,7 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
     // below, once the options are whole), the default marks fall back to the comfort length's clamp, which always lays (a straight road's end, as before)
     const floored = ch === 'phi' && Number.isFinite(bankFloorM) && typeof minM === 'function' ? (c, a, b) => Math.min(bankFloorM, minM(c, a, b)) : minM;
     const froms = changeFroms(out.length, list, targets[ch], ch, { lo: transition[ch] || 0, minM: floored, ...lead });
-    later[ch] = list.map((x, k) => ({ from: froms[k], target: x.target }));
+    later[ch] = list.map((x, k) => ({ from: froms[k], target: f === 'widthR' ? items[k].then - wAt(froms[k]) : x.target }));   // the right width: against the width at the mark as laid
     if (floored !== minM) bankComfort = () => changeFroms(out.length, list, targets[ch], ch, { lo: transition[ch] || 0, minM, ...lead });
   }
   // THE FLOWING BANK's marks (the contract, plan Part 2): the first target at transition.phi, then each extra bank row as { at, target } in through.phi. A blank at is
@@ -380,11 +389,12 @@ function mount(root, shell, mountOpts = {}) {
   // so the core refuses a value past it by name
   const edge = el('input', { type: 'number', value: '', step: '1', title: 'left edge: how many degrees MORE the LEFT side\'s very edge tilts than the plain profile would, rising smoothly from the edge start out; 0 = off; below 0 it turns DOWN, toward flat and up to 30° past it. Bank still rolls the whole section. Shows the left edge at the head; left as shown, it keeps it; typed, only the left side changes' }),
     // the user, 2026-10-12: bank the outside of a turn harder and turn the inside down, so the inside line is not banked
+    widthR = el('input', { type: 'number', value: '', step: '0.1', min: '0', title: 'right width: the RIGHT side\'s own width in m, measured as the width is (the road\'s right half is half of it). Blank, or left as shown, it follows the width; typed, the right side takes its own width and the left side and the line stay as they are. Shows the right width at the head' }),
     edgeR = el('input', { type: 'number', value: '', step: '1', title: 'right edge: how many degrees MORE the RIGHT side\'s very edge tilts than the plain profile would, like the left edge (below 0 it turns down). Shows the right edge at the head; left as shown, it keeps it; typed, only the right side changes. For a right turn: a big left edge (the outside) and a small right edge (the inside), so the inside line is not banked' }),
     start = el('input', { type: 'number', value: '', step: '0.01', min: '0.5', max: '0.95', title: 'edge start: where the edge curve begins, as a share of the half-width from the centre (0.64 = the outer 36% each side curves more; 0.5 to 0.95). Shows it at the head; left as shown, it keeps it' }),
     tube = el('input', { type: 'number', value: '', step: '1', min: '0', max: '360', title: 'tube sweep: the cross-section as an arc of this many degrees, 0 (none) to 360 (a closed pipe). Shows the sweep at the head; left as shown, it keeps it' });
   // (the right edge is the shell's er; a shell without it, the right follows the left, as the core makes it)
-  const HEAD = { turn: [turn, (h) => h.kh * 100 / DEG], climb: [climb, (h) => h.kv * 100 / DEG], bank: [bank, (h) => HD.wrapTurn(h.phi / DEG)], width: [width, (h) => h.w], cup: [cup, (h) => h.c],
+  const HEAD = { turn: [turn, (h) => h.kh * 100 / DEG], climb: [climb, (h) => h.kv * 100 / DEG], bank: [bank, (h) => HD.wrapTurn(h.phi / DEG)], width: [width, (h) => h.w], widthR: [widthR, (h) => h.w + (Number.isFinite(h.wd) ? h.wd : 0)], cup: [cup, (h) => h.c],
     edge: [edge, (h) => h[XS.CHANNEL.edge]], edgeR: [edgeR, (h) => (Number.isFinite(h.er) ? h.er : h[XS.CHANNEL.edge])], start: [start, (h) => h[XS.CHANNEL.start]], tube: [tube, (h) => h[XS.CHANNEL.tube]] };
   // THE WIDTH REFERENCE (the user: "a drop down that tells you the width of different known t-180 tracks, such as track H, track N, track G"):
   // picking a known track puts its measured median into the width field, like typing it (so on an empty track it is the first piece's start, which is the
@@ -479,7 +489,7 @@ function mount(root, shell, mountOpts = {}) {
   // the bank's marks as the options carry them: the changes, or ticked, the flowing bank's through marks read as changes ({ from: at, target }); null: none
   const secArr = (o, f) => { const key = secKey(f); if (key === 'phi' && o.bankShape === 'flow') return o.through && o.through.phi ? o.through.phi.map((m) => ({ from: m.at, target: m.target })) : null; return (o.changes && o.changes[key]) || null; };
   const SEC = Object.fromEntries(SECOND_FIELDS.map((f) => [f, { list: [], box: el('div', { class: 'then-list', 'aria-label': `${SECOND_NAME[f]} changes` }) }]));
-  const secUnit = (f) => (f === 'turn' || f === 'climb' ? (cornerMode() ? '°' : '°/100m') : f === 'width' ? 'm' : '°');
+  const secUnit = (f) => (f === 'turn' || f === 'climb' ? (cornerMode() ? '°' : '°/100m') : f === 'width' || f === 'widthR' ? 'm' : '°');
   const secHasTarget = (f) => (f === 'bank' ? bankTarget() !== '' : f === 'edgeR' ? rightTarget() !== '' : asTyped(f) !== '');
   const secThen = (f, x) => { const v = x.then.value, T = Number(v); return f !== 'bank' || v === '' || !Number.isFinite(T) ? v : inHeadTurn(T); };   // a bank row in the head's own turn (D677)
   const secLive = (f) => SEC[f].list.filter((x) => x.then.value !== '' && Number.isFinite(Number(x.then.value)));   // the changes the options carry, in order
@@ -550,7 +560,7 @@ function mount(root, shell, mountOpts = {}) {
   // typing ONE side changes only that side: the left typed alone sends the right as the head has it (the core would otherwise set both from e)
   const rightTarget = () => { const r = asTyped('edgeR'); return r !== '' || asTyped('edge') === '' ? r : String(HEAD.edgeR[1](shell.headState())); };
   const endsInFlight = (ps) => ps.length > 0 && ps[ps.length - 1].type === 'flight';   // D677 C1: Extend lays the landing
-  const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), edgeR: rightTarget(), start: asTyped('start'), tube: asTyped('tube'),
+  const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), edgeR: rightTarget(), widthR: asTyped('widthR'), start: asTyped('start'), tube: asTyped('tube'),
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
     empty: !shell.getState().history.present.pieces.length, afterFlight: endsInFlight(shell.getState().history.present.pieces), turnAs: turnAs.value, head: shell.headState(),
     changes: secChanges(), secondMinM: shellMinM, cornerChangeMinM: shellCornerMin, secondFloorM: secondFloor(),
@@ -655,7 +665,7 @@ function mount(root, shell, mountOpts = {}) {
   // so the ghost showed the piece before the last edit, or none: found in the window proof)
   // (the cup's handler is the cup-or-tube one below, the cup is not in this list, where its handler would only be replaced)
   for (const f of [len, turn, climb, bank, width, ...Object.values(atStart)]) f.oninput = f.onchange = ghost;
-  for (const f of [edge, edgeR, start, tube]) f.oninput = f.onchange = ghost;   // the cross-section fields follow the same way
+  for (const f of [edge, edgeR, widthR, start, tube]) f.oninput = f.onchange = ghost;   // the cross-section fields follow the same way
   for (const f of [cup, tube]) f.oninput = f.onchange = () => { exclusive(f); ghost(); };   // cup OR tube: the rule first, then the ghost
   tube.oninput = tube.onchange = () => { exclusive(tube); ghost(); fillWidthLike(); };   // a tube's entries read round and across
   width.oninput = width.onchange = () => { ghost(); showTubeNote(); };
@@ -1263,7 +1273,7 @@ function mount(root, shell, mountOpts = {}) {
   const plainMessage = (m) => (m && /BAD_TUBE/.test(m) && /must stay within 0 to 360/.test(m) ? TUBE_SHUT : m);
   // the rest of the shape, always shown: each channel with its "at start" box on its row, width like… and grip like… beside their fields, each note under its field
   wlike.setAttribute('class', 'like-pick'); gripLike.setAttribute('class', 'like-pick');
-  const shapeFields = [fieldAt('cup °', cup, 'cup'), SEC.cup.box, fieldAt('width m', width, 'width', wlike), SEC.width.box, el('label', { class: 'picker inline' }, el('span', { text: 'grip %' }), gripF, gripLike), gripNote,
+  const shapeFields = [fieldAt('cup °', cup, 'cup'), SEC.cup.box, fieldAt('width m', width, 'width', wlike), SEC.width.box, fieldAt('right width m', widthR, 'widthR'), SEC.widthR.box, el('label', { class: 'picker inline' }, el('span', { text: 'grip %' }), gripF, gripLike), gripNote,
     fieldAt('left edge °', edge, 'edge'), SEC.edge.box, fieldAt('right edge °', edgeR, 'edgeR'), SEC.edgeR.box, fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube'), wnote];
   // the selection box, shown only with a selection (and while a delete it started is previewed: its Apply and Cancel are in it)
   const selBox = el('div', { 'aria-label': 'selected pieces' }, ...pieces.nodes.selection);
@@ -1463,7 +1473,7 @@ function mount(root, shell, mountOpts = {}) {
   // just ahead of its own handle, as a share of the piece from its start (0) to its front (1). Read off the drawing: bank 0.60 (bank's own at 0.50), climb 0.74 (0.50), turn 0.89 (the
   // front), width 0.11 (the start). Cup is not in the drawing: it takes width's 0.11, as its own handle shares width's place at the start
   // (round 2: this is where the HANDLE stands; where its change starts is EXTRA_FROM_SHARE, below, and the handle steps back on screen to clear the others, handles.js CLEAR_PX)
-  const EXTRA_AT = Object.freeze({ bank: 0.60, climb: 0.74, turn: 0.89, width: 0.11, cup: 0.11 });
+  const EXTRA_AT = Object.freeze({ bank: 0.60, climb: 0.74, turn: 0.89, width: 0.11, cup: 0.11, widthR: 0.11 });
   const EXTRA_FROM_SHARE = 0.5;
   // `unused` (D642, E's review of d87ba99): only the fields with no change yet, all the extra handles read (one per field: a field with its change has its handle on it). The
   // offer after a field's last change asks that change's shortest, a search of a dozen probe roads under a moving first ramp, and while the extra bank is dragged its target

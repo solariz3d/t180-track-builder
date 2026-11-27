@@ -158,8 +158,14 @@ const GOLDEN_135 = [
   ['cup and edge', () => extend(flat135(), { length: 300, targets: { c: 40, e: 20 } }), 'de2401817557d141029cd6b182c2d68a3faa87edae204471addde9f7562f1c9c'],
   ['turn only', () => extend(flat135(), { length: 500, targets: { kh: 1 / 300 } }), 'c144288b9917fc979abaf4f0a71826bdb911c18b8994a8226f70dfbbb1e00f20'],
 ];
+// AMENDED, D677 (b), pane B (L258): every road piece now carries the right width's channel wd in memory, all 0 where it is not used (as it carries c, e, s, t and er),
+// so the hash of the document as an object moved. The rule kept is the same: with wd taken out, each document is d10eacf's to the byte, and every wd here is 0
+// (checked first by scratch golden135.js: all eight SAME with wd stripped, none with a non-zero wd)
 test('L135 7: no second bank, the same bytes as before: eight extend calls equal their base documents, and `second: undefined` / `second: null` change nothing', () => {
-  const crypto = require('crypto'), sha = (d) => crypto.createHash('sha256').update(JSON.stringify(d)).digest('hex');
+  const crypto = require('crypto');
+  const noWd = (d) => ({ ...d, pieces: d.pieces.map((P) => { if (!P.channels || !('wd' in P.channels)) return P; const { wd, ...channels } = P.channels; return { ...P, channels }; }) });
+  const sha = (d) => crypto.createHash('sha256').update(JSON.stringify(noWd(d))).digest('hex');
+  for (const [what, make] of GOLDEN_135) assert.ok(make().pieces.every((P) => !P.channels || !P.channels.wd || P.channels.wd.every((v) => v === 0)), `${what}: wd is 0 on every piece (none has a right width)`);
   for (const [what, make, want] of GOLDEN_135) assert.equal(sha(make()), want, what);
   const base = { length: 750, targets: { phi: 30 * DEG } };
   for (const second of [undefined, null]) assert.equal(sha(extend(flat135(), { ...base, second })), GOLDEN_135[0][2], `second: ${second}`);
