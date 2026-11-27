@@ -171,12 +171,26 @@ const MUTANTS = [
   { id: 'O1j (C\'s N9) the probe\'s bar is 1.3, not 1.0', pattern: 'O1 F[12]', edits: [[X, 'routePeak(ch, b - a, base, L2, end) <= PROBE_BAR;', 'routePeak(ch, b - a, base, L2, end) <= 1.3;'], [X, 'routePeak(ch, b - a, base, span, end) <= PROBE_BAR);', 'routePeak(ch, b - a, base, span, end) <= 1.3);']] },
   { id: 'O1k (C\'s N3) the shortest is not stepped back by the metre', pattern: 'O1 F2', edits: [[X, 'if (L2 < cap) while (L2 - 1 >= floor && ok(L2 - 1)) L2 -= 1;', '']] },
   { id: 'O1l (C\'s N8) the shortest is searched in 50 m steps', pattern: 'O1 F2', edits: [[X, 'L2 = Math.min(cap, L2 + PROBE_STEP_M);', 'L2 = Math.min(cap, L2 + 50);']] },
+  // the second O1 repair (pane C's re-read of eee621f, F3 and F4; the chair's D677 second repair): the panel asks a change's shortest at its end, its blank marks are laid where
+  // they lay, its drag range's low end is where the change before first holds; and the probe's memo keyed by the end (C's N12)
+  { id: "O1m (C's N12) the probe's memo forgets the change's end", pattern: "O1 F4", edits: [[X, "[L2, end, ch === 'kh' ? -3 : -4]", "[L2, ch === 'kh' ? -3 : -4]"]] },
+  { id: "O1n the shell drops the change's end from secondMinM", pattern: "O1 F3", edits: [['../app/core/coreshell.js', "EXT.secondMinM(ch, a, b, base, end)", "EXT.secondMinM(ch, a, b, base)"]] },
+  { id: "O1o the panel's shortest drops the change's end", pattern: "O1 F3", edits: [[P, "const m = minM(ch, a, b, end);", "const m = minM(ch, a, b);"]] },
+  { id: "O1p the default marks ask the shortest without the change's end", pattern: "O1 F3", edits: [[P, "(c, a, b, end) => secondMinM(c, a, b, base, end) : secondMinM;", "(c, a, b, end) => secondMinM(c, a, b, base) : secondMinM;"]] },
+  { id: "O1q the first mark a change holds up to is not searched (the old mark)", pattern: "O1 F3", edits: [[P, "  if (ok(p0)) return p0;", "  return p0;"]] },
+  { id: "O1r the first mark a change holds up to is not stepped back by the metre", pattern: "O1 F3 drag, near", edits: [[P, "while (up2(p - 1) > p0 && ok(up2(p - 1))) p = up2(p - 1);", ""]] },
+  { id: "O1s the room for a blank mark does not see the next typed mark", pattern: "O1 F3|L139 S3", edits: [[P, "Math.min(L - rest, E(k) - m(k, E(k)))", "L - rest"]] },
+  { id: "O1t the drag range's low end is the change before plus its shortest at the dragged mark's place, not where that change first holds", pattern: "O1 F3 drag, near", edits: [[P, "lo: k === 0 ? S.lo0 : S.reach(k - 1),", "lo: k === 0 ? S.lo0 : S.arr[k - 1].from + S.min(k - 1),"]] },
+  { id: "O1u a later blank mark past the room never falls back to the room's own mark", pattern: "O1 F3", edits: [[P, "if (k > 0 && lower > room(k) && room(k) - out[k - 1] >= m(k - 1, room(k)) - 1e-6) lower = room(k);", ""]] },
+  { id: "O1v the panel's segments ask the shortest without the change's end", pattern: "O1 F3 drag", edits: [[P, "return (c, a, b, end) => shellMinM(c, a, b, base, end); };", "return (c, a, b, end) => shellMinM(c, a, b, base); };"]] },
+  { id: "O1w a segment's shortest is asked at the piece's end, not at its own", pattern: "O1 F3 drag, first and far", edits: [[P, "memo[k] = minAt(k, arr[k].from + spanOf(k))", "memo[k] = minAt(k, L)"]] },
 ];
-const FILES = ['core_turn_share_built.test.js', 'core_mirror_refusal.test.js', 'core_extra_change.test.js', 'core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js', 'core_width_at_start_f.test.js', 'core_changes.test.js', 'core_additive.test.js'];
+const FILES = ['core_turn_share_built.test.js', '../app/test/core-second-change-panel.test.js', 'core_mirror_refusal.test.js', 'core_extra_change.test.js', 'core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js', 'core_width_at_start_f.test.js', 'core_changes.test.js', 'core_additive.test.js'];
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-ramp-mut-'));
-  for (const d of ['src', 'tools', 'app/core', 'app/camera', 'app/lib', 'app/validate-ui']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });   // the app folders app/core/panel.js loads
-  fs.mkdirSync(path.join(dir, 'test')); for (const f of FILES) fs.copyFileSync(path.join(__dirname, f), path.join(dir, 'test', f));   // D459: the C2 rows too; D482: the banded fit's; bank the bend's
+  for (const d of ['src', 'tools', 'app/core', 'app/camera', 'app/lib', 'app/validate-ui', 'app/preview']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });   // the app folders app/core/panel.js loads; app/preview: the O1 F3 rows load the shell (coreshell.js → closejob.js → validate-ui/checkjob.js → preview/trackmodel.js)
+  fs.mkdirSync(path.join(dir, 'test')); fs.mkdirSync(path.join(dir, 'app', 'test'));   // the O1 drag row's file (app/test)
+  for (const f of FILES) fs.copyFileSync(path.join(__dirname, f), path.join(dir, 'test', f));   // D459: the C2 rows too; D482: the banded fit's; bank the bend's
   fs.mkdirSync(path.join(dir, 'test', 'fixtures')); for (const f of fs.readdirSync(path.join(__dirname, 'fixtures')).filter((x) => x.endsWith('.core2.json'))) fs.copyFileSync(path.join(__dirname, 'fixtures', f), path.join(dir, 'test', 'fixtures', f));
   fs.copyFileSync(path.join(__dirname, 'fixtures', 'extra-bank-short-2026-11-10.t180track'), path.join(dir, 'test', 'fixtures', 'extra-bank-short-2026-11-10.t180track'));   // core_extra_change's: his track
   return dir;

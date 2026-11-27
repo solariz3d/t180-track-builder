@@ -122,8 +122,11 @@ test('L139 S3: a dragged change keeps its share of the piece (lengthen: the mark
     p.set(p.from('bank', 1), 500); p.type('length m', 1000);
     assert.equal(p.from('bank', 1).value, '500', 'typed: metres, it stays'); assert.equal(p.from('bank', 2).value, '700', 'the dragged one keeps its share');
     p.set(p.from('bank', 1), '');
-    assert.equal(p.from('bank', 1).value, '800', 'cleared: laid by the rule, 1000 − the two segments\' 100 + 100'); assert.equal(p.opts().changes.phi[0].from, 800);
-    p.type('length m', 900); assert.equal(p.from('bank', 1).value, '700', 'and it follows the piece');
+    // AMENDED 2026-11-26 (the rule changed: the chair's D677 second O1 repair, item 2, "solve the default placement so that every blank mark it offers lays"; pane E): this row
+    // pinned 800, 1000 − the two segments' 100 + 100, which is AFTER the dragged mark at 700, and the core refuses that list ("change 2 … starts after change 1 (800 m)",
+    // G:\consonance-scratch\e-o1-repair2\s3_check.txt). The room now also keeps a blank mark where its change fits before the next mark: 700 − 100
+    assert.equal(p.from('bank', 1).value, '600', 'cleared: laid by the rule, before the dragged mark at 700 by its segment\'s 100'); assert.equal(p.opts().changes.phi[0].from, 600);
+    p.type('length m', 900); assert.equal(p.from('bank', 1).value, '530', 'and it follows the piece (the dragged mark at 70% of 900, 630, less 100)');
   });
   p.panel.unmount();
 });
@@ -362,5 +365,52 @@ test('L139 K1: his picture\'s −90° corner with a second corner change (+90°)
   assert.ok(500 - mark >= need - 1e-9, `the default mark (${mark}) leaves the second corner at least the core's ${need.toFixed(1)} m`);
   const n = p.shell.getState().history.present.pieces.length; p.extend();
   assert.equal(p.shell.getState().history.present.pieces.length, n + 1, `laid by the core, not refused (${msgText(p)})`);
+  p.panel.unmount();
+});
+
+// O1 F3 (pane C's re-read of eee621f): the drag range asked the change before the dragged mark for its shortest at the piece's end (80.3 m for −80 → −95), but dragging the
+// mark moves that change's END, and ending at 200 m it needs 148.3: the range offered marks from 200.3 the fit check called short, and the walk (60 m) found none, so the mark
+// did not move (from 80 m: the old low end 160.3, the walk's reach 220.3, the first that holds 234; G:\consonance-scratch\e-o1-repair2). Now its low end is where that change first holds, ending there; the mark dragged toward it stops there and the piece lays
+test('O1 F3 drag: a turn −80 → −95 from 80 m then −90, its second mark dragged from 274 toward the first, stops where the first change holds ending there, and lays', async () => {
+  const p = await mountPanel();
+  p.turnAs.value = 'rate'; p.turnAs.onchange();
+  p.type('length m', 200); p.type('turn °/100m', 0); p.extend();   // a straight first, so the piece's own turn ramps 0 → −80 under its changes
+  const n = p.shell.getState().history.present.pieces.length;
+  p.type('length m', 300); p.type('turn °/100m', -80); p.add('turn', -95, '80'); p.add('turn', -90, '274');
+  p.panel.secondDrag({ field: 'turn', index: 1 }, 100);
+  const at = Number(p.from('turn', 2).value), X = require('../../src/core/extend.js'), R = (x) => (x * DEG) / 100, base = { step: R(-80), length: 300 };
+  assert.ok(at < 270, `the mark moved toward the first change: ${at}`);
+  assert.equal(X.spanHolds('kh', R(-80), R(-95), base, at - 80, at), true, `the first change holds ending at ${at}`);
+  assert.ok(at - 1 - 80 < X.secondMinM('kh', R(-80), R(-95), base, at - 1), `and a metre earlier it would not: ${at}`);
+  p.extend(); assert.equal(p.shell.getState().history.present.pieces.length, n + 1, `laid (${msgText(p)})`);
+  p.panel.unmount();
+});
+// and two more drags (pane E, the survivors of the first mutation run, G:\consonance-scratch\e-o1-repair2\survivor_search.txt): from 20 m, the second mark dragged from 154
+// toward the first stops at the first metre the first change holds up to (114.3; the 5 m grid alone gives 115.3, and the low end the change before plus its shortest at
+// the current mark gives 141.3); and the FIRST mark dragged toward the second moves up to where its change still fits ending there, its shortest asked at that end
+test('O1 F3 drag, near: a turn −80 → −95 from 20 m then −90, its second mark dragged from 154 toward the first, stops at the first metre the first change holds up to', async () => {
+  const p = await mountPanel();
+  p.turnAs.value = 'rate'; p.turnAs.onchange();
+  p.type('length m', 200); p.type('turn °/100m', 0); p.extend();
+  const n = p.shell.getState().history.present.pieces.length;
+  p.type('length m', 300); p.type('turn °/100m', -80); p.add('turn', -95, '20'); p.add('turn', -90, '154');
+  p.panel.secondDrag({ field: 'turn', index: 1 }, 40);
+  const at = Number(p.from('turn', 2).value), X = require('../../src/core/extend.js'), R = (x) => (x * DEG) / 100, base = { step: R(-80), length: 300 };
+  assert.ok(at - 20 >= X.secondMinM('kh', R(-80), R(-95), base, at) - 1e-6, `the first change fits ending at ${at}`);
+  assert.ok(at - 1 - 20 < X.secondMinM('kh', R(-80), R(-95), base, at - 1), `and a metre earlier it would not: ${at}`);
+  p.extend(); assert.equal(p.shell.getState().history.present.pieces.length, n + 1, `laid (${msgText(p)})`);
+  p.panel.unmount();
+});
+test('O1 F3 drag, first and far: a turn −80 → −100 from 20 m then −90 at 248.5, its FIRST mark dragged toward the second, moves up to where its change still fits ending at 248.5 (205.9 m there; 121.0 m at the piece\'s end, 60 m and more past the walk)', async () => {
+  const p = await mountPanel();
+  p.turnAs.value = 'rate'; p.turnAs.onchange();
+  p.type('length m', 200); p.type('turn °/100m', 0); p.extend();
+  const n = p.shell.getState().history.present.pieces.length;
+  p.type('length m', 300); p.type('turn °/100m', -80); p.add('turn', -100, '20'); p.add('turn', -90, '248.5');
+  p.panel.secondDrag({ field: 'turn', index: 0 }, 240);
+  const at = Number(p.from('turn', 1).value), X = require('../../src/core/extend.js'), R = (x) => (x * DEG) / 100, base = { step: R(-80), length: 300 };
+  assert.ok(at > 20, `the mark moved toward the second: ${at}`);
+  assert.ok(248.5 - at >= X.secondMinM('kh', R(-80), R(-100), base, 248.5) - 1e-6, `the first change fits before 248.5 from ${at}`);
+  p.extend(); assert.equal(p.shell.getState().history.present.pieces.length, n + 1, `laid (${msgText(p)})`);
   p.panel.unmount();
 });

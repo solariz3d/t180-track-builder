@@ -77,8 +77,21 @@ const SECOND_NAME = Object.freeze({ turn: 'turn', climb: 'climb', bank: 'bank', 
 // ramp; else the head's value, 0 when no head is given (as extendOptions' fromDeg reads it)
 const rampStart = (first, head, ch) => (first && Number.isFinite(first[ch]) ? first[ch] : head && Number.isFinite(head[ch]) ? head[ch] : 0);
 const baseOfRamp = (tr, target, from, L) => { if (tr !== undefined || !Number.isFinite(target) || !Number.isFinite(from) || !(L > 0) || target === from) return null; return { step: target - from, length: L }; };
-const secondMinOf = (minM, ch, a, b) => { if (typeof minM !== 'function' || !Number.isFinite(a) || !Number.isFinite(b)) return 0; const m = minM(ch, a, b); return Number.isFinite(m) && m > 0 ? m : 0; };
+// `end` (O1, pane C's F3 on eee621f): where the change ends in the piece, the next mark or the piece's end; a turn's or climb's shortest under a moving first ramp depends on it
+const secondMinOf = (minM, ch, a, b, end) => { if (typeof minM !== 'function' || !Number.isFinite(a) || !Number.isFinite(b)) return 0; const m = minM(ch, a, b, end); return Number.isFinite(m) && m > 0 ? m : 0; };
 const up2 = (x) => Math.ceil(x * 100 - 1e-9) / 100, down2 = (x) => Math.floor(x * 100 + 1e-9) / 100, near2 = (x) => Math.round(x * 100) / 100;
+/** The first mark after a change from s that it holds up to (O1, pane C's F3 on eee621f). minAt(end), its shortest when it ends there, is not monotone in the end (−80 → −95
+ *  on a 0 → −80 ramp over 300 m: 148.3 m ending at 200, 154.4 at 225, 106.3 at 274.2, 80.3 at 300), so this walks as extend.js routeMin does, over the end: from s plus
+ *  its shortest at the piece's end (the mark laid before O1's repair), up by 5 m to the first end whose shortest the span reaches, then back by the metre while it still does.
+ *  A shortest with no end gives the mark laid before, at one ask. None within 400 m: Infinity */
+function firstHold(minAt, s, L) {
+  const ok = (p) => p - s >= minAt(p) - 1e-6, p0 = up2(s + minAt(L));
+  if (ok(p0)) return p0;
+  let p = p0; for (let i = 0; i < 80 && !ok(p); i++) p = up2(p + 5);
+  if (!ok(p)) return Infinity;
+  while (up2(p - 1) > p0 && ok(up2(p - 1))) p = up2(p - 1);
+  return p;
+}
 /**
  * Each change's from (m) for one field's list [{ from: number | null, target }]: a from given stays; a missing one is laid: the first at SECOND_FROM_SHARE of the piece,
  * a later one right after the previous mark plus that segment's minimum (segment k runs from mark k to the next and changes target k−1 to target k; B's core measures
@@ -106,17 +119,27 @@ function flowAts(length, ats) {
 }
 function changeFroms(length, list, first, ch, { lo = 0, corner = false, minM = null, cornerMin = null, firstAt = null, floor = 0 } = {}) {
   const L = Number(length), n = list.length, out = [];
-  if (!(L > 0)) return list.map((x) => x.from);
+  if (!(L > 0) || list.every((x) => x.from !== null)) return list.map((x) => x.from);
   const cm = (deg) => { if (typeof cornerMin !== 'function' || !Number.isFinite(deg)) return 0; const v = cornerMin(deg); return Number.isFinite(v) && v > 0 ? v : 0; };
   // each change's minimum, asked only when a mark is laid here (D642, E's review of d87ba99: asked for every change on every options build, a drag's included, it was 9 of the
   // 13 searches a move, each a dozen probe roads, though a dragged change always has its mark). Laid marks need m[j] for j from that change on, and m[k - 1] before it
-  const t = [first, ...list.map((x) => x.target)], mm = new Array(n), m = (k) => (mm[k] === undefined ? (mm[k] = corner ? cm(t[k + 1]) : secondMinOf(minM, ch, t[k], t[k + 1])) : mm[k]);
+  // O1 (pane C's F3 on eee621f): a turn's or climb's shortest under a moving first ramp depends on where the change ENDS (extend.js secondMinM's `end`), and a mark laid
+  // here is the end of the change before it. So the room the later changes need is chained back from the piece's end (change j ends at the next typed mark, or where the
+  // changes after it, each at its shortest there, leave it: E(j)), and a later mark is the first the change before it holds up to (firstHold); where that is past the room,
+  // the room's own mark, when the change holds up to it. A minimum with no end (the corners, the other fields) gives the marks laid before
+  const t = [first, ...list.map((x) => x.target)], mm = new Map(), ee = new Array(n);
+  const m = (k, end = L) => { const key = corner ? k : `${k}@${end}`; if (!mm.has(key)) mm.set(key, corner ? cm(t[k + 1]) : secondMinOf(minM, ch, t[k], t[k + 1], end)); return mm.get(key); };
+  const E = (j) => (ee[j] !== undefined ? ee[j] : (ee[j] = j === n - 1 ? L : list[j + 1].from !== null ? list[j + 1].from : E(j + 1) - m(j + 1, E(j + 1))));
+  // the room for mark k: the old one, the piece less every later change's shortest, and never past where change k still fits before its own end (a typed next mark the
+  // old sum did not see: −80 → −90 then a mark typed at 240 laid the blank one at 188.7, 51.3 m from it, against the 85.5 m it needs there)
+  const room = (k) => { let rest = 0; for (let j = k; j < n; j++) rest += m(j, E(j)); return down2(Math.min(L - rest, E(k) - m(k, E(k)))); };
   for (let k = 0; k < n; k++) {
     if (list[k].from !== null) { out.push(list[k].from); continue; }
-    let rest = 0; for (let j = k; j < n; j++) rest += m(j);
     // firstAt, the first change's preferred mark when one is given (the extra bank behind an extra turn), with the floor under it
-    const lower = up2(k === 0 ? (Number.isFinite(firstAt) ? Math.max(lo, floor) : lo) : out[k - 1] + m(k - 1)), pref = corner ? near2((L * (k + 1)) / (n + 1)) : k === 0 ? near2(Number.isFinite(firstAt) ? firstAt : L * SECOND_FROM_SHARE) : lower;
-    out.push(Math.max(lower, Math.min(pref, down2(L - rest))));
+    let lower = k === 0 ? up2(Number.isFinite(firstAt) ? Math.max(lo, floor) : lo) : firstHold((e) => m(k - 1, e), out[k - 1], L);
+    if (k > 0 && lower > room(k) && room(k) - out[k - 1] >= m(k - 1, room(k)) - 1e-6) lower = room(k);
+    const pref = corner ? near2((L * (k + 1)) / (n + 1)) : k === 0 ? near2(Number.isFinite(firstAt) ? firstAt : L * SECOND_FROM_SHARE) : lower;
+    out.push(Math.max(lower, Math.min(pref, room(k))));
   }
   return out;
 }
@@ -263,13 +286,13 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
     const ch = FIELD_CHANNEL[f]; if (targets[ch] === undefined || (flow && ch === 'phi')) continue;
     const per = f === 'turn' || f === 'climb' ? DEG / 100 : f === 'bank' ? DEG : 1, list = items.map((x) => ({ from: x.from, target: x.then * per }));
     // D642 (pane B's additive model): a first ramp over the whole piece (no early transition) is still moving under the change, so the change's shortest is asked with it
-    const base = baseOfRamp(transition[ch], targets[ch], rampStart(empty ? targets : null, head, ch), out.length), minM = base && typeof secondMinM === 'function' ? (c, a, b) => secondMinM(c, a, b, base) : secondMinM;
+    const base = baseOfRamp(transition[ch], targets[ch], rampStart(empty ? targets : null, head, ch), out.length), minM = typeof secondMinM === 'function' ? (c, a, b, end) => secondMinM(c, a, b, base, end) : secondMinM;   // `end`: pane C's F3
     // Way 1: the extra bank behind the piece's first extra turn (its list was laid above: turn comes before bank in SECOND_FIELDS)
     const turnList = f === 'bank' ? later.turnDeg : null, lead = turnList && turnList.length ? { firstAt: turnList[0].from - EXTRA_BANK_LEAD_SHARE * out.length, floor: Number.isFinite(secondFloorM) && secondFloorM > 0 ? secondFloorM : DEFAULT_FLOOR_M } : {};
     // (2026-11-10) A BANK CHANGE IS LAID WHERE THE ROAD AS BUILT CARRIES IT (src/core/extend.js bankAsBuilt): its default mark is first clamped only by the bank's fit floor
     // (bankFloorM, 26 m), so a mark at his 47.5 m on a 125 m piece stays there while the extra bank is dragged; when the core then refuses it on the road as built (bankRefusal,
     // below, once the options are whole), the default marks fall back to the comfort length's clamp, which always lays (a straight road's end, as before)
-    const floored = ch === 'phi' && Number.isFinite(bankFloorM) && typeof minM === 'function' ? (c, a, b) => Math.min(bankFloorM, minM(c, a, b)) : minM;
+    const floored = ch === 'phi' && Number.isFinite(bankFloorM) && typeof minM === 'function' ? (c, a, b, end) => Math.min(bankFloorM, minM(c, a, b, end)) : minM;
     const froms = changeFroms(out.length, list, targets[ch], ch, { lo: transition[ch] || 0, minM: floored, ...lead });
     later[ch] = list.map((x, k) => ({ from: froms[k], target: x.target }));
     if (floored !== minM) bankComfort = () => changeFroms(out.length, list, targets[ch], ch, { lo: transition[ch] || 0, minM, ...lead });
@@ -438,10 +461,10 @@ function mount(root, shell, mountOpts = {}) {
   // other"); a from typed here is metres, as L135's was, and a cleared one is laid again by the rule (changeFroms) and follows the piece. A field's rows are off while it
   // has no target (the first change is its target). A new document clears them all (showHead); Undo gives back the undone piece's own (fieldsNow, putBack)
   // the core's minimum and floor, through the shell (a shell without them: null)
-  const shellMinM = (ch, a, b, base) => (typeof shell.secondMinM === 'function' ? shell.secondMinM(ch, a, b, base) : null);
+  const shellMinM = (ch, a, b, base, end) => (typeof shell.secondMinM === 'function' ? shell.secondMinM(ch, a, b, base, end) : null);
   // D642: the minimum for one field of the options `o`, its first ramp passed when that ramp still moves under the change (baseOfRamp); a corner's first is its degrees
   const baseFor = (o, key) => baseOfRamp(o.transition && o.transition[key], o.targets && o.targets[key], rampStart(o.first, shell.headState(), key), Number(o.length));
-  const minOf = (o, key) => { const base = baseFor(o, key); return base ? (c, a, b) => shellMinM(c, a, b, base) : shellMinM; };
+  const minOf = (o, key) => { const base = baseFor(o, key); return (c, a, b, end) => shellMinM(c, a, b, base, end); };   // `end`: pane C's F3
   // a later corner's shortest, by its degrees (B's R1: src/core/turnby.js cornerChangeMinM, through the shell); cornerMinM reads only the family and the knot spacing, so the
   // document's own (the last road piece's family) is what it is asked with, as extend() would lay it
   // D642: and the first corner's degrees, and the piece's length, which the share of the first corner still turning under it is read from (turnby.js cornerChangeMinM)
@@ -1399,14 +1422,18 @@ function mount(root, shell, mountOpts = {}) {
     if (key === 'phi' && o.bankShape === 'flow') {
       const L = Number(len.value), lo0 = o.transition && Number.isFinite(o.transition.phi) ? o.transition.phi : 0;
       const holds = (k) => (k + 1 < arr.length ? arr[k + 1].from > arr[k].from : arr[k].from <= L + 1e-9) && arr[k].from > (k ? arr[k - 1].from : lo0);
-      return { key, corner: false, arr, first, lo0, min: () => 0, holds, L };
+      return { key, corner: false, arr, first, lo0, min: () => 0, reach: (k) => arr[k].from, holds, L };
     }
     const mm = corner ? null : minOf(o, key), L = Number(len.value);   // D642: with the first ramp under it (corners: the first corner's degrees)
     // D642 (E's review of d87ba99: 106 ms a move dragging the extra bank back toward level): each segment's shortest, asked only when a range needs its number (min); and
     // whether a segment holds at the span it has (holds), which is all the fit check needs: at most ONE probe of the built road (shell.spanHolds, extend.js spanHolds),
     // where its shortest is a search of a dozen. A core without spanHolds: the span against the shortest, as before
     const prevOf = (k) => (k === 0 ? first : arr[k - 1].target), spanOf = (k) => (k + 1 < arr.length ? arr[k + 1].from : L) - arr[k].from;
-    const memo = new Array(arr.length), min = (k) => (memo[k] === undefined ? (memo[k] = corner ? cornerMin(o, Number(arr[k].deg), first) : secondMinOf(mm, key, prevOf(k), arr[k].target)) : memo[k]);
+    // each segment's shortest at its END (pane C's F3 on eee621f), the next mark or the piece's end; reach(k): the first place the next mark may stand, where change k from its
+    // mark holds up to it (the drag range's low end: dragging the next mark moves change k's end, and its shortest with it)
+    const minAt = (k, end) => (corner ? cornerMin(o, Number(arr[k].deg), first) : secondMinOf(mm, key, prevOf(k), arr[k].target, end));
+    const memo = new Array(arr.length), min = (k) => (memo[k] === undefined ? (memo[k] = minAt(k, arr[k].from + spanOf(k))) : memo[k]);
+    const reach = (k) => (corner ? arr[k].from + min(k) : firstHold((e) => minAt(k, e), arr[k].from, L));
     const holds = (k) => {
       if (!corner && typeof shell.spanHolds === 'function') {
         const b = shell.spanHolds(key, prevOf(k), arr[k].target, baseFor(o, key), spanOf(k), arr[k].from + spanOf(k));   // its end, where it sits (pane C's F1)
@@ -1416,9 +1443,9 @@ function mount(root, shell, mountOpts = {}) {
       }
       return spanOf(k) >= min(k) - 1e-6;
     };
-    return { key, corner, arr, first, lo0: (o.transition && o.transition[key]) || 0, min, holds, L };
+    return { key, corner, arr, first, lo0: (o.transition && o.transition[key]) || 0, min, reach, holds, L };
   };
-  const secRange = (S, k) => ({ lo: k === 0 ? S.lo0 : S.arr[k - 1].from + S.min(k - 1), hi: (k === S.arr.length - 1 ? S.L : S.arr[k + 1].from) - S.min(k) });
+  const secRange = (S, k) => ({ lo: k === 0 ? S.lo0 : S.reach(k - 1), hi: (k === S.arr.length - 1 ? S.L : S.arr[k + 1].from) - S.min(k) });
   // every mark inside its range: the first at or after the first ramp's end, and each segment (the span to the next mark, or the end) holding; a mark is past its range's low
   // end exactly when the segment before it does not hold, so the spans alone say it
   const secFits = (S) => (!S.arr.length || S.arr[0].from >= S.lo0 - 1e-6) && S.arr.every((c, k) => S.holds(k));

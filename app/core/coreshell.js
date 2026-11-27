@@ -793,7 +793,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     // THE LATER CHANGES' NUMBERS FOR THE PANEL (L139, pane C, at B's word): the core's own, passed through, because the panel may not require src/core/extend.js
     // (it pulls node's fs, which the app's loader refuses). null where this core does not export them: the panel then lays 85% and offers nothing
     // D642 (pane B's additive model): a fourth argument, the field's own first ramp still moving under the change ({ step, length }, extend.js secondMinM), passed through
-    secondMinM: (ch, a, b, base) => (typeof EXT.secondMinM === 'function' ? EXT.secondMinM(ch, a, b, base) : null),
+    // and a fifth, `end`: where the change ends in the piece (the next mark, or the piece's end), as spanHolds takes it (pane C's F3 on eee621f: dropped here, the panel's
+    // default marks and drag range read the shortest at the piece's end and the core refused them at their real end)
+    secondMinM: (ch, a, b, base, end) => (typeof EXT.secondMinM === 'function' ? EXT.secondMinM(ch, a, b, base, end) : null),
     // D642 (E's review of d87ba99: the panel's fit check ran secondMinM's full search, a dozen probe roads, on every drag move): whether a change of `span` metres holds, as
     // secondMinM would say, at most ONE probe (extend.js spanHolds, what changeLists asks). null where this core does not export it: the panel then compares with secondMinM
     // `end`, where the change ends in the piece (the next mark, or the piece's end), so the probe lays it where it sits (pane C's F1 on bfa6732)

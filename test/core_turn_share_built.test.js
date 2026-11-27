@@ -10,7 +10,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
 const D = require('../src/core/document.js');
-const { extend, secondMinM } = require('../src/core/extend.js');
+const { extend, secondMinM, spanHolds } = require('../src/core/extend.js');
 const A = require('../src/core/adapter.js');
 
 const DEG = Math.PI / 180, BAR = 29.4 / (10 * 170 * 170), R = (x) => (x * DEG) / 100;   // °/100m → rad/m
@@ -125,3 +125,40 @@ for (const [ch, peak] of [['kh', (d, a, b) => builtPeak(d, a, b)], ['kv', builtC
     assert.throws(() => lay2(ch, -80, -95, 52.7, -90, 200), (e) => e.code === 'BAD_SECOND' && /needs at least 148\.3 m before change 2's mark/.test(e.message));
   });
 }
+
+// F3 (pane C's re-read of eee621f, its panelmarks table): the panel asked a change's shortest without its end, so with both marks left blank it laid them from the shortest at the
+// piece's end and the core, asking at the change's real end, refused them (−80 → −95 → −90: [193.9, 274.2], "needs 106.3 m") where ceb21f5 laid the road. Asked here through the
+// shell's secondMinM, as the panel passes it, and laid by extend with the options the panel builds. A placement that lays exists for each (C's: ceb21f5's own marks lay at eee621f)
+const { extendOptions } = require('../app/core/panel.js');
+const { createCoreShell } = require('../app/core/coreshell.js');
+for (const [kind, ch, first, t1, t2] of [['turn', 'kh', -80, -95, -90], ['climb', 'kv', -80, -95, -90], ['turn', 'kh', -80, -100, -90], ['turn', 'kh', -60, -75, -70]]) {
+  test(`O1 F3 ${kind}: ${first} → ${t1} → ${t2} on a 0 → ${first} ramp over 300 m, both marks left blank: the panel lays the marks where the road lays (never placed and then refused)`, async () => {
+    const s = await createCoreShell({ brushFn: null, autosaveMs: 0 });
+    const o = extendOptions({ length: 300, turn: '', climb: '', width: '', cup: '', turnAs: 'rate', [kind]: String(first), head: { kh: 0, kv: 0 }, changes: { [kind]: [{ then: String(t1), from: '' }, { then: String(t2), from: '' }] }, secondMinM: s.secondMinM });
+    const marks = o.changes[ch].map((x) => x.from);
+    assert.ok(marks.length === 2 && marks.every(Number.isFinite) && marks[0] < marks[1] && marks[1] < 300, `the panel's marks ${JSON.stringify(marks)}`);
+    const d0 = extend(D.createDoc('g'), { length: 200, targets: { [ch]: 0 } });
+    let laid = null; try { extend(d0, o); laid = true; } catch (e) { laid = e.message; }
+    assert.equal(laid, true, `marks ${JSON.stringify(marks)}: ${laid}`);
+  });
+}
+
+// and with the second mark typed (C's table had one, at 200, refused at every commit because the first change needs more than its share of it): −80 → −90 then a mark typed at
+// 240 on 300 m. The room summed every later shortest and did not see the typed mark: the blank one was laid at 222.7 (eee621f), 17.3 m before it, against the 85.5 m it needs there
+test('O1 F3 turn: −80 → −90 with its mark left blank, then −85 at a mark typed at 240 m, on a 0 → −80 ramp over 300 m: the blank mark is laid where its change fits before the typed one', async () => {
+  const s = await createCoreShell({ brushFn: null, autosaveMs: 0 });
+  const o = extendOptions({ length: 300, turn: '-80', climb: '', width: '', cup: '', turnAs: 'rate', head: { kh: 0, kv: 0 }, changes: { turn: [{ then: '-90', from: '' }, { then: '-85', from: '240' }] }, secondMinM: s.secondMinM });
+  const marks = o.changes.kh.map((x) => x.from);
+  assert.equal(marks[1], 240, 'the typed mark stays');
+  assert.ok(240 - marks[0] >= secondMinM('kh', R(-80), R(-90), { step: R(-80), length: 300 }, 240) - 1e-6, `the blank mark ${marks[0]} leaves its change the room it needs ending at 240`);
+  let laid = null; try { extend(extend(D.createDoc('g'), { length: 200, targets: { kh: 0 } }), o); laid = true; } catch (e) { laid = e.message; }
+  assert.equal(laid, true, `marks ${JSON.stringify(marks)}: ${laid}`);
+});
+
+// F4 (pane C's re-read, its N12): the probe's memo keyed without the change's end answered a span asked at the next mark with the answer for the piece's end, and laid 4 of C's
+// cases at up to 1.086 × the bar. One process, the same change and span at both ends, the piece's end first: 80.3 m holds where it runs to the piece's end, not where it ends at 200 m
+test('O1 F4: the same change and span asked at the piece\'s end and then at the next mark is answered for each end (80.3 m holds ending at 300, not ending at 200)', () => {
+  const base = { step: R(-80), length: 300 };
+  assert.equal(spanHolds('kh', R(-80), R(-95), base, 80.3, 300), true, 'ending at the piece\'s end');
+  assert.equal(spanHolds('kh', R(-80), R(-95), base, 80.3, 200), false, 'ending at the next mark, 200 m');
+});
