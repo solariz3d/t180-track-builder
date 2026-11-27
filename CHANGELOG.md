@@ -52,17 +52,21 @@ All notable changes to this project are recorded here. The format follows
   before the end, radius 40) the edge bends there about five times as hard as the brush itself bent it. These figures are Extend's (and Turn by's, a
   corner list's, Jump's and Level's) on a 100 m piece; a shorter piece has a shorter hold and bends harder (after the wide brush, 6.55 times on 15 m and
   9.71 times on 10 m). Sharp holds the width over its own first span, which is far shorter (about 1.9 m), so it goes past by less (about 0.1 to 0.2 times the
-  head's change per metre: 18 to 33 cm after the +4 m grab) and bends much harder: after that grab the width's second derivative reaches 4.4 to 7.2 per
-  metre (7.15 with a ramp of 1). A level head lays exactly as before, and a typed width still goes where it is typed.
+  head's change per metre: 18 to 33 cm after the +4 m grab) and bends much harder: after that grab the width's second derivative reaches 5.0 to 9.0 per
+  metre at the joint (8.95 with a ramp of 1). When a bank, cup or edge is typed with its "early" box ticked in the same Extend, at a head where the
+  width is still changing, the width goes past the head's the way it was heading by about a third of the head's change per metre times the early
+  ramp's first step (0.94 m on a 30 m piece, 2.3 m on 100 m), stays there for about 10 m and comes back, within 1 mm by about 16 m: on a 30 m piece
+  47 mm after the wide brush and 0.52 m after the +4 m grab, on a 100 m piece 0.12 m and 1.30 m. A level head lays exactly as before, and a typed
+  width still goes where it is typed.
   Only the width: the turn and climb keep going as they go, as their fields say, and the bank, cup and edges still carry a brush's slope on as before
   (measured after the same kind of brush: 0.42° of bank and 0.73° of cup or edge every 100 m). The hold does not move the road: after a brush, Extend,
   Turn by, a corner list, Sharp, Jump and Level lay the same turn and climb as from the same head with its width level (to within a step of their
   stored decimals) and end in the same place (within 0.003 mm). Finish is the exception: its first new piece plans its bank with the hold's knots in it, so
   after a brush that piece's bank can differ from a level head's by up to about 1° (0.97° measured, on a piece banked to 64°), its turn by under
-  2e-7 rad per metre, and the closed lap's pieces end within 0.1 mm of a level head's. One try at laying that hold only once the lap is closed
-  (D678) was measured against the bar set for it beforehand and missed it (after a grab with Sculpt, by more than a step of bank, as Finish from the
-  same head with its width level also does), so it was not kept and Finish stays as described here. The app has no right-width brush (Sculpt's brushes
-  refuse the right width), so nothing there is left changing by a brush.
+  2e-7 rad per metre, and its first two new pieces end about 1.4 and 1.0 mm from where a level head's do (the lap's own end within 0.1 mm). One try
+  at laying that hold only once the lap is closed (D678) was measured against the bar set for it beforehand and missed it (after a grab with Sculpt,
+  by more than a step of bank, as Finish from the same head with its width level also does), so it was not kept and Finish stays as described here.
+  The app has no right-width brush (Sculpt's brushes refuse the right width), so nothing there is left changing by a brush.
 - **A typed bank past a full turn rolls on into the next turn instead of unwinding.** He asked for it on 2026-11-26: past a full turn the bank
   shown resets to 0, and the road carries the extra degrees into the next turn. The bank field still shows the bank within one turn, its sign kept, but a
   typed bank (the field, an extra bank row, a flowing bank's mark) is now laid as typed, in the head's own turn. From a head at −340, a typed −392 rolls
