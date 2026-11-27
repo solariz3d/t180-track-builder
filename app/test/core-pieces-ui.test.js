@@ -1098,6 +1098,22 @@ test('row 16b (D335): a slow bank drag on a sculpt mark is 0.01 degree a pixel w
   P1.panel.unmount();
 });
 
+// D677 (2) (his answer 6 of 2026-11-27 01:11, lighthouse exo_memory/briefs/t180_unmakeable_shapes.md:68): the Sculpt mark's drag through the panel's own handle host
+// (panel.js: delta = value - the unwrapped middle, then sculptTo), on a piece the core wound past a turn. Before D677 (2) the drag's first step from 366 came out
+// near 6 (the shell sent on the delta landing within one turn); app/test/core-bank-carry.test.js S1 to S3 hold the same rule through the shell's API
+test('D677 (2): a steady bank drag on the Sculpt mark of a piece wound past a turn (340 → 392, its middle at 366) rises from 366 and never goes back round a turn', async () => {
+  const P1 = await handlePanel(), { shell } = P1, R = Math.PI / 180;
+  let w = extend(shell.getState().history.present, { length: 600, targets: { phi: 340 * R } }); w = extend(w, { length: 150, targets: { phi: 392 * R } }); shell.commitDoc(w);
+  const last = w.pieces.length - 1, at = require('../../src/core/sculpt.js').pieceOffsets(w)[last] + w.pieces[last].length / 2;
+  shell.setSculpt(true); P1.frame(); P1.click(at); P1.frame(); P1.frame();
+  const si = shell.sculptInfo(); assert.ok(si && si.index === last && Math.abs(si.values.phi - 366) < 1e-6, `control: the wound piece is selected, its middle at 366 (${si && si.index}, ${si && si.values.phi})`);
+  const h = handleOf(P1, 'bank:1'); assert.ok(h && h.screen, 'control: its bank mark is on the stage');
+  const v = followMark(P1, 'bank:1', 30, 1, 1);   // 30 px at 1 px a millisecond
+  assert.ok(v[0] > 366 && v[v.length - 1] > v[0], `it rises from 366: first ${v[0]}, last ${v[v.length - 1]}`);
+  assert.ok(v.every((x, i) => i === 0 || x >= v[i - 1] - 1e-9), `and never goes back: ${v.map((x) => x.toFixed(2)).join(' ')}`);
+  P1.panel.unmount();
+});
+
 // A review found: the closed-tube sweep refusal in plain words. The panel replaces src/core/document.js:412's "must stay within 0 to 360" by matching its
 // text, so a rename there would silently bring back the words that read as a fault; this row holds the coupling (nobody sees it until a closed tube is on the table)
 test('row 21: in Sculpt, a Tube sweep drag on a closed tube is refused in plain words: "Sculpt can\'t change the sweep of a closed tube…", not the core\'s', async () => {
