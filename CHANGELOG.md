@@ -7,7 +7,9 @@ All notable changes to this project are recorded here. The format follows
 ### Added
 - **A road's right side can have its own width (D677 (b)).** Type "right width m" in the panel (beside "width m"): the right side takes that width and
   the left side and the driven line stay exactly where they were, so a road can widen on one side only, as some real tracks do (one widens 3.5 m on
-  its right within about 5 m). Blank, the right side follows the width, and the width typed alone still moves both sides. It is a new optional
+  its right within about 5 m). Blank, the right side follows the width, and the width typed alone still moves both sides. Typed as the width is
+  shown (two decimals), the right width is the width exactly, also where the width carries more decimals than it shows (typed so, or left by the
+  width brush); any other number is measured from the width in force, to the millimetre. It is a new optional
   channel, `wd` (the right side's width less the width), written only by a piece that uses it; a track with one is saved as `t180b.core/7`.
   **Every track made before opens and saves byte for byte** (his answer, 2026-11-26: "old tracks stay the same, it allows for new tracks to have
   the individual sides of width"). An older builder refuses a core/7 file by name rather than open it wrong; to go back, set the right width back to

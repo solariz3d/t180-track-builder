@@ -83,3 +83,63 @@ test('the mounted panel: "right width m" shows the head\'s right width, and type
   ps = shell.getState().history.present.pieces; L = ps[ps.length - 1];
   near(D.pieceEnd(L).w.v, 25, 'the width'); near(D.pieceEnd(L).wd.v, 3.5, 'the step kept: the right side follows the width');
 });
+
+// ── L258 F2 (pane O's delta read, handback/p-l258-read-right-width-O_2026-11-27.md:182): the panel SHOWS a width to two decimals, but measured a typed right width
+// from the head's width with all its decimals, so on a width of 19.1346 (typed so) or one the width brush left (20.463) a right width typed as the width is shown
+// left 3 to 5 mm of wd: the road stayed split, SPLIT_HEAD's own advice led back to SPLIT_HEAD, and the CHANGELOG's way back left the file at core/7 ──
+const PC = require('../../src/core/piece.js');
+const shown2 = (x) => Math.round(x * 100) / 100;   // as the panel's fields show a number (app/core/panel.js show)
+function memStorage(seed) {
+  const st = { docs: new Map(Object.entries(seed)), pieces: new Map() };
+  return Object.assign(st, { saveDoc: async (n, t) => { st.docs.set(n, t); }, openDoc: async (n) => st.docs.get(n), listDocs: async () => [...st.docs.keys()], saveUndo: async () => {}, openUndo: async () => null,
+    savePiece: async (n, t) => { st.pieces.set(n, t); }, openPiece: async (n) => st.pieces.get(n), listPieces: async () => [...st.pieces.keys()], saveRecipe: async () => {}, openRecipe: async () => null,
+    saveAutosave: async () => {}, openAutosave: async () => null, clearAutosave: async () => {} });
+}
+const roadAt = (w) => extend(extend(D.createDoc('f2'), { length: 120, first: { w }, targets: { kh: 0 } }), { length: 300, transition: 60, targets: { kh: 1 / 400, phi: 8 * Math.PI / 180 } });
+/** The two heads O's read names: a width typed with four decimals, and one the width brush left (19.1 brushed +1.37 at the head); `split` adds the right side's 3.5 m step first. */
+async function headOn(kind, { split }) {
+  let d = roadAt(kind === 'typed' ? 19.1346 : 19.1);
+  if (split) d = extend(d, { length: 100, transition: { wd: 5 }, targets: { wd: 3.5 } });
+  const storage = memStorage({ 'eq-f2': D.serialize(d) }), s = await createCoreShell({ brushFn: null, storage, autosaveMs: 0 }); await s.open('f2');
+  if (kind === 'brushed') { const L = s.getState().history.present.pieces.reduce((a, P) => a + P.length, 0); s.beginBrush({ mode: 'rate', channel: 'w', s0: L - 5, r: 20 }); s.brushTo(1.37); s.endBrush(); }
+  assert.notEqual(shown2(s.headState().w), s.headState().w, `${kind}: the head's width has more than two decimals (${s.headState().w})`);
+  await storage.savePiece('plain', PC.serialize(PC.saveRun(extend(D.createDoc('p'), { length: 60, first: { w: 19.1 }, targets: { kh: 1 / 300 } }), 0, 0, { name: 'plain' })));
+  return s;
+}
+const piecesOf = (s) => s.getState().history.present.pieces.length;
+
+test('L258 F2: with the width left as shown, a right width typed as the width is SHOWN is sent as wd 0; any other number, and one beside a typed width, is measured as before', () => {
+  const head = { w: 19.1346 };
+  assert.equal(extendOptions({ ...BLANK, widthR: '19.13', head }).targets.wd, 0, 'the width as its field shows it: back to the width');
+  near(extendOptions({ ...BLANK, widthR: '19.133', head }).targets.wd, 19.133 - 19.1346, 'another number: from the head\'s width, to the millimetre');
+  near(extendOptions({ ...BLANK, width: '19.1346', widthR: '19.13', head }).targets.wd, 19.13 - 19.1346, 'the width typed too: the difference of the two typed numbers');
+  const o = extendOptions({ ...BLANK, length: 300, widthR: '22.63', head, changes: { widthR: [{ then: '19.13', from: '200' }] } });
+  assert.equal(o.changes.wd[0].target, 0, 'a later change typed as the width is shown: back to the width at its mark');
+  assert.equal(extendOptions({ ...BLANK, widthR: '19.1', head: { w: 19.1 } }).targets.wd, 0, 'a two-decimal width: as before');
+});
+
+test('L258 F2: SPLIT_HEAD\'s advice, typed as it is written, lays the piece, on a head of width 19.1346 and on one left by the width brush', async () => {
+  for (const kind of ['typed', 'brushed']) {
+    const s = await headOn(kind, { split: true }), n0 = piecesOf(s);
+    await s.insertPiece('plain');
+    const said = s.getState().message, m = /Extend with right width m set to the width \(([\d.]+)\)/.exec(said || '');
+    assert.ok(m && piecesOf(s) === n0, `${kind}: refused by name first: ${said}`);
+    assert.equal(Number(m[1]), shown2(s.headState().w), `${kind}: the words give the width as his field shows it`);
+    s.extend(extendOptions({ ...BLANK, length: 100, widthR: m[1], head: s.headState() }));
+    const P = s.getState().history.present.pieces.slice(-1)[0];
+    assert.deepEqual(D.pieceEnd(P).wd, { v: 0, m: 0 }, `${kind}: the right width ends back at the width`);
+    const n1 = piecesOf(s); await s.insertPiece('plain');
+    assert.equal(piecesOf(s), n1 + 1, `${kind}: the piece is laid: ${s.getState().message}`);
+  }
+});
+
+test('L258 F2: the CHANGELOG\'s way back holds on such a width: a piece laid with the right width set to the width as shown writes no wd, and the file keeps its schema, not core/7', async () => {
+  for (const kind of ['typed', 'brushed']) {
+    const s = await headOn(kind, { split: false }), before = JSON.parse(D.serialize(s.getState().history.present)).schema;
+    s.extend(extendOptions({ ...BLANK, length: 100, widthR: String(shown2(s.headState().w)), head: s.headState() }));
+    const o = JSON.parse(D.serialize(s.getState().history.present));
+    assert.equal(o.pieces[o.pieces.length - 1].channels.wd, undefined, `${kind}: the new piece writes no wd`);
+    assert.equal(o.schema, before, `${kind}: the schema it had (${before})`);
+    assert.notEqual(o.schema, 't180b.core/7');
+  }
+});

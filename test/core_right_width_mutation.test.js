@@ -51,6 +51,11 @@ const MUTANTS = [
   // L258 F1 (pane O's read): a saved piece added at a split head, refused in his words
   { id: 'R26 a saved piece at a split head is refused in the stored channel\'s name', edits: [[PI, "if (e.code === 'JOINT' && onlyRightWidth(doc, head, run))", 'if (false)']] },
   { id: 'R27 any joint refused at a split head is said as the right width\'s', edits: [[PI, ' !== null && D.jointProblem({ ...head, wd: { v: D.OPT_DEFAULT.wd, m: 0 } }, P, kind) === null;', ' !== null;']] },
+  { id: 'R28 SPLIT_HEAD gives the width with all its decimals, not as his field shows it', edits: [[PI, 'const shown2 = (x) => Math.round(x * 100) / 100;', 'const shown2 = (x) => x;']] },
+  // L258 F2 (pane O's delta read): a right width typed as the width is shown is back to the width
+  { id: 'P6 a right width typed as the width is shown is measured from the width\'s hidden decimals', edits: [[PA, ' if (backToWidth(wR, ref)) targets.wd = 0;', '']] },
+  { id: 'P7 a later right width change typed as the width is shown is measured from its hidden decimals', edits: [[PA, 'return backToWidth(then, ref) ? 0 : then - ref;', 'return then - ref;']] },
+  { id: 'P8 a right width typed as the width is shown is the width also beside a typed width', edits: [[PA, 'targets.w === undefined && typed === near2(ref)', 'typed === near2(ref)']] },
   // the panel and the shell
   { id: 'P1 the right width is sent as typed, not as its difference from the width', edits: [[PA, 'targets.wd = wR - ref;', 'targets.wd = wR;']] },
   { id: 'P2 a right width\'s change is sent against the head\'s width, not the width at its mark', edits: [[PA, 'return L.length ? L[L.length - 1].target : targets.w', 'return false ? 0 : targets.w']] },
