@@ -61,6 +61,11 @@ All notable changes to this project are recorded here. The format follows
   back, revert the commits.
 
 ### Fixed
+- **The next piece's ghost lies where Extend places the piece after a grab or an Even (D678 N5).** The ghost was drawn without the road's sideways
+  and height offsets, so with Sculpt switched off it lay up to 2 m beside the placed road: on a banked road, as a see-through lavender copy of the
+  road from the first grab to the head (the next piece re-lays the last piece's bank there); and on any road whose head a grab or an Even had moved
+  sideways, as a next piece starting beside the head (1.94 m in the read that found it). The ghost now carries the same offsets placing does. Older
+  than Even: the builder before it showed the same. Nothing saved changes; it is the preview only.
 - The File and Edit menus now open rightwards from their titles at every window width, as the leftmost menus of a bar usually do. They opened leftwards above
   1000 px, so a long saved track name in File ▸ Open… (the longest the app takes, 61 characters) pushed File up to 72 px off the window's left edge between
   1000 and 1130 px, its words cut. Every other menu still opens leftwards.

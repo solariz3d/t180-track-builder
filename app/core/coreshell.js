@@ -427,6 +427,12 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   };
   const startOf = (d) => ({ pos: d.start.pos.slice(), theta: d.start.heading, p: d.start.pitch });
   const resolvedOf = (d) => { const segments = segmentsOf(d); return { resolved: Object.freeze({ segments, closed: !!d.closed, start: startOf(d), lift: offsetPath && segments.length ? (p) => offsetPath(d, segments, p) : undefined }), resolveError: null }; };
+  // THE GHOST'S LIFT (D678 N5, pane B's read of Even 2.1, "the lavender wash"): a candidate hands on its own document's offsets h and l, as resolvedOf hands on the placed track's.
+  // Without it, on a banked road (where the next piece re-lays the last placed piece's bank, D642) the preview's re-laid ghost (app/preview/trackmodel.js ghostSteps) ran from the
+  // first grab on and drew the road there with NO offset, up to 2 m beside the placed one, as soon as Sculpt was off; and on any road (B's read 2.4, a flat one) whose head's middle a
+  // grab or an Even moved, the copy-and-extend ghost began the next piece at the unoffset head, beside where placing lays it (1.94 m in B's read). Both now lift with it. The lift
+  // reads the segments the ghost is built from (a drag's coarse ones when given); otherwise the document's own (the shell's segment cache), found the first time the preview lifts.
+  const liftFor = (d, segments) => (offsetPath ? (p) => offsetPath(d, segments || (segments = segmentsOf(d)), p) : undefined);
   /** Run an edit; a core error becomes the message, and nothing else changes. */
   // the worst roll rate (°/m) on the road over lap distance [s0, s1], read as the checker reads it (src/validate rollRates, its 20 m chord); a closed lap wraps
   const rollOn = (d, s0, s1) => {
@@ -812,10 +818,10 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     secondFloorM: () => (Number.isFinite(EXT.SECOND_FLOOR_M) ? EXT.SECOND_FLOOR_M : null),
     cornerMinM: (d, o) => (typeof TB.cornerMinM === 'function' ? TB.cornerMinM(d, o) : null),
     cornerChangeMinM: (d, o, deg, baseDeg) => (typeof TB.cornerChangeMinM === 'function' ? TB.cornerChangeMinM(d, o, deg, baseDeg) : null),   // L139 R1 (pane B): a later corner's shortest, by its angle; D642: and the first corner's degrees under it
-    /** The GHOST of an extension: the track as it would be, not committed (the preview's 't180-ghost' candidate). */
+    /** The GHOST of an extension: the track as it would be, not committed (the preview's 't180-ghost' candidate), with its offsets' lift (liftFor). */
     candidate: (opts, { coarse = false } = {}) => {
-      if (coarse) { const n0 = doc().pieces.length, dc = TB.extendCorner(doc(), opts); return { segments: segmentsOf(dc, { segMFor: (P, pi) => (pi >= n0 && P.type === 'road' ? ghostSegM(P) : undefined) }), closed: false, start: startOf(dc) }; }   // the drag's ghost
-      const d = TB.extendCorner(doc(), opts); return { segments: segmentsOf(d), closed: false, start: startOf(d) };
+      if (coarse) { const n0 = doc().pieces.length, dc = TB.extendCorner(doc(), opts), sc = segmentsOf(dc, { segMFor: (P, pi) => (pi >= n0 && P.type === 'road' ? ghostSegM(P) : undefined) }); return { segments: sc, closed: false, start: startOf(dc), lift: liftFor(dc, sc) }; }   // the drag's ghost
+      const d = TB.extendCorner(doc(), opts); return { segments: segmentsOf(d), closed: false, start: startOf(d), lift: liftFor(d) };
     },
     /** The ghost's readout: what extend(opts) would place, before it is placed (A: the same numbers as after). Throws on bad fields. */
     candidateReadout: (opts) => RD.candidateReadout(doc(), opts),
