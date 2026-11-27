@@ -8,6 +8,8 @@
 //      station for station, and starts where the same road with no grab re-lays (the re-laid tail, not the grab)
 //   2  the same with a height grab (a hill, 2 m): the same
 //   3  a road that ends at rest (no re-laid tail) with a sideways grab: the copy-and-extend ghost, which placing matches, as before (a control; green before the mend too)
+//   4  (the chair's addition, from B's read 2.4: 1.94 m after an Even to the head) a FLAT road with a sideways grab whose window reaches the head, so the head's middle moved:
+//      placing lays the next piece from the offset head (the new piece carries the head's l), and its ghost, a copy-and-extend one with no re-laid tail, lies there too
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -73,4 +75,16 @@ test('N5 3: a road that ends at rest, with a sideways grab, keeps the copy-and-e
   s.extend({ family: 'bowl', ...NEXT });
   const after = modelOf(s.getState().resolved).path, f = farthest(ghost, after, n);
   assert.ok(f.worst <= 1e-9, `the new piece's ghost lies where it is placed: ${f.worst.toFixed(4)} m off at s ${f.at.toFixed(0)}`);
+});
+
+test('N5 4: on a flat road with a sideways grab that moves the head\'s middle, the next piece\'s ghost starts at the offset head, where placing lays the piece', async () => {
+  const s = await placed([{ length: 1000 }, { length: 1000 }], { channel: 'lateral', s0: 1980, r: 60, delta: 2 }), st = s.getState(), n = st.resolved.segments.length;
+  const d = st.history.present, head = d.pieces[d.pieces.length - 1], D = require('../../src/core/document.js');
+  assert.ok(Math.abs(D.channelAt(head, 'l', head.length).v) > 1, `the grab moved the head's middle sideways: l ${D.channelAt(head, 'l', head.length).v.toFixed(4)} m at the head`);
+  const ghost = modelOf(st.resolved).ghostFor(s.candidate(NEXT));
+  assert.equal(ghost.relaid, undefined, 'a flat road: no re-laid tail, the copy-and-extend ghost');
+  s.extend({ family: 'bowl', ...NEXT });
+  const after = modelOf(s.getState().resolved).path, f = farthest(ghost, after, n);
+  assert.ok(f.worst <= 1e-9, `the new piece's ghost lies where it is placed: ${f.worst.toFixed(4)} m off at s ${f.at.toFixed(0)}`);
+  assert.ok(f.head <= 1e-9, `the ghost's head is where placing puts it: ${f.head.toFixed(4)} m off`);
 });
