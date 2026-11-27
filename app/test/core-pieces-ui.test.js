@@ -915,10 +915,12 @@ test('row 15: the preview\'s ghostInfo says whether the ghost is a jump\'s and c
 // brush; no nearest-equivalent rewrite; the stored winding of existing tracks and the core are untouched.
 const headBank = (shell) => shell.headState().phi * 180 / Math.PI;
 const extendWithBank = (P1, v) => { const b = fieldOf(P1, 'bank °'); b.value = String(v); b.oninput(); P1.frame(); P1.button('Extend').onclick(); P1.frame(); };
-test('D259: a typed 300 stays 300 (one full turn either way is allowed), and a typed 400 becomes 40; the field shows them so', async () => {
+// AMENDED BY NAME (D677; the user, 2026-11-26 23:00, lighthouse exo_memory/briefs/t180_unmakeable_shapes.md:49-50: past a full turn the bank shown resets to 0 while the road carries the extra degrees into the next turn): it was "a typed 300 stays 300 (one full turn either way is allowed), and a typed 400 becomes 40; the field shows them so".
+// The field still SHOWS the bank within one turn (40); the road now rolls on to 400 instead of back to 40. The drag row below is unchanged
+test('D259 (amended D677): a typed 300 stays 300, and a typed 400 rolls on to 400 while the field shows 40', async () => {
   const P1 = await handlePanel(), { shell } = P1, bank = fieldOf(P1, 'bank °'); assert.ok(Math.abs(headBank(shell)) < 1e-6, 'control: the track starts upright');
   extendWithBank(P1, 300); assert.ok(Math.abs(headBank(shell) - 300) < 1e-6, `300 rolls 300: ${headBank(shell)}`); assert.equal(bank.value, '300');
-  extendWithBank(P1, 400); assert.ok(Math.abs(headBank(shell) - 40) < 1e-6, `400 becomes 40: ${headBank(shell)}`); assert.equal(bank.value, '40');
+  extendWithBank(P1, 400); assert.ok(Math.abs(headBank(shell) - 400) < 1e-6, `400 rolls on to 400: ${headBank(shell)}`); assert.equal(bank.value, '40', 'the field shows it within one turn');
 });
 test('D259: dragging the bank handle from 350 by about +20 gives about 10 (not 370), and from -350 by about -20 gives about -10; Extend applies what the field shows', async () => {
   for (const [from, dir] of [[350, 1], [-350, -1]]) {
@@ -928,6 +930,23 @@ test('D259: dragging the bank handle from 350 by about +20 gives about 10 (not 3
     const shown = Number(bank.value); assert.ok(Math.sign(shown) === dir && Math.abs(shown) < 30, `from ${from} the drag wrapped back from 0, its sign kept: ${bank.value} after ${steps} drags`);
     P1.button('Extend').onclick(); P1.frame(); assert.ok(Math.abs(headBank(shell) - shown) < 0.11, `applied as shown: ${headBank(shell)} for ${shown}`);
   }
+});
+
+// D677 (2) (E's read of 2067c88, his E1): the ghost's bank handle writes the field within one turn (panel.js, the handles host's apply: show(HD.wrapTurn(value))),
+// and since 2067c88 the field is laid in the head's own turn (inHeadTurn), so from a head past a turn the handle's drag rolls on. Through the handle's own path
+// (a pointer drag on the fake stage). Red on f3cd425 (the road unwinds to the field's value), green since 2067c88; the head is laid by the core so both can run it
+test('D677 (ghost handle): from a head past one turn (−392, shown −32), a drag on the ghost\'s bank handle writes the field within one turn and Extend lays the road in the head\'s turn, one way, never back round', async () => {
+  const P1 = await handlePanel(), { shell } = P1, bank = fieldOf(P1, 'bank °');
+  shell.commitDoc(extend(shell.getState().history.present, { length: 400, targets: { phi: -392 * Math.PI / 180 } })); P1.frame(); P1.frame();
+  assert.ok(Math.abs(headBank(shell) + 392) < 1e-6, `control: the head at −392 (${headBank(shell)})`);
+  bank.value = '-32'; bank.oninput(); P1.frame();   // the field as it shows that head
+  dragBy(P1, 'bank:1', -10); P1.frame();
+  const v = Number(bank.value); assert.ok(v < -32 && v > -360, `the drag wrote the field within one turn, past −32: ${bank.value}`);
+  const n = shell.getState().history.present.pieces.length; P1.button('Extend').onclick(); P1.frame();
+  assert.equal(shell.getState().history.present.pieces.length, n + 1, `laid: ${shell.getState().message}`);
+  assert.ok(Math.abs(headBank(shell) - (v - 360)) < 0.11, `laid in the head's turn: the head is ${headBank(shell)} for the field's ${v}`);
+  const d = shell.getState().history.present, P = d.pieces[d.pieces.length - 1]; let prev = Infinity;
+  for (let s = 0; s <= P.length; s += 1) { const b = D.channelAt(P, 'phi', Math.min(s, P.length)).v * 180 / Math.PI; assert.ok(b <= prev + 1e-9, `one way, never back round: ${b} after ${prev} at ${s} m`); prev = b; }
 });
 
 // 2026-10-14 (stretching a long piece lagged): a piece is cut into equal chords of about 2 m, so a length that is not a whole 2 m changes every chord on every move and
@@ -1076,6 +1095,22 @@ test('row 16b (D335): a slow bank drag on a sculpt mark is 0.01 degree a pixel w
   const P1 = await sculptPanel(), phi0 = P1.shell.sculptInfo().values.phi, v = followMark(P1, 'bank:1', 100, 1, 20);   // 100 px, one pixel every 20 ms: 0.05 px a ms
   assert.ok(Math.abs(v[v.length - 1] - phi0 - 1) < 0.02, `100 px slow is 1.00 degree (the piece rose ${v[v.length - 1] - phi0})`);
   assert.ok(v.every((x, i) => i === 0 || x >= v[i - 1] - 1e-12), 'and it never goes back');
+  P1.panel.unmount();
+});
+
+// D677 (2) (his answer 6 of 2026-11-27 01:11, lighthouse exo_memory/briefs/t180_unmakeable_shapes.md:68): the Sculpt mark's drag through the panel's own handle host
+// (panel.js: delta = value - the unwrapped middle, then sculptTo), on a piece the core wound past a turn. Before D677 (2) the drag's first step from 366 came out
+// near 6 (the shell sent on the delta landing within one turn); app/test/core-bank-carry.test.js S1 to S3 hold the same rule through the shell's API
+test('D677 (2): a steady bank drag on the Sculpt mark of a piece wound past a turn (340 → 392, its middle at 366) rises from 366 and never goes back round a turn', async () => {
+  const P1 = await handlePanel(), { shell } = P1, R = Math.PI / 180;
+  let w = extend(shell.getState().history.present, { length: 600, targets: { phi: 340 * R } }); w = extend(w, { length: 150, targets: { phi: 392 * R } }); shell.commitDoc(w);
+  const last = w.pieces.length - 1, at = require('../../src/core/sculpt.js').pieceOffsets(w)[last] + w.pieces[last].length / 2;
+  shell.setSculpt(true); P1.frame(); P1.click(at); P1.frame(); P1.frame();
+  const si = shell.sculptInfo(); assert.ok(si && si.index === last && Math.abs(si.values.phi - 366) < 1e-6, `control: the wound piece is selected, its middle at 366 (${si && si.index}, ${si && si.values.phi})`);
+  const h = handleOf(P1, 'bank:1'); assert.ok(h && h.screen, 'control: its bank mark is on the stage');
+  const v = followMark(P1, 'bank:1', 30, 1, 1);   // 30 px at 1 px a millisecond
+  assert.ok(v[0] > 366 && v[v.length - 1] > v[0], `it rises from 366: first ${v[0]}, last ${v[v.length - 1]}`);
+  assert.ok(v.every((x, i) => i === 0 || x >= v[i - 1] - 1e-9), `and never goes back: ${v.map((x) => x.toFixed(2)).join(' ')}`);
   P1.panel.unmount();
 });
 
