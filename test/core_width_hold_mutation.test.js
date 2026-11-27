@@ -1,5 +1,5 @@
 // core_width_hold_mutation.test.js: node --test test/core_width_hold_mutation.test.js   (under the heavy-run lock, --max-old-space-size=4096)
-// L264, THE WIDTH HOLDS AFTER A BRUSH: each mutant changes src/core/extend.js's new lines in ONE way (one exact string replacement, in a temporary copy of src/, tools/ and
+// L264, THE WIDTH HOLDS AFTER A BRUSH, and L268, THE HOLD LAID AS A SHORT RAMP (rampControl), not fitted: each mutant changes src/core/extend.js's hold lines in ONE way (one exact string replacement, in a temporary copy of src/, tools/ and
 // app/ without its tests), and the hold's rows (app/test/core-width-hold.test.js) run against the copy, whole. "Applied" means the replaced string occurs EXACTLY once;
 // "caught" means at least one row FAILED on the mutant. The CONTROL runs the file on an unmutated copy, so a copy that is missing a file cannot make every mutant look
 // caught. Built as core_right_width_mutation.test.js is (D194b, D352).
@@ -13,15 +13,23 @@ const ROOT = path.join(__dirname, '..');
 const EX = 'src/core/extend.js';
 
 const MUTANTS = [
-  { id: 'H1 the width is never held: it goes on at the brush\'s slope, as before L264', edits: [[EX, 'const holdW = held && !given(targets.w) && from.w.m !== 0 ? from.w.v : undefined;', 'const holdW = undefined;']] },
-  { id: 'H2 the hold is spread over the whole piece, not the first knot span', edits: [[EX, "channelFn(from.w, holdW, startRampM(length, knotM), 'w')", "channelFn(from.w, holdW, Lof('w'), 'w')"]] },
-  { id: 'H3 a held width\'s end is not pinned level', edits: [[EX, 'if (holdW !== undefined) { const w = laid.channels.w', 'if (false) { const w = laid.channels.w']] },
-  { id: 'H4 the hold\'s blend starts level, not at the head\'s slope', edits: [[EX, 'channelFn(from.w, holdW,', 'channelFn({ v: from.w.v, m: 0 }, holdW,']] },
+  { id: 'H1 the width is never held: it goes on at the brush\'s slope, as before L264', edits: [[EX, 'const holdW = held && !given(targets.w) && from.w.m !== 0 ? from.w.v : undefined, holdR', 'const holdW = undefined, holdR']] },
   { id: 'H5 a typed width is held at the head\'s width instead', edits: [[EX, 'held && !given(targets.w) && from.w.m', 'held && from.w.m']] },
-  { id: 'H6 the joint kinks: the second control point is put at the head\'s width', edits: [[EX, 'z[n - 1] = holdW; z[n - 2] = holdW; laid', 'z[n - 1] = holdW; z[n - 2] = holdW; z[1] = holdW; laid']] },
-  // LEFT OUT (L264, pane B): 'a level head is held too' (`&& from.w.m !== 0` taken out) is EQUIVALENT: at a head whose width is level, the hold's target is the
-  // head's own width, so the blend is that width all along, and the fitted, quantised piece is every control point at it, which is what going on at a slope of 0
-  // lays (pane B's scratch h6check.js: 5 of 5 rows pass on it). The condition is kept so that a level head is not touched by construction, not by rounding
+  // L268: the hold LAID as a short ramp (rampControl), not fitted
+  { id: 'N1 the hold is fitted again (rampControl not run on it), on the new knots', edits: [[EX, 'if (holdR !== undefined) rampControl(piece, ', 'if (false) rampControl(piece, ']] },
+  { id: 'N2 the hold\'s ramp gets no knots of its own (laid on the piece\'s even knots)', edits: [[EX, 'const knots = holdR === undefined ? knots0 :', 'const knots = true ? knots0 :']] },
+  { id: 'N3 a held bank piece loses its quarter knots (extend passes no base)', edits: [[EX, ', shortRamps.length ? undefined : knots0);', ');']] },
+  { id: 'N4 the joint is not held: rampControl overwrites the head\'s value and slope too', edits: [[EX, "rampControl(piece, 'w', from.w, holdW, holdR, held, sub)", "rampControl(piece, 'w', from.w, holdW, holdR, false, sub)"]] },
+  { id: 'N5 the hold\'s ramp is the whole piece, not the first knot span', edits: [[EX, 'holdR = holdW === undefined ? undefined : startRampM(length, knotM)', 'holdR = holdW === undefined ? undefined : length']] },
+  { id: 'N6 a held bank piece loses its quarter knots (rampKnots ignores base)', edits: [[EX, '(base || D.evenKnots(length, knotM))', 'D.evenKnots(length, knotM)']] },
+  // LEFT OUT (L264, pane B): 'a level head is held too' (`&& from.w.m !== 0` taken out) is EQUIVALENT: at a level head the hold's target is the head's own width
+  // and its slope is 0, so every control point is that width, which is what going on at a slope of 0 lays (pane B's scratch h6check.js: every row passes on it,
+  // at L264 and again at L268). The condition is kept so that a level head is not touched by construction, not by rounding.
+  // LEFT OUT (L268, pane B): L264's H2 (the hold's blend spread over the whole piece) and H4 (the blend starting level) are EQUIVALENT now: they change only the
+  // width function roadPiece fits, and rampControl then overwrites every free control point (the first two carry the head's value and slope from `from`, not
+  // from that function), so the piece is the same (precheck268.txt: 8 of 8 rows pass on each). L264's H3 and H6 mutated the end pin, which L268 removed
+  // (rampControl ends the hold at the head's width itself: pincheck.txt: with the pin out, the last two control points exact on all 8 paths tried: plain, two shaped banks,
+  // a flowing bank, a second bank, changes on the bank and cup, a cup on 30 m, an edge at start).
 ];
 const FILES = [['app/test', 'core-width-hold.test.js']];
 function tree() {

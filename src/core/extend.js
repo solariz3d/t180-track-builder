@@ -141,9 +141,9 @@ const RAMP_KNOTS = 4;
 /** A C2 channel's short ramp is read at twice the subdivisions. With 4, the compressed quintic read at the Greville abscissae (ξ₃ at the ramp's end) and the zero-curvature
  *  start (P₂ = P₀) left the whole change to one span: a 54° roll over 100 m read 1.62 °/m against 0.80 before; with 8 it reads the quintic's shape to a few tenths. */
 const RAMP_KNOTS_C2 = 8;
-function rampKnots(length, ramps, knotM, sub = RAMP_KNOTS) {
+function rampKnots(length, ramps, knotM, sub = RAMP_KNOTS, base) {   // base (L268): the knots kept beside the ramps' when they are not the even ones
   const extra = []; for (const R of new Set(ramps)) for (let j = 1; j <= sub; j++) extra.push((R * j) / sub);
-  const gap = Math.min(...ramps) / (2 * sub), keep = D.evenKnots(length, knotM).filter((k) => extra.every((e) => Math.abs(e - k) > gap));
+  const gap = Math.min(...ramps) / (2 * sub), keep = (base || D.evenKnots(length, knotM)).filter((k) => extra.every((e) => Math.abs(e - k) > gap));
   const all = [...extra, ...keep].filter((k) => k > 0.5 && k < length - 0.5).map((k) => +k.toFixed(4)).sort((a, b) => a - b);
   return all.filter((k, i) => i === 0 || k - all[i - 1] > 1e-6);
 }
@@ -1020,18 +1020,27 @@ function extend(doc, opts = {}) {
   if (from.tNext) from = { ...from, t: from.tNext };   // the tube this piece may start continues from tNext (endState reports t only at a tube head)
   // L264, THE WIDTH HOLDS (his choice, 2026-11-27: after Sculpt's width brush, Extend with the width left as shown holds the width, as the width field says): a
   // width with no target, at a head where the width is still changing (a brush ends the open end on its falloff; a piece Extend lays ends level), is brought to
-  // rest at the head's own width by the blend a typed width takes (bloss: the head's value and slope at the joint, so it is C1; level at its end), and the pieces
+  // rest at the head's own width (laid as a typed width's short ramp is, since L268, below: the head's value and slope at the joint, so it is C1; level at its end), and the pieces
   // after it keep it. The width only: the turn and climb keep going as they go (ref 09 §2), and the bank, cup, edges and right width are as before (L264 measured
   // them, and changed none). A level head is not touched, so every Extend from one lays as before, to the byte.
-  const holdW = held && !given(targets.w) && from.w.m !== 0 ? from.w.v : undefined;
-  const channels = Object.fromEntries(D.CHANNELS.map((ch) => [ch, ch === 'w' && holdW !== undefined ? channelFn(from.w, holdW, startRampM(length, knotM), 'w') : channelFn(from[ch], targets[ch], Lof(ch), ch, shapeOf(ch))]));
+  // L268 (E's read of L264, §2): FITTED by least squares the hold rang, as rampControl's comment says a short ramp does: the width swung about 3.7 × the head's
+  // slope past the head's and stayed over 1 mm off until 88 to 96 m of a 100 m piece after a steep head. So the hold is LAID as a typed width's short ramp is: by
+  // rampControl on RAMP_KNOTS extra knots in its ramp (holdR, the first knot span), at rest at the head's width by the ramp's end and exactly there after it. Its
+  // first two control points are the head's value and slope (rampControl leaves them), so the joint stays C1 and the width still goes past the head's before it
+  // comes back (the overshoot a smooth joint from a head still changing needs), at most the second control point's way. The extra knots are the piece's: a held
+  // piece's other channels are fitted on them too (L268 measured what that moves). A level head adds none.
+  const holdW = held && !given(targets.w) && from.w.m !== 0 ? from.w.v : undefined, holdR = holdW === undefined ? undefined : startRampM(length, knotM);
+  const channels = Object.fromEntries(D.CHANNELS.map((ch) => [ch, ch === 'w' && holdW !== undefined ? channelFn(from.w, holdW, holdR, 'w') : channelFn(from[ch], targets[ch], Lof(ch), ch, shapeOf(ch))]));
   const c2Targets = [...C2_CHANNELS].filter((ch) => given(targets[ch]));
   // a shaped width at start is laid as the cross-section's are, in three quarters of its ramp (8 subdivisions), so F's 20 m rise is 20 m as laid
   const sub = shortRamps.some((ch) => C2_CHANNELS.has(ch) || ((ch === 'w' || ch === 'wd') && shapeOf(ch))) ? RAMP_KNOTS_C2 : RAMP_KNOTS;   // the short-ramp subdivisions, 8 when a cross-section channel ramps short
   // extra knots only where a ramp is short; a piece with a bank, cup or edge target has at least three interior knots, so c2Ends has a free point at each end and one is left for the shape
-  const knots = shortRamps.length ? rampKnots(length, shortRamps.map((ch) => ramp[ch]), knotM, sub) : c2Targets.length && D.evenKnots(length, knotM === undefined ? D.KNOT_M : knotM).length < 3 ? D.evenKnots(length, length / 4) : undefined;
+  const knots0 = shortRamps.length ? rampKnots(length, shortRamps.map((ch) => ramp[ch]), knotM, sub) : c2Targets.length && D.evenKnots(length, knotM === undefined ? D.KNOT_M : knotM).length < 3 ? D.evenKnots(length, length / 4) : undefined;
+  // L268: a held width's ramp gets its subdivisions as a short ramp's do, kept beside the knots the piece would have had (the even ones, or a bank piece's quarters)
+  const knots = holdR === undefined ? knots0 : rampKnots(length, [...shortRamps.map((ch) => ramp[ch]), holdR], knotM, sub, shortRamps.length ? undefined : knots0);
   const piece = D.roadPiece({ length, family: fam, from: held ? from : null, channels, knotM, knots, cup, edge, tube, split, grip: grip === undefined ? D.gripOf(last) : grip });
   for (const ch of shortRamps) rampControl(piece, ch, from[ch], targets[ch], ramp[ch], held, sub, shapeOf(ch));   // not fitted: see rampControl
+  if (holdR !== undefined) rampControl(piece, 'w', from.w, holdW, holdR, held, sub);   // L268: the held width is laid, not fitted
   for (const ch of c2Targets) if (!shortRamps.includes(ch)) fitWithHold(piece, ch, channels[ch], Lof(ch), targets[ch]);   // the fitted quintic, its hold and end pinned (fitWithHold)
   // the clamps below may move a channel's last two points ("an edge that ends at 0 ends flat"), so the ends are pinned to zero curvature AFTER them (c2Ends moves
   // only P[2] and P[n − 3]) and the clamps run once more on what it moved: a point pushed past a cap or the floor is held there, and that one end stays C1 (a ramp from
@@ -1143,9 +1152,8 @@ function extend(doc, opts = {}) {
     const li = lists.wd, endAsked = li && li.items.length ? li.items[li.items.length - 1].target : targets.wd, wd = laid.channels.wd, n = wd.length;
     if (endAsked === 0 && (wd[n - 1] !== 0 || wd[n - 2] !== 0)) { const z = wd.slice(); z[n - 1] = 0; z[n - 2] = 0; laid = { ...laid, channels: { ...laid.channels, wd: z } }; }
   }
-  // L264: a held width ENDS at the head's width, level (its last two control points), as a right width brought back to the width does: on a piece with no inner knot
-  // the fit cannot end level by itself (+0.00093 /m measured on 10 m), and a slope left at the end would carry on into the next piece
-  if (holdW !== undefined) { const w = laid.channels.w, n = w.length; if (w[n - 1] !== holdW || w[n - 2] !== holdW) { const z = w.slice(); z[n - 1] = holdW; z[n - 2] = holdW; laid = { ...laid, channels: { ...laid.channels, w: z } }; } }
+  // (L264 pinned a held width's last two control points here: the FITTED hold could not end level on a piece with no inner knot. Laid by rampControl since L268,
+  // every control point from half its ramp on is the head's width, the last two included, and they stay so through every later step: the pin is gone.)
   if (opts.bankCheck !== false) bankAsBuilt(doc, laid, deferred);   // a caller that reshapes the piece after (turnby.js) checks the piece it returns instead
   return D.appendPiece(doc, laid);
 }

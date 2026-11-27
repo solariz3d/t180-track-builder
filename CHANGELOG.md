@@ -41,12 +41,18 @@ All notable changes to this project are recorded here. The format follows
   width still changing there, and Extend carried that on: after a +1.37 m brush the road narrowed about 10 cm every 100 m, although the width field
   says that left as shown it keeps the width. (So could a width ramp given to the core as one number transition for every channel, which the fit can
   end off level: 25 typed over 30 m of a 75 m piece ended widening 8.4 cm per metre, and three corners laid after it ran the road out to 59 to 210 m
-  wide. The panel's own width ramps end level.) Now a width with no target, at a head where it is still changing, is brought to rest at the head's own
-  width within the new piece's first knot span (at most 20 m), by the blend a typed width takes, and the piece ends there, level. The joint stays
-  smooth (value and slope continuous), and the width moves a few millimetres inside that span (3.7 mm after that brush) before it holds. A level head
-  lays exactly as before, and a typed width still goes where it is typed. Only the width: the turn and climb keep going as they go, as their fields
-  say, and the bank, cup, edges and right width still carry a brush's slope on as before (measured after the same kind of brush: 0.42° of bank,
-  0.73° of cup or edge and 7.35 cm of right width every 100 m).
+  wide. The panel's own width ramps end level.) Now a width with no target, at a head where it is still changing, is laid as a typed width's short ramp
+  at the start is: it leaves the head with the head's own width and slope, so the joint stays smooth, goes on past the head's width the way it was
+  heading, and comes back to it within the new piece's first knot span (at most 20 m; the whole piece when it is 20 m or shorter). How far
+  it goes past is about 1.5 times the head's change per metre, in metres, at about 3.6 m into the piece (on a 10 m piece about 0.75 times, at 1.8 m):
+  1.6 mm after a +1.37 m brush centred 5 m before the end, and up to 30 cm after the steepest heads measured (Sculpt's grab of +2 m centred 10 m before
+  the end, 0.19 m per m). The width is within 1 mm of the head's by 7 to 14 m into a 100 m piece, and on it from three quarters of that span on (15 m),
+  with nothing past it after. The price is a sharper bend in the edge over those metres: after that grab the width's second derivative reaches 0.076 per
+  metre, and after a wide brush (+5 m centred 30 m before the end, radius 40) the edge bends there about five times as hard as the brush itself bent it.
+  A level head lays exactly as before, and a typed width still goes where it is typed.
+  Only the width: the turn and climb keep going as they go, as their fields say, and the bank, cup and edges still carry a brush's slope on as before
+  (measured after the same kind of brush: 0.42° of bank and 0.73° of cup or edge every 100 m). The app has no right-width brush (Sculpt's brushes refuse
+  the right width), so nothing there is left changing by a brush.
 - **A typed bank past a full turn rolls on into the next turn instead of unwinding.** He asked for it on 2026-11-26: past a full turn the bank
   shown resets to 0, and the road carries the extra degrees into the next turn. The bank field still shows the bank within one turn, its sign kept, but a
   typed bank (the field, an extra bank row, a flowing bank's mark) is now laid as typed, in the head's own turn. From a head at −340, a typed −392 rolls
