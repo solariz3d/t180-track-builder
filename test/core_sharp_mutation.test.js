@@ -28,9 +28,12 @@ const MUTANTS = [
   { id: "S10 the probe is not banked as the head is", pattern: 'D677 row', edits: [[S, 'phi: from.phi.v, w: from.w.v,', 'phi: 0, w: from.w.v,']] },
   { id: 'S11 the probe is judged at design speed, not full speed', pattern: 'D677 row|the minimum radius', edits: [[S, '{ csp: true, fullSpeed: true });\n  const on', '{ csp: true });\n  const on']] },
   // the corner: exact angle, the refusals by name
-  // LEFT OUT, found in the first run (2026-11-26) and named in pane B's D677 hand-back. EQUIVALENT: S15 'a closed loop is not refused' (doc.closed -> false) and
-  // S16 'a radius of 0 is accepted' (R > 0 dropped): the layer below refuses the same names (document.js CLOSED; extend.js BAD_TARGET for the rate 1/0), so
-  // core_sharp.test.js's by-name rows hold. NOT CAUGHT, and NOT shown equivalent (untested here, outside D677's change, left for a row that measures them):
+  // S15 and S16 were left out as EQUIVALENT in the first build; pane A's read of d80c96a (F2) showed neither is: a negative radius LAYS a corner turned the
+  // other way, and a closed track at a radius too tight is refused SHARP_TOO_TIGHT, not CLOSED. Each now has its own row, seen red against it first
+  { id: 'S15 a closed loop is not refused by Sharp (the fold is named first)', pattern: 'closed track is refused CLOSED', edits: [[S, "if (doc.closed) throw new D.CoreError('CLOSED',", "if (false) throw new D.CoreError('CLOSED',"]] },
+  { id: 'S16 a radius at or under 0 is not refused by Sharp (a negative one lays)', pattern: 'negative radius', edits: [[S, 'if (!(Number.isFinite(R) && R > 0))', 'if (!(Number.isFinite(R)))']] },
+  // LEFT OUT, found in the first run (2026-11-26) and named in pane B's D677 hand-back. NOT CAUGHT, and NOT shown equivalent (untested here, outside D677's
+  // change, left for a row that measures them):
   // S12 the exit's last rate and slope not set to 0 (build), S13 the least-norm correction of the hold skipped (its comment measures 0.02° short at R 12,
   // width 24; the rows turn at R 22 and up, where the bisection alone is within TURN_TOL), S17 the knots 4 m apart on a 4 m ramp, not 2
   { id: 'S14 a corner smaller than its ramps is not refused by name', pattern: 'smaller than its own ramps', edits: [[S, 'if (f(lo) > want + TURN_TOL) {', 'if (false) {']] },

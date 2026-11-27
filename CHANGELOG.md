@@ -32,8 +32,10 @@ All notable changes to this project are recorded here. The format follows
 - **Sharp refuses only on a red now; an amber no longer stops the corner (D677).** Sharp judged its corner at the checker's full speed (970 km/h, never
   braking) and refused it for any amber, most often a load past the proven 90 g on a banked corner. That speed is an upper bound, and the checker shows such a
   load rather than forbidding it, so Sharp refused corners that a reference lap drives clean and that Extend lays. Now the corner is laid and the checker
-  shows its amber, as it does for Extend. A red (a fold at the inner edge, road running into itself, the car leaving the surface) still refuses by name, and
-  "tightest at this width" now names the tightest radius with no red. The checker's 970 km/h display is unchanged. To go back, restore the amber test in
+  shows its amber, as it does for Extend. A red ON THE CORNER itself (a fold at its inner edge, the corner's road running into itself, the car leaving the
+  surface there) still refuses by name, and "tightest at this width" now names the tightest radius with no red on the corner. Sharp judges the corner only:
+  what the corner does to the rest of the track (road it reaches elsewhere, a crossing off the corner) is the checker's to show, as before. The checker's
+  970 km/h display is unchanged. To go back, restore the amber test in
   `src/core/sharp.js` (`extendSharp` and `clear`).
 - The left column is docked at the window's left edge, as he asked. It used to float 12 px in from the edge, the top and the bottom; it now runs
   from the bar to the bottom of the window, square, with one line on the side that faces the preview. It keeps its 248 px width. The view's label moved 12 px

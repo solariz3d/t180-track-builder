@@ -140,9 +140,10 @@ test('D677 row 3: where only ambers fired, tightestSharp names a radius no large
 });
 
 // D677 row 4: what the red is judged on. An OFF-CAMBER corner (turning right on road whose right side is up) at full speed pulls the car off the surface, a red
-// that comes from the head's bank and the probe's speed: one of the 36 made synthetic the same way (R 48 m, -36°, width 29, bank -18°, edges 13° and 7.5°). It
-// refused before D677 and still does, by name. Before D677 no radius up to R_HI was green, for its bank-cup-edge AMBER, which no radius clears; now the tightest
-// named is where the red ends (308.5 m on this build, measured, not pinned), it lays, and 0.2 m under it the red is back
+// that comes from the head's bank and the probe's speed: one of the 36 made synthetic the same way (R 48 m, -36°, width 29, bank -18°, edges 13° and 7.5°). A GUARD,
+// green before D677 too: on ceb21f5 the same corner refused for leaves-surface alone (no amber) and named the same tightest (pane A's read of d80c96a, F1). It holds
+// the red half of the rule, and it is the row that catches a probe not banked as the head is, or judged at design speed (S10, S11). The tightest named is where
+// the red ends (308.5 m on this build, measured, not pinned), it lays, and 0.2 m under it the red is back
 test('D677 row 4: an off-camber corner that leaves the surface at full speed (a red from the bank) still refuses, by name, and names the radius where the red ends', () => {
   const b = extend(D.createDoc('sharp'), extendOptions({ length: 200, turn: 0, width: 29, bank: -18, edge: 13, edgeR: 7.5, empty: true }));
   const e = refusal(() => SH.extendSharp(b, {}, { angle: -36 * DEG, R: 48 }));
@@ -154,4 +155,16 @@ test('D677 row 4: an off-camber corner that leaves the surface at full speed (a 
   assert.equal(refusal(() => SH.extendSharp(b, {}, { angle: -36 * DEG, R: e.needR })), null, 'the tightest named lays');
   const u = refusal(() => SH.extendSharp(b, {}, { angle: -36 * DEG, R: +(e.needR - 0.2).toFixed(1) }));
   assert.ok(u && u.faults.red.includes('leaves-surface'), `0.2 m under it the red is back: ${u && u.message}`);
+});
+
+// D677 repair, pane A's read of d80c96a (F2): two inputs the layer below does NOT refuse by the same name, so Sharp's own checks are what refuse them
+test('a negative radius is refused by name (BAD_TARGET), and nothing changes', () => {
+  const b = base(24), e = refusal(() => SH.extendSharp(b, {}, { angle: 90 * DEG, R: -22 }));
+  assert.equal(e && e.code, 'BAD_TARGET', `refused: ${e && (e.code + ' ' + e.message)}`);
+  assert.equal(b.pieces.length, 1, 'the document is untouched');
+});
+test('a closed track is refused CLOSED even at a radius too tight for it (the closed loop is named before any fold)', () => {
+  const b = { ...base(24), closed: true }, e = refusal(() => SH.extendSharp(b, {}, { angle: 90 * DEG, R: 5 }));
+  assert.equal(e && e.code, 'CLOSED', `refused: ${e && (e.code + ' ' + e.message)}`);
+  assert.equal(b.pieces.length, 1, 'the document is untouched');
 });
