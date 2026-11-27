@@ -224,7 +224,12 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, wid
   // wd, its difference from the width (src/core/document.js), so blank follows the width and the width typed alone moves both sides. The width it is measured from is
   // the typed one, else the head's: an empty track's head is its start (the shell's headState)
   const wR = num(widthR);
-  if (wR !== null) { const ref = w !== null ? w : head && Number.isFinite(head.w) ? head.w : null; if (ref === null) throw new Error('BAD_RIGHT_WIDTH: the right width is measured from the width: type the width too, or give the head'); targets.wd = wR - ref; }
+  // L258 F2 (pane O's delta read): the fields SHOW a width to two decimals (show, near2), while the head's width may carry more (typed so, or left by the width brush).
+  // With the width left as shown (no width target), a right width typed AS THE WIDTH IS SHOWN means back to the width: wd 0, which Extend ends at exactly 0
+  // (src/core/extend.js endAsked), so SPLIT_HEAD's advice and the CHANGELOG's way back hold. Any other number is measured as before, from the width in force to the
+  // millimetre (19.133 beside a width shown 19.13 that is 19.1346 is wd -0.0016); with the width typed too, wd is the difference of the two typed numbers
+  const backToWidth = (typed, ref) => targets.w === undefined && typed === near2(ref);
+  if (wR !== null) { const ref = w !== null ? w : head && Number.isFinite(head.w) ? head.w : null; if (ref === null) throw new Error('BAD_RIGHT_WIDTH: the right width is measured from the width: type the width too, or give the head'); targets.wd = wR - ref; if (backToWidth(wR, ref)) targets.wd = 0; }
   // the CUP: the channel c holds DEGREES, so the typed value goes in as it is. It is NOT clamped here: the core's guard
   // binds the DOCUMENT to [0, 150] and refuses by name, and a clamp here would hide that guard
   if (k !== null) targets.c = k;
@@ -274,7 +279,8 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, wid
     const ch = FIELD_CHANNEL[f]; if (targets[ch] === undefined || (flow && ch === 'phi')) continue;
     // the right width's changes are typed as the right side's width: each is sent as its difference from the width in force at its mark (the width's own list, laid above, else its target or the head's)
     const wAt = (s) => { const L = (later.w || []).filter((x) => x.from <= s); return L.length ? L[L.length - 1].target : targets.w !== undefined ? targets.w : head && Number.isFinite(head.w) ? head.w : 0; };
-    const per = f === 'turn' || f === 'climb' ? DEG / 100 : f === 'bank' ? DEG : 1, list = items.map((x) => ({ from: x.from, target: f === 'widthR' ? x.then - wAt(x.from === null ? 0 : x.from) : x.then * per }));
+    const wdAt = (then, s) => { const ref = wAt(s); return backToWidth(then, ref) ? 0 : then - ref; };   // L258 F2: a change typed as the width is shown is back to the width there
+    const per = f === 'turn' || f === 'climb' ? DEG / 100 : f === 'bank' ? DEG : 1, list = items.map((x) => ({ from: x.from, target: f === 'widthR' ? wdAt(x.then, x.from === null ? 0 : x.from) : x.then * per }));
     // D642 (pane B's additive model): a first ramp over the whole piece (no early transition) is still moving under the change, so the change's shortest is asked with it
     const base = baseOfRamp(transition[ch], targets[ch], rampStart(empty ? targets : afterFlight ? landingFirst(targets) : null, head, ch), out.length), minM = base && typeof secondMinM === 'function' ? (c, a, b) => secondMinM(c, a, b, base) : secondMinM;
     // Way 1: the extra bank behind the piece's first extra turn (its list was laid above: turn comes before bank in SECOND_FIELDS)
@@ -284,7 +290,7 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, wid
     // below, once the options are whole), the default marks fall back to the comfort length's clamp, which always lays (a straight road's end, as before)
     const floored = ch === 'phi' && Number.isFinite(bankFloorM) && typeof minM === 'function' ? (c, a, b) => Math.min(bankFloorM, minM(c, a, b)) : minM;
     const froms = changeFroms(out.length, list, targets[ch], ch, { lo: transition[ch] || 0, minM: floored, ...lead });
-    later[ch] = list.map((x, k) => ({ from: froms[k], target: f === 'widthR' ? items[k].then - wAt(froms[k]) : x.target }));   // the right width: against the width at the mark as laid
+    later[ch] = list.map((x, k) => ({ from: froms[k], target: f === 'widthR' ? wdAt(items[k].then, froms[k]) : x.target }));   // the right width: against the width at the mark as laid
     if (floored !== minM) bankComfort = () => changeFroms(out.length, list, targets[ch], ch, { lo: transition[ch] || 0, minM, ...lead });
   }
   // THE FLOWING BANK's marks (the contract, plan Part 2): the first target at transition.phi, then each extra bank row as { at, target } in through.phi. A blank at is
