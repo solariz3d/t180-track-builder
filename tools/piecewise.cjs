@@ -162,7 +162,7 @@ function meshCentreline(read, ix, { drivenM = 20 } = {}) {
     if (pending) {   // the landing: the first road station after a jump
       const j = pending; pending = null; let on = null;
       // drivenM (20 m) must stay under the reader's shortest jump: the skill's read_track.cjs looks for landings from 25 m out only (its landing search,
-      // `for (let dist = 25; …`), and a landing is always within its gap of the take-off station, so a radius at or past 25 m would end every jump
+      // `for (let dist = 25; …`), and a landing is always at least its gap from the take-off station, so a radius at or past 25 m would end every jump
       // (pane C's read of dab271b, 2026-11-26, case B1). Raise one only with the other.
       for (const y of out) { const g = len(sub(y.reader, x.c)); if (g < drivenM && (!on || g < on.g)) on = { g, d: y.d }; }
       if (on) { falseLandings.push({ d: j.d, landingD: x.d, onD: on.d, distM: +on.g.toFixed(1) }); break; }
