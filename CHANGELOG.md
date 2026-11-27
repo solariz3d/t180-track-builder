@@ -28,6 +28,14 @@ All notable changes to this project are recorded here. The format follows
 - The File and Edit menus now open rightwards from their titles at every window width, as the leftmost menus of a bar usually do. They opened leftwards above
   1000 px, so a long saved track name in File ▸ Open… (the longest the app takes, 61 characters) pushed File up to 72 px off the window's left edge between
   1000 and 1130 px, its words cut. Every other menu still opens leftwards.
+- **The pit lane's gap from the road can no longer be set below 0.1 m.** A gap of 0 was accepted, and the export then refused the lane on any road: its run
+  lay on the road's own edge, meeting the road and leaving a gap the downforce ray fell through (332 red on a plain flat straight). Measured on synthetic
+  roads, the export refused some gaps of 0.01 m and less (not in order: 0.002 and 0.008 passed where 0.005 and 0.01 failed) and passed every gap
+  measured from 0.012 m; 0.1 m is a margin above that, not the least gap that exports. What is refused, exactly: the shell setting a pit lane whose gap is
+  under 0.1 m AND differs from the stored lane's gap (in the panel, typing such a gap). The panel says why (`PIT_GAP_TOO_SMALL`), the lane stays as it was, and the gap box shows
+  the stored gap again. A saved track whose lane already has a smaller gap opens and exports as before, and every other field of that lane (side,
+  joins, width, peel-off, merge, boxes, spacing) can still be edited; only its gap, when changed, must go to 0.1 m or more. To go back, remove the
+  check in `setPitLane` (`app/core/coreshell.js`).
 - Extend, Straight, Undo, Redo are the panel's first row again, with or without a saved piece's ghost up. Place piece and Cancel piece (and the note about the ghost) now sit directly under that row instead of above it, so a ghost going up or away no longer moves the buttons you press, and all of them stay in view without scrolling at 1400 x 860. With no ghost, their empty row no longer adds a gap at the top of the panel.
 - Renaming a saved piece now keeps its numbers: the recipe is rewritten for the renamed piece text (it is hashed, and the rename changes the name field), and a case-only rename (Run to run, one file on Windows) rewrites it in place instead of saving then deleting it. Found by pane C reading L238.
 

@@ -42,6 +42,7 @@
 'use strict';
 
 const D = require('../../src/core/document.js');
+const PL = require('../../src/doc/pitlane.js');   // D677: the pit lane's smallest gap from the road (PIT_GAP_MIN_M)
 const EXT = require('../../src/core/extend.js'), { extend } = EXT;
 const LV = require('../../src/core/level.js');
 const TB = require('../../src/core/turnby.js');
@@ -1156,6 +1157,11 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     setPitLane(lane) {
       const d = doc();
       if (lane && (!d.pieces[0] || d.pieces[0].type !== 'road')) return set({ message: 'put the first piece down first: the pit lane leaves the road beside it' });
+      // D677: under PIT_GAP_MIN_M the lane's run lies on the road's own edge and the export refuses it; refused here by name, the document unchanged.
+      // Only a gap that CHANGES is judged (pane O's read): the panel sends the whole stored lane on every edit (pitui.js put), so a saved lane under the floor
+      // still takes its width, boxes and joins, and keeps its gap
+      const gapNow = d.pitLane ? d.pitLane.offsetM : undefined;
+      if (lane && typeof lane.offsetM === 'number' && lane.offsetM !== gapNow && lane.offsetM < PL.PIT_GAP_MIN_M) return set({ message: `PIT_GAP_TOO_SMALL: the pit lane's gap from the road must be at least ${PL.PIT_GAP_MIN_M} m; with less, the lane lies on the road's own edge and the export refuses it` });
       let nd; try { nd = D.setPitLane(d, lane); } catch (e) { if (e && e.name === 'CoreError') return set({ message: e.message }); throw e; }
       if (JSON.stringify(nd.pitLane) === JSON.stringify(d.pitLane)) return st;
       return commit('pitLane', () => nd, { lastEdited: null, ...ok(lane ? 'pit lane set' : 'pit lane removed') });

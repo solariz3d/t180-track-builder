@@ -46,7 +46,8 @@ function mount({ shell, el, win }) {
   const doc = () => shell.getState().history.present;
   const segs = () => (shell.getState().resolved || {}).segments || [];
   const cur = () => doc().pitLane;
-  const put = (patch) => { const c = cur(); if (c) shell.setPitLane({ ...c, ...patch }); };
+  // a refused edit leaves the document as it was, so update() would keep the refused value in its box: draw the stored lane again (pane O's read, D677)
+  const put = (patch) => { const c = cur(); if (!c) return; shell.setPitLane({ ...c, ...patch }); if (cur() === c) { shownFor = null; update(shell.getState()); } };
   const val = (inp) => { const v = Number(inp.value); return inp.value === '' || !Number.isFinite(v) ? null : v; };
 
   on.onchange = () => {
