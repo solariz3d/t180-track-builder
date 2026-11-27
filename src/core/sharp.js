@@ -8,11 +8,13 @@
 //                                                  is solved so the two turn EXACTLY `angle` (rad, + = left) on the adapter's path; R is kept as typed.
 //                                                  Both pieces carry knots every knotM = min(2, ramp) m (B §3: a ramp shorter than one knot span is drawn
 //                                                  wrong, and knotM ≤ ramp draws it right). opts are extend's for the other channels (width, climb, bank…).
-//   tightestSharp(doc, opts, { angle, ramp })        the smallest radius (m, to 0.1 m) at which the corner stays GREEN for the head's width and cross-section.
+//   tightestSharp(doc, opts, { angle, ramp })        the smallest radius (m, to 0.1 m) at which the corner has NO RED for the head's width and cross-section.
 //
 // THE MINIMUM RADIUS is the geometry's, not a cap: the validator at full speed reds the fold (1 − κ·o ≤ 0 at the inner edge) and road that runs into
-// itself (the clip test; surfaces merely within 2 m are information), and ambers a normal load past the proven 90 g. Sharp refuses a radius at which any red or amber falls on the corner (SHARP_TOO_TIGHT), naming the
-// tightest that stays green ("tightest at this width: 15.0 m"), and changes nothing. It is judged on a PROBE: a straight with the head's cross-section, the
+// itself (the clip test; surfaces merely within 2 m are information). Sharp refuses a radius at which a RED falls on the corner (SHARP_TOO_TIGHT), naming the
+// tightest with no red ("tightest at this width: 15.0 m"), and changes nothing. An AMBER (a normal load past the proven 90 g, bank-cup-edge, any other) does
+// not refuse: the corner is laid and the checker shows it, as it shows Extend's (D677, from pane B's sharp-vs-rate answer: the 970 km/h full-speed load is an
+// upper bound, "shown, not forbidden"; it refused 36 corners a reference lap drives clean). It is judged on a PROBE: a straight with the head's cross-section, the
 // corner, and a straight after it, so it is a property of the width and cross-section (and cheap on a long track); what the corner does to the REST of the
 // track (running over another part of it) is the validator's to show, as for any piece.
 'use strict';
@@ -107,29 +109,31 @@ function faults(doc, opts, sharp) {
   const on = (xs) => (xs || []).filter((x) => { const a = x.s0 != null ? x.s0 : x.s, b = x.s1 != null ? x.s1 : a; return b >= s0 - NEAR_M && a <= s1 + NEAR_M; }).map((x) => x.reason);
   return { red: [...new Set(on(res.red))], amber: [...new Set(on(res.amber.filter((x) => !ADVISORY.has(x.reason))))] };
 }
-// the two warnings measured on a driven lap are limits known to hold, not geometry: they never set Sharp's minimum radius (the user drove 56-63 g clean)
+// the two warnings measured on a driven lap are limits known to hold, not geometry: they never set Sharp's minimum radius (the user drove 56-63 g clean).
+// Since D677 no amber sets it (clear, below); these two are still left out of the ambers a refusal carries, as before
 const ADVISORY = new Set(['load-on-the-chassis', 'wall-swerve']);
-const green = (doc, opts, sharp) => { const f = faults(doc, opts, sharp); return !f.red.length && !f.amber.length; };
+// D677: only a RED refuses. Ambers are shown on the laid corner by the checker, as Extend's are
+const clear = (doc, opts, sharp) => !faults(doc, opts, sharp).red.length;
 
-/** The smallest radius (rounded UP to 0.1 m) at which this corner stays green from this head, or null when none up to R_HI m does. */
+/** The smallest radius (rounded UP to 0.1 m) at which this corner has no red from this head, or null when none up to R_HI m does. */
 function tightestSharp(doc, opts, { angle, ramp = RAMP_DEFAULT }, fromR = 1) {
   let lo = fromR, hi = Math.max(2 * fromR, 8);
-  const ok = (R) => { try { return green(doc, opts, { angle, R, ramp }); } catch (e) { if (e && e.code === 'SHARP_TOO_SMALL') return false; throw e; } };
+  const ok = (R) => { try { return clear(doc, opts, { angle, R, ramp }); } catch (e) { if (e && e.code === 'SHARP_TOO_SMALL') return false; throw e; } };
   while (!ok(hi)) { lo = hi; hi *= 2; if (hi > R_HI) return null; }
   while (hi - lo > R_RES) { const mid = (lo + hi) / 2; if (ok(mid)) hi = mid; else lo = mid; }
   let r = Math.ceil(hi * 10 - 1e-9) / 10; while (!ok(r) && r <= R_HI) r = +(r + 0.1).toFixed(1);
   return r;
 }
 
-/** Extend with a Sharp corner, or refuse by name: too tight for the width (with the tightest that works), or too small for its ramps. */
+/** Extend with a Sharp corner, or refuse by name: a red on it (with the tightest radius that has none), or too small for its ramps. An amber does not refuse (D677). */
 function extendSharp(doc, opts, sharp) {
   const s = { ramp: RAMP_DEFAULT, ...sharp };
   check(doc, s);
   const f = faults(doc, opts, s);
-  if (f.red.length || f.amber.length) {
+  if (f.red.length) {
     const need = tightestSharp(doc, opts, s, s.R);
-    const why = [...f.red, ...f.amber].join(', ');
-    throw Object.assign(new D.CoreError('SHARP_TOO_TIGHT', need === null ? `R ${s.R} m is too tight here (${why}), and no radius up to ${R_HI} m is green` : `R ${s.R} m is too tight for this width (${why}): tightest at this width: ${need.toFixed(1)} m`), { needR: need, faults: f });
+    const why = f.red.join(', ');
+    throw Object.assign(new D.CoreError('SHARP_TOO_TIGHT', need === null ? `R ${s.R} m is too tight here (${why}), and no radius up to ${R_HI} m is free of reds` : `R ${s.R} m is too tight for this width (${why}): tightest at this width: ${need.toFixed(1)} m`), { needR: need, faults: f });
   }
   return freeze(corner(doc, opts, s));
 }
