@@ -8,18 +8,25 @@
 // three figures: how far the middle moved; that line's load on the track as it stood (the old road with its middle moved by the level, its width as it was);
 // and the old middle's load. Where the line held on the old road too, the red is the level's own (on a cupped road it moves the bottom of the dish onto the
 // line), and the sentence says that instead.
+//
+// AFTER THE RELEASE, OFF THE PAGE (D678 repair, U6: on a 27.6 km closed lap the release's check took 33 s, three whole-track validates). The shell says the
+// first sentence (evenDone) at once and runs evenCheck(request) as a job (app/validate-ui/checkjob.js evenCheck, in a Web Worker): plain data in, { message,
+// leaves } out. The job reads the loads only at the stations inside the level's window (src/validate linesBetween: the same loads there, the speed profile still
+// the whole track's), so its words equal the whole-track check's (evenWords with no window, the on-page check the rows compare against).
 'use strict';
 const AD = require('../../src/core/adapter.js');
 const V = require('../../src/validate/index.js');
+const EV = require('../../src/core/even.js');
 
 const VOPTS = Object.freeze({ csp: true, fullSpeed: true, leanLines: true });
 const km = (s) => `${(s / 1000).toFixed(2)} km`;
 const gWords = (x) => `${x < 0 ? '−' : '+'}${Math.abs(x).toFixed(1)} g`;
 
-/** The centre line's load (g, with the downforce) at each station of the checker's path: Map s -> load. */
-function centreLoads(doc) {
-  const tp = AD.toPath(doc, { step: 2 }), r = V.validate(tp.path, tp.segments, VOPTS), m = new Map();
-  for (const ln of r.lines) if (ln.u === 0) m.set(ln.s, ln.fHold_g !== undefined ? ln.fHold_g : ln.fN_g);
+/** The centre line's load (g, with the downforce) at each station of the checker's path: Map s -> load. With `win` ({ w0, w1 }), the stations inside it only. */
+function centreLoads(doc, win = null) {
+  const tp = AD.toPath(doc, { step: 2 }), m = new Map();
+  const lines = win ? V.linesBetween(tp.path, tp.segments, win.w0, win.w1, VOPTS) : V.validate(tp.path, tp.segments, VOPTS).lines;
+  for (const ln of lines) if (ln.u === 0) m.set(ln.s, ln.fHold_g !== undefined ? ln.fHold_g : ln.fN_g);
   return m;
 }
 
@@ -35,24 +42,42 @@ function middleOnly(before, after) {
 /**
  * The stations in the level's window where the car leaves the road on the new middle and held on the old one; null when there are none.
  * Returns { from, to, at, shift, line, old, own } (lap distance in m; shift in m; loads in g): `at` the worst such station, `line` the new middle's line on the
- * track as it stood, `old` the old middle there, `own` true when that line held on the old road too (the red is the level's own).
+ * track as it stood, `old` the old middle there, `own` true when that line held on the old road too (the red is the level's own). `bounded`: the loads read only
+ * inside the window (the job's), not along the whole track (the same loads there).
  */
-function newLeaves(before, res) {
-  const a = centreLoads(before), b = centreLoads(res.doc), { w0, w1 } = res.window, hit = [];
+function newLeaves(before, res, { bounded = false } = {}) {
+  const win = bounded ? res.window : null;
+  const a = centreLoads(before, win), b = centreLoads(res.doc, win), { w0, w1 } = res.window, hit = [];
   for (const [s, v] of b) if (s >= w0 - 1e-9 && s <= w1 + 1e-9 && v < 0 && a.has(s) && a.get(s) >= 0) hit.push([s, v]);
   if (!hit.length) return null;
   const worst = hit.reduce((m, x) => (x[1] < m[1] ? x : m)), at = worst[0];
-  const line = centreLoads(middleOnly(before, res.doc)).get(at);
+  const line = centreLoads(middleOnly(before, res.doc), win).get(at);
   return { from: hit[0][0], to: hit[hit.length - 1][0], at, shift: Math.abs(res.shiftAt(at)), line, old: a.get(at), own: !(line < 0) };
 }
 
-/** The message after a level: { message, leaves (newLeaves's, or null) }. */
-function evenWords(before, res) {
-  const where = res.hold === 'centre' ? 'the middle stays where it was' : `the ${res.hold} edge stays where it was`;
-  const { lo, hi, w0, w1 } = res.window, a = Math.round(lo - w0), b = Math.round(w1 - hi);
-  const eased = a === b ? `over the ${a} m either side` : !b ? `over the ${a} m before it (it ends at the open end)` : !a ? `over the ${b} m after it (it starts at the track's start)` : `over the ${a} m before it and the ${b} m after`;
-  const done = `Even: ${res.value} m wide from ${km(lo)} to ${km(hi)}, eased back to the road ${eased}; ${where} (Ctrl+Z puts it back).`;
-  const x = newLeaves(before, res);
+/**
+ * The first sentence after a level, said at once: what it did, where, and what became of the edges.
+ * D678 repair (the librarian's 15:4x ruling, item 3): no sentence may say an edge "stays where it is" over code that moves it. The kept edge is laid where Even
+ * READS the road's own edge from the stretch's ends (src/core/even.js evenIn: restOf and the agree rule), which can be metres from where it was; the middle
+ * ('centre') is laid smooth between the stretch's ends. And the stretch: the width is the value over the run and back to the road WITHIN the window's reach
+ * beyond each end (50 m, more before it at the carry side). Not "20 m at the value, then a 30 m ease": where a piece's knots are coarse, a control point whose
+ * support reaches past the window is left as it was, so the width starts to ease inside the margin (measured, the flat turn's exit piece: 13.28 m at the
+ * margin's end, 460, for a value of 16; lighthouse exo_memory/handback/p-d678-even-build-A_2026-11-27.md, section 4.4).
+ */
+function evenDone(res) {
+  const where = res.hold === 'centre' ? 'the middle is laid smooth between the stretch\'s ends, and both edges move' : `the ${res.hold} edge is laid where Even reads the road's own edge from the stretch's ends, so it can move`;
+  const { lo, hi, w0, w1 } = res.window, a = Math.round(lo - w0), b = Math.round(w1 - hi), full = EV.EVEN_MARGIN_M + EV.EVEN_RAMP_M;
+  // a window end cut short by the track's start or its open end
+  const before = a < 1 ? 'from the track\'s start' : a < full ? `eased toward the road over the ${a} m to the track's start` : `back to the road within ${a} m before it`;
+  const after = b < 1 ? 'to the open end' : b < full ? `eased toward the road over the ${b} m to the open end` : `back to the road within ${b} m after it`;
+  const eased = a >= full && b >= full && a === b ? `back to the road within ${a} m either side` : `${before}, and ${after}`;
+  return `Even: ${res.value} m wide from ${km(lo)} to ${km(hi)}, ${eased}; ${where} (Ctrl+Z puts it back).`;
+}
+
+/** The message after a level: { message, leaves (newLeaves's, or null) }. With no options, the whole track's check (the on-page check); `bounded`, the job's. */
+function evenWords(before, res, opts = {}) {
+  const done = evenDone(res);
+  const x = newLeaves(before, res, opts);
   if (!x) return { message: done, leaves: null };
   const span = x.from === x.to ? `at ${km(x.from)}` : `from ${km(x.from)} to ${km(x.to)}`;
   const moved = `The bank rolls there, and the middle has moved ${x.shift.toFixed(1)} m to one side`;
@@ -62,4 +87,15 @@ function evenWords(before, res) {
   return { message: `${done} But ${span} the car now leaves the road on the new middle at the checker's speed. ${said} A longer bank change there, or a run that ends before it, would clear it.`, leaves: x };
 }
 
-module.exports = { evenWords, newLeaves, centreLoads, middleOnly, VOPTS };
+/**
+ * THE JOB (plain data in and out, for a Web Worker): `req` { before, after (documents), window { lo, hi, w0, w1 }, value, hold }, as the shell sends it after a
+ * level. Returns evenWords' { message, leaves }, the loads read inside the window only. Throws on a request that is not one.
+ */
+function evenCheck(req) {
+  const { before, after, window: win, value, hold } = req || {};
+  if (!before || !Array.isArray(before.pieces) || !after || !Array.isArray(after.pieces)) throw new Error('Even\'s check needs the track before and after the level');
+  if (!win || ![win.lo, win.hi, win.w0, win.w1].every(Number.isFinite) || !(win.w0 <= win.w1)) throw new Error('Even\'s check needs the level\'s window');
+  return evenWords(before, { doc: after, window: win, value, hold, shiftAt: EV.shiftOf(before, after) }, { bounded: true });
+}
+
+module.exports = { evenWords, evenDone, evenCheck, newLeaves, centreLoads, middleOnly, VOPTS };

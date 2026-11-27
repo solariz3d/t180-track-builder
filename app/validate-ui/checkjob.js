@@ -24,6 +24,7 @@ const G = require('../../src/geom/index.js');
 const { createTrackModel } = require('../preview/trackmodel.js');
 const { createValidationController } = require('./panel.js');
 const { graphModel } = require('./graph.js');
+const { evenCheck } = require('../core/evenwords.js');   // D678 repair: Even's sentence after a level is checked in this worker too (checkworker.js)
 
 /** A mesh with nothing in it: the track model's path is what the check reads, and meshing 24 km would cost the worker seconds for nothing. */
 const emptyMesh = () => ({ scene: { root: { children: [] }, materials: [] }, cells: [], _state: { pieces: [], seams: [], nseg: 0 } });
@@ -72,4 +73,4 @@ function createCheckJob() {
   };
 }
 
-module.exports = { createCheckJob, PATH_ONLY };
+module.exports = { createCheckJob, evenCheck, PATH_ONLY };

@@ -6,10 +6,19 @@
 // Left out on purpose: the fitted height's own quantising (settle quantises every changed value as it builds the joints, so a mutant there changes no document);
 // and the banked rows from the width brush's starts (app/test/sculpt-even-banked.test.js), which take minutes per start: the core's K2 and K3 rows from the
 // untouched road cover the same lines.
-// Left out after they were run (D678; the numbers are scratch measures beside the hand-back): H6, the height fit not carrying a whole joint from the piece before,
-// changes the height by at most 0.0019 m on the fixtures and a 31 m straight into a banked turn, and K3 by under 0.0004 m (either way), so no row at the 0.01 m
-// bar can see it; H7, the fit freeing a joint the window covers in part, changes nothing on any of them (no window end falls in a joint's last spans); S6, a typed
-// width with no run selected, is refused by the core as well (EVEN_RUN for a run of undefined), so the shell's own check is a second guard, not a behaviour.
+// Left out after they were run (D678; the numbers are scratch measures beside the hand-back, lighthouse exo_memory/handback/p-d678-even-build-A_2026-11-27.md):
+// - H6, NAMED EQUIVALENT BELOW THE BAR (the repair round's item 3, accepted by the librarian): the height fit not carrying a whole joint from the piece before
+//   (fitHeight: "if (before === 'all') {" read as "if (false) {"). Measured: it moves the height by at most 0.0019 m on the fixtures and on a 31 m straight into a
+//   banked turn, and K3 by under 0.0004 m either way, so no row at the 0.01 m bar can see it; a row pinned tighter would test the fit's arithmetic, not a road.
+//   On H7's fixture below with a 3 m dip at 175 m it moves the height by 0.012 m, where the build's own K3 is already 0.039 m, over its bar.
+// - H7, NOT CAUGHT, ITS FIXTURE MADE (the repair round's item 3): the fit freeing a joint the window covers in part ("} else if (before === 'part') { fixed.add(0);
+//   fixed.add(1); }" read as "}"). The fixture: a joint at 155 m, inside the window's first ramp (a lead, a 90 m piece ending at 155, a 45 or 30 m piece to the run
+//   at 200, the run 200-440 of four 30-degree pieces, the window 150-490), flat or banked -20 degrees, with a hill or dip on the height (the core's brush, centred
+//   150-172 m, radius 10-30 m, 1-3 m up or down): 192 variants. H7 changes the height in 96 of them, by up to 0.0277 m; but in all 105 where the build's own K3 is
+//   within its 0.01 m bar, H7 moves K3 by -0.00006 to +0.00025 m and the height by at most 0.00225 m, so no row at the bar can catch it there; where it moves
+//   more, the build's own K3 is already over the bar (the height fit missing its in-plane target near a height feature in the ramps, reported in the hand-back).
+// - S6, a typed width with no run selected, is refused by the core as well (EVEN_RUN for a run of undefined), so the shell's own check is a second guard, not a
+//   behaviour.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -17,8 +26,8 @@ const fs = require('fs'), os = require('os'), path = require('path');
 const IR = require('./inner_run.js');
 const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
-const EV = 'src/core/even.js', CS = 'app/core/coreshell.js';
-const CORE = ['test/core_even.test.js'], SHELL = ['app/test/sculpt-even.test.js'];
+const EV = 'src/core/even.js', CS = 'app/core/coreshell.js', VI = 'src/validate/index.js';
+const CORE = ['test/core_even.test.js'], SHELL = ['app/test/sculpt-even.test.js'], SENT = ['app/test/sculpt-even-sentence.test.js'], LINES = ['test/validate_lines_between.test.js'];
 
 const MUTANTS = [
   // the held rim and the centre
@@ -51,8 +60,14 @@ const MUTANTS = [
   { id: 'S3 the drag drops the run\'s selection (its handles go)', pattern: 'snaps', files: SHELL, edits: [[CS, "(b.sculpt || b.mode === 'follow' || b.mode === 'even') && st.selection", "(b.sculpt || b.mode === 'follow') && st.selection"]] },
   { id: 'S4 a jump within reach opens the drag anyway', pattern: 'refuses by name and changes nothing', files: SHELL, edits: [[CS, "if (T.mode === 'even' && attempt(() => EV.evenWindow(", "if (false && attempt(() => EV.evenWindow("]] },
   { id: 'S5 the drag forgets the rim it holds (both rims move)', pattern: 'snaps', files: SHELL, edits: [[CS, 'value: evenValue(b, delta), hold: b.hold });', "value: evenValue(b, delta), hold: 'centre' });"]] },
+  // the sentence after the release, off the page (D678 repair, item 1)
+  { id: 'E1m the release starts no check (the second sentence is never said)', pattern: 'E1 and E2', files: SENT, edits: [[CS, '...(res ? { evenCheck: beginEvenCheck(b.base, doc(), res) } : {})', '']] },
+  { id: 'E4m the check\'s words are said on a track changed since (an Undo meanwhile)', pattern: 'E4', files: SENT, edits: [[CS, 'if (doc() !== after) return set({ evenCheck: null });   // the track changed', '//']] },
+  { id: 'E2m the job does not read the middle\'s move between the two tracks (it says 0.0 m)', pattern: 'E1 and E2|E5', files: SENT, edits: [['app/core/evenwords.js', 'shiftAt: EV.shiftOf(before, after) }', 'shiftAt: EV.shiftOf(before, before) }']] },
+  { id: 'E3m linesBetween stops a station short of its end', pattern: 'E3', files: LINES, edits: [[VI, 'b < 0 ? S.length : b).lines;', 'b < 0 ? S.length : b - 1).lines;']] },
+  { id: 'E3n linesBetween reads the speed from its own stations, not the lap', pattern: 'E3', files: LINES, edits: [[VI, 'return core(path, segments, { ...opts, lap: false }, a, null, b < 0 ? S.length : b).lines;', 'const sub = { ...path, samples: S.slice(a, b < 0 ? S.length : b) }; return core(sub, segments, { ...opts, lap: false }, 0, null, sub.samples.length).lines;']] },
 ];
-const FILES = [...CORE, ...SHELL];
+const FILES = [...CORE, ...SHELL, ...SENT, ...LINES];
 const HELPERS = ['test/even_fixtures.js', 'test/inner_run.js'];
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-even-mut-'));
@@ -71,7 +86,7 @@ function runTests(dir, pattern, files = FILES) {
   const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, ''), n = (k) => Number((out.match(new RegExp(`ℹ ${k} (\\d+)`)) || [])[1]);
   return { tests: n('tests'), pass: n('pass'), fail: n('fail'), skipped: n('skipped'), out };
 }
-test('CONTROL: core_even.test.js and sculpt-even.test.js pass whole on an unmutated copy', () => {
+test('CONTROL: core_even.test.js, sculpt-even.test.js, sculpt-even-sentence.test.js and validate_lines_between.test.js pass whole on an unmutated copy', () => {   // AMENDED BY NAME (D678 repair): the sentence's two files joined it
   const dir = tree();
   try { const r = runTests(dir); assert.ok(r.tests >= 20 && r.fail === 0, `tests ${r.tests}, fail ${r.fail}\n${r.out.slice(-1500)}`); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

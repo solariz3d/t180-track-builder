@@ -65,7 +65,10 @@ test('the drag snaps to 0.5 m, keeps the run selected through every step, and it
   sh.endSculpt();
   assert.ok(Math.abs(F.at(F.present(sh), 'w', F.RUN.mid) - 16) < 1e-6);
   assert.match(msg(sh), /^Even: 16 m wide from 0\.20 km to 0\.44 km/);
-  assert.match(msg(sh), /the right edge stays where it was/);
+  // AMENDED BY NAME (D678 repair, the librarian's 15:4x ruling item 3): the words are made true to the code. The kept edge is laid where Even reads the road's
+  // own edge from the stretch's ends and can move (B's read, 2.5: 3.96 m on the flat turn after a grab), so "stays where it was" is withdrawn.
+  assert.match(msg(sh), /the right edge is laid where Even reads the road's own edge from the stretch's ends, so it can move/);
+  assert.doesNotMatch(msg(sh), /stays where it/);
   sh.undo(); assert.equal(D.serialize(F.present(sh)), D.serialize(F.fixture('flat')), 'the whole drag is one undo step');
 });
 

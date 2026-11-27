@@ -28,4 +28,36 @@ function createCheckRunner({ WorkerCtor, url = 'validate-ui/checkworker.js', onA
   };
 }
 
-module.exports = { createCheckRunner };
+/**
+ * EVEN'S SENTENCE through the check job, off the page (D678 repair, U6: on a 27.6 km closed lap the release waited 33 s for it). The core shell is given this runner
+ * (app/index.html) and asks it as it asks the overlap runner:
+ *   runner.start(req) -> { promise, cancel() }   req: app/core/evenwords.js evenCheck's request (plain data); the promise resolves with its { message, leaves },
+ *                                                 or rejects (the worker failed or the check threw; { cancelled: true } after cancel)
+ * Each check gets a worker of its own (checkworker.js), made at start and ended when it answers or is cancelled: a level never waits behind the track check's
+ * worker, and no worker is kept holding a long track. THROWS when the page has no Worker; start() throws when one cannot be made (the shell then checks on the page).
+ */
+function createEvenRunner({ WorkerCtor, url = 'validate-ui/checkworker.js' } = {}) {
+  if (typeof WorkerCtor !== 'function') throw new Error('this page has no Web Worker');
+  return {
+    start(req) {
+      const w = new WorkerCtor(url);
+      let settled = false, reject = null;
+      const end = () => { settled = true; w.onmessage = w.onerror = null; try { w.terminate(); } catch (e) { /* gone already */ } };
+      const promise = new Promise((res, rej) => {
+        reject = rej;
+        w.onmessage = (e) => {
+          const m = (e && e.data) || {};
+          if (settled || !m.even && m.ok) return;   // not this check's answer
+          end();
+          if (m.ok) res(m.even); else rej(new Error(m.error || 'Even\'s check failed'));
+        };
+        w.onerror = (e) => { if (settled) return; end(); rej(new Error((e && e.message) || 'Even\'s check worker failed')); };
+      });
+      // outside the promise, so a request the worker cannot take (a DataCloneError) THROWS from start and the shell checks on the page, as the overlap runner does
+      try { w.postMessage({ serial: 1, even: req }); } catch (e) { end(); throw e; }
+      return { promise, cancel() { if (settled) return; end(); reject(Object.assign(new Error('cancelled'), { cancelled: true })); } };
+    },
+  };
+}
+
+module.exports = { createCheckRunner, createEvenRunner };

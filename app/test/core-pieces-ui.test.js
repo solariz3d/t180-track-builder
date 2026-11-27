@@ -1273,7 +1273,9 @@ for (const [id, held] of [['width:1', 'right'], ['width:-1', 'left']]) {
     assert.ok(EVF.spread(EVF.stations(300, 600).map((s) => EVF.at(d1, 'w', s))) <= 1e-4, 'one width from the run\'s first metre to its last');
     const S = EVF.stations(300, 600), moved = Math.max(...S.map((s) => Math.abs(EVF.rimAcross(d1, s, held) - EVF.rimAcross(d0, s, held))));
     assert.ok(moved <= 0.01, `the ${held} edge stays: it moved ${moved} m`);
-    assert.match(shell.getState().message, new RegExp(`^Even: ${w} m wide from 0\\.30 km to 0\\.60 km.*the ${held} edge stays where it was`));
+    // AMENDED BY NAME (D678 repair, the librarian's 15:4x ruling item 3): the done sentence no longer says the kept edge "stays where it was" (it can move: B's
+    // read, 2.5); it says where Even lays it. This road has no grab, so the edge's own measure above (moved <= 0.01) still holds here.
+    assert.match(shell.getState().message, new RegExp(`^Even: ${w} m wide from 0\\.30 km to 0\\.60 km.*the ${held} edge is laid where Even reads the road's own edge from the stretch's ends, so it can move`));
     assert.deepEqual([shell.selectionInfo().from, shell.selectionInfo().to], [1, 2], 'the run stays selected');
     shell.undo(); assert.equal(shell.getState().history.present, d0, 'Undo gives back the very same document');
     P1.panel.unmount();

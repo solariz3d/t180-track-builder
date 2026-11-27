@@ -9,11 +9,14 @@
 //     run's first span would still be ramping. Before the run, where the piece before has knots coarser than that, the window reaches back to its last knot
 //     span's control points (evenWindow, the carry side). At an open track's ends the window stops, and a run that ends at the head gives the head the value. On a
 //     closed lap a window over the start line is refused: every brush holds the lap's first two control points, so a level across it would leave a step.
-//   - ONE RIM HELD (hold 'left' or 'right'; a drag on one rim's handle holds the other): the held rim stays where the road has it with its bumps taken out
-//     (its width and sideways offset eased between the window's ends; an end still in a taper the road had before, such as an Extend easing from the empty
-//     track's head, takes the other end's value: restOf; where the two ends still disagree, the road's own width changes across the window and the rim is held
-//     where it is now), read from the cross-section the builder makes at the new width (profile.js readAt),
-//     because on a cupped road the rim is not at l ± w/2. The centre moves sideways (l) to hold it. 'centre' holds neither: both rims move by half.
+//   - ONE RIM HELD (hold 'left' or 'right'; a drag on one rim's handle holds the other): the held rim is laid where the road, as read from the window's ends, has
+//     it with its bumps taken out (its width and sideways offset eased between the window's ends; an end still in a taper the road had before, such as an Extend
+//     easing from the empty track's head, takes the other end's value: restOf; where the two ends still disagree, the road's own width changes across the window
+//     and the rim is held where it is now), read from the cross-section the builder makes at the new width (profile.js readAt),
+//     because on a cupped road the rim is not at l ± w/2. The centre moves sideways (l) to hold it. 'centre' holds neither: the centre is eased between the
+//     window's ends and both rims move. THE READING CAN BE WRONG, BY METRES (D678, lighthouse exo_memory/handback/p-d678-even-read-B_2026-11-27.md 2.2, 2.3):
+//     a window end on a grab, a grab straddling restOf's 10 m test, a road whose width changes inside the run. How the held rim should be read is a design
+//     pass the keeper decides (the librarian's 15:4x ruling); until then no sentence says it "stays where it is".
 //   - THE CENTRE'S HEIGHT (h) moves in the plane of the road AS BUILT (adapter.js bankPlan's roll, not the bank channel: the plan re-rounds the bank's corners),
 //     so on a banked road a sideways move rises or falls with the bank; on the run the height is eased between the window's ends. h is fitted by least
 //     squares at every quarter metre, because its target is a product (the sideways move times the bank's tangent) that no control point value carries.
@@ -260,8 +263,16 @@ function evenIn(doc, { off, L, lo, hi, win, w0, w1, value, hold }) {
   };
   const out = Object.freeze(D.checkDoc({ ...c1, pieces: SC.settle(c1, 'h', fitHeight(c1, target, win)).pieces }));
   const changed = []; out.pieces.forEach((P, p) => { if (P !== doc.pieces[p]) changed.push(p); });
-  const offO = SC.pieceOffsets(out);
-  return { doc: out, changed, window: Object.freeze({ lo, hi, w0, w1 }), value, hold, shiftAt: (s) => (valueAt(out, offO, 'l', s) - valueAt(doc, off, 'l', s)) / Math.cos(phiAt(s)) };
+  return { doc: out, changed, window: Object.freeze({ lo, hi, w0, w1 }), value, hold, shiftAt: shiftOf(doc, out, plan) };
 }
 
-module.exports = { even, evenWindow, HOLDS, EVEN_RAMP_M, EVEN_MARGIN_M, EVEN_SNAP_M, EVEN_MIN_M, EVEN_MAX_M, _internal: { weight, rimReader, levelTo, fitHeight, builtPhi } };
+/**
+ * The centre's move across the road from `before` to `after`, in the plane of the road as built on `before` (its bankPlan roll): (s) -> m, at lap distance s.
+ * Even's result carries it as shiftAt; the sentence's job (app/core/evenwords.js evenCheck) has only the two documents, so it is a function of them.
+ */
+function shiftOf(before, after, plan = bankPlan(before)) {
+  const off = SC.pieceOffsets(before), offA = SC.pieceOffsets(after);
+  return (s) => { const a = pieceAt(before, off, s); if (!a) throw new Error(`even: no road at ${s}`); return (valueAt(after, offA, 'l', s) - valueAt(before, off, 'l', s)) / Math.cos(builtPhi(before, plan, a.p, a.sl)); };
+}
+
+module.exports = { even, evenWindow, shiftOf, HOLDS, EVEN_RAMP_M, EVEN_MARGIN_M, EVEN_SNAP_M, EVEN_MIN_M, EVEN_MAX_M, _internal: { weight, rimReader, levelTo, fitHeight, builtPhi } };

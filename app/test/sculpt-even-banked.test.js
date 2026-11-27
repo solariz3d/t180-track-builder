@@ -25,6 +25,7 @@ for (const fx of ['Bhold', 'B-', 'B-0']) {
     test(`K1-K6: ${fx} from ${start}: Even levels the banked turn to 16 m, the left edge held, the centre in the plane of the road as built, the bank as found`, async () => {
       const base = F.fixture(fx), sh = await F.startOf(base, start), st0 = F.present(sh), run = F.runPieces(st0);
       evenDrag(sh, run, 'left', 16);
+      await sh.whenEvenChecked();   // AMENDED BY NAME (D678 repair, item 1): the sentence lands after the release, so P4 reads it once the check is done
       const d = F.present(sh), S = F.stations(F.RUN.lo, F.RUN.hi);
       assert.notEqual(d, st0, msg(sh));
       assert.deepEqual(F.redsLacked(d, base), [], 'K1: no red the untouched road lacks');
@@ -52,6 +53,7 @@ for (const fx of ['B+', 'B+0']) {
   test(`P1-P3: ${fx}: Even is laid, and where the new middle's line leaves the road the release says so in plain words with the place and three figures`, async () => {
     const base = F.fixture(fx), sh = await F.shellOn(base), run = F.runPieces(base);
     evenDrag(sh, run, 'left', 16);
+    await sh.whenEvenChecked();   // AMENDED BY NAME (D678 repair, item 1): the sentence lands after the release, off the page; P2 and P3 read it once it has
     const d = F.present(sh), m = msg(sh);
     assert.notEqual(d, base, 'P1: laid');
     sh.undo(); assert.equal(D.serialize(F.present(sh)), D.serialize(base), 'P1: one undo step'); sh.redo();

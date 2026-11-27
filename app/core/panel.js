@@ -791,8 +791,8 @@ function mount(root, shell, mountOpts = {}) {
   const MORE_TOOLS = Object.freeze({
     wall: Object.freeze({ key: 'wall', label: 'Wall rise', tool: 'wall', channel: 'r', axis: 'y', hint: 'drag up or down to raise or lower the wall here; the road itself does not move' }),
     sweep: Object.freeze({ key: 'sweep', label: 'Tube sweep', tool: 'sweep', channel: 't', axis: 'y', hint: 'drag up or down to close the tube more or open it here; the road itself does not move' }),
-    // EVEN (D678): the selected run to one width, from its width handle (the far edge stays) or typed under "Even ▾"; a drag on the road is refused by name (app/core/coreshell.js)
-    even: Object.freeze({ key: 'even', label: 'Even', tool: 'even', channel: 'w', axis: 'y', hint: 'select a run (Shift-click), then drag one edge\'s width handle: the whole run comes to one width in 0.5 m steps and the other edge stays where it is; or type the width under Even ▾' }),
+    // EVEN (D678): the selected run to one width, from its width handle (the far edge laid where Even reads the road's own edge, so it can move) or typed under "Even ▾"; a drag on the road is refused by name (app/core/coreshell.js)
+    even: Object.freeze({ key: 'even', label: 'Even', tool: 'even', channel: 'w', axis: 'y', hint: 'select a run (Shift-click), then drag one edge\'s width handle: the whole run comes to one width in 0.5 m steps, and the other edge is laid where Even reads the road\'s own edge from the stretch\'s ends, so it can move; or type the width under Even ▾' }),
   });
   const EDGE_SIDE = Object.freeze({ edge: 'e', 'edge-right': 'er', 'edge-start': 's' });
   const SMOOTH_CH = Object.freeze(['kh', 'kv', 'height', 'lateral', 'phi', 'w', 'c', 'e', 'er', 's', 'r', 't']);
@@ -1221,15 +1221,15 @@ function mount(root, shell, mountOpts = {}) {
   const bankBend = el('details', { class: 'sculpt-more', 'aria-label': 'bank the bend' }, el('summary', { text: 'Bank the bend ▾', style: 'cursor:pointer', title: 'lay the bank over a whole bend as one smooth swing, across every joint: select the bend (shift-click for a run), type the peak bank, Preview, Apply' }),
     el('div', { class: 'pickers' }, field('peak bank °', swingPeak), field('peak at', swingAt), field('lead-in m', swingIn), field('run-out m', swingOut), field('exit bank °', swingExit)),
     el('div', { class: 'actions' }, swingPreview, swingApply, swingCancel));
-  // EVEN (D678), beside Bank the bend: the selected run brought to one width, typed (exact) with which edge stays, or picked from the road just before or just after the run;
+  // EVEN (D678), beside Bank the bend: the selected run brought to one width, typed (exact) with which edge Even lays, or picked from the road just before or just after the run;
   // one undo step. The drag is the run's width handle with the Even tool (under "other tool"), on a 0.5 m step, the far edge staying
   const evenW = num('', 0.5, 'even to, m: the width the selected run is brought to, from its first metre to its last');
-  const evenKeep = el('select', { 'aria-label': 'even keeps', title: 'which edge stays where it is while the width changes; the middle: both edges move by half' });
+  const evenKeep = el('select', { 'aria-label': 'even keeps', title: 'which edge Even lays where it reads the road\'s own edge from the stretch\'s ends while the width changes (that edge can move); the middle: the middle is laid smooth between the stretch\'s ends, and both edges move' });
   evenKeep.replaceChildren(new win.Option('the middle', 'centre'), new win.Option('left edge', 'left'), new win.Option('right edge', 'right')); evenKeep.value = 'centre';
   const evenPick = (which) => () => { const p = shell.evenPicks(); if (!p) return shell.evenRun({});   /* no run selected: the shell says so */ const v = p[which]; if (Number.isFinite(v)) evenW.value = String(+v.toFixed(2)); };
   const evenBefore = el('button', { text: '◀ before', title: 'the width of the road just before the selected run', onclick: evenPick('before') });
   const evenAfter = el('button', { text: 'after ▶', title: 'the width of the road just after the selected run', onclick: evenPick('after') });
-  const evenGo = el('button', { text: 'Even', title: 'bring the selected run to this width, eased back to the road over 50 m either side: one undo step', onclick: () => shell.evenRun({ value: evenW.value, hold: evenKeep.value }) });
+  const evenGo = el('button', { text: 'Even', title: 'bring the selected run to this width, back to the road within 50 m beyond each end (more before it after a piece with coarse knots): one undo step', onclick: () => shell.evenRun({ value: evenW.value, hold: evenKeep.value }) });
   const evenBox = el('details', { class: 'sculpt-more', 'aria-label': 'even the width' }, el('summary', { text: 'Even ▾', style: 'cursor:pointer', title: 'bring a run to one width: select it (Shift-click for a run), type the width or pick the road\'s before or after it, Even' }),
     el('div', { class: 'pickers' }, field('even to m', evenW), field('keeps', evenKeep)),
     el('div', { class: 'actions' }, evenBefore, evenAfter, evenGo));

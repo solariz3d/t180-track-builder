@@ -8,16 +8,26 @@ All notable changes to this project are recorded here. The format follows
 - **Sculpt has an Even tool: a selected run's width brought to one value, from the run's first metre to its last (D678).** Grabs and width strokes
   leave a run's edge scalloped (four grabs of one edge out to 16 m left a turn's width 4 m uneven, eight left 2 m, and no snap evens it), and no tool
   brought a run to one width. Pick Even under "other sculpt tool", select a run (or one piece) and drag one edge's width handle: the run goes to that
-  width in 0.5 m steps and the other edge stays where the road had it; or type the width in "even to m" (taken as typed) and pick the edge that
-  keeps (or the middle); "◀ before" and "after ▶" fill in the road's width either side of the run. It is one undo step. Beyond each end of the run the
-  width stays at the value for 20 m and eases back to the road over a 30 m ramp (it reaches further back where the piece before has coarser knots,
-  whose last span's slope would otherwise carry into the run); nothing outside that stretch changes, and the bank is kept as found. The middle moves
-  sideways to hold the kept edge, and on a banked road it rises or falls in the plane of the road as built, so the edge stays on the surface. The kept
-  edge is the road's before any grab, read from where the stretch ends; where the road's own width differs there (a wide straight into a narrow turn),
-  the edge is kept where it is now. Where the new middle's line leaves the road where the old one held, the message says where, how far the middle
-  moved, and the load before and after. Refused by name, nothing changed: no run selected, a jump within reach, a tube, a right side with its own
-  width, a closed lap's start line within reach, a width under 0.5 m or over 400 m. The grab is unchanged. In the core: `src/core/even.js` (`even`,
-  `evenWindow`); `src/core/sculpt.js` now exports `settle` and `isLinked`.
+  width in 0.5 m steps and the other edge is laid where Even reads the road's own edge (below); or type the width in "even to m" (taken as typed)
+  and pick the edge Even lays (or the middle); "◀ before" and "after ▶" fill in the road's width either side of the run. It is one undo step. Beyond
+  each end of the run the width is back to the road within 50 m (it reaches further back where the piece before has coarser knots, whose last
+  span's slope would otherwise carry into the run); nothing outside that stretch changes, and the bank is kept as found. The plan is 20 m at the
+  value and a 30 m ease, but a control point whose reach crosses the stretch's end is left as it was, so on a piece with coarse knots the width
+  starts to ease inside those 20 m (on a 150 m exit piece, 13.28 m at the 20 m mark for a value of 16), and the kept edge and the middle's height
+  miss by up to 0.17 m and 0.05 m there. The middle moves sideways to put the kept edge where Even lays it, and on a banked road it rises or
+  falls in the plane of the road as built, so the edge stays on the surface. **The kept edge can move, by metres.** Even reads the road's own width and offset at the stretch's two
+  ends (an end still in a taper takes the other end's reading) and lays the kept edge on the road between them, bumps taken out; where the two ends
+  disagree it keeps the edge where it is now, to within about 0.08 m. That reading is wrong where a stretch end sits on a grab, where a grab
+  straddles its 10 m test, or where the road's own width changes inside the run: the kept edge then ends 2.9 to 3.9 m from the road before any grab.
+  How the kept edge should be read is open, and nothing here says it stays where it is. With the middle kept, the middle is laid smooth between the
+  stretch's ends and both edges move. The height on the run is eased between the stretch's ends too, so a hill or dip there goes. Where the new
+  middle's line leaves the road where the old one held, the message says where, how far the middle moved, and the load before and after, in the
+  same words as before; it says so after the release, because that check now runs off the page in the checker's worker and reads the loads only
+  over the stretch (on a 27.6 km closed lap the release had waited 33 s for it; now it returns in milliseconds and the words follow about 23 s
+  later). Refused by name, nothing changed: no run selected, a jump within reach, a tube, a
+  right side with its own width, a closed lap's start line within reach, a width under 0.5 m or over 400 m. The grab is unchanged. In the core: `src/core/even.js` (`even`,
+  `evenWindow`, `shiftOf`); `src/core/sculpt.js` now exports `settle` and `isLinked`; `src/validate/index.js` exports `linesBetween` (the load lines
+  between two lap distances, each the one a whole check makes there).
 - **A road's right side can have its own width (D677 (b)).** Type "right width m" in the panel (beside "width m"): the right side takes that width and
   the left side and the driven line stay exactly where they were, so a road can widen on one side only, as some real tracks do (one widens 3.5 m on
   its right within about 5 m). Blank, the right side follows the width, and the width typed alone still moves both sides. Typed as the width is

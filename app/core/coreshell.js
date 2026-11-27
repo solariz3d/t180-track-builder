@@ -227,7 +227,7 @@ const coreChannel = (ch) => (ch === 'height' ? 'h' : ch === 'lateral' ? 'l' : ch
 const callTimers = { setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (t) => clearTimeout(t) };
 const exportError = (code, message) => Object.assign(new Error(message), { name: 'ExportError', code });
 
-async function createCoreShell({ storage = null, exporter = null, brushFn = typeof SC.brush === 'function' ? SC.brush : null, stretchFn = typeof SC.stretch === 'function' ? SC.stretch : null, smoothFn = typeof SC.smooth === 'function' ? SC.smooth : null, now = () => Date.now(), autosaveMs = 1500, timers = callTimers, overlapRunner = null, closeRunner = null } = {}) {
+async function createCoreShell({ storage = null, exporter = null, brushFn = typeof SC.brush === 'function' ? SC.brush : null, stretchFn = typeof SC.stretch === 'function' ? SC.stretch : null, smoothFn = typeof SC.smooth === 'function' ? SC.smooth : null, now = () => Date.now(), autosaveMs = 1500, timers = callTimers, overlapRunner = null, closeRunner = null, evenRunner = null } = {}) {
   const ok = (msg) => ({ message: msg, messageKind: 'ok' });
   // AUTOSAVE: what the last session left behind, read once at the start (the header says what happens to each kind)
   const canAutosave = !!storage && typeof storage.saveAutosave === 'function';
@@ -271,6 +271,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     sculpt: false,   // the Sculpt switch: the brush and the handles on a placed piece change its shape only, never the route
     lastToolChannel: null,   // the channel of the Sculpt tool used last, which Smooth works on
     closePending: null,   // 2026-10-15: a close the worker is working out, { base, finish, startedAt }: no preview yet (closeRunner)
+    evenCheck: null,   // D678 repair: Even's sentence being checked after the level, { after, status 'checking', startedAt, via }: its words not said yet (evenRunner)
   };
   // a Pieces autosave that could not be kept aside is never overwritten: this session simply does not autosave
   const mayAutosave = canAutosave && !(recovery && recovery.blocked);
@@ -392,6 +393,35 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   // the open track again (64 s of a 25 km press). Only a check with CSP on counts, as the press checks with it on
   const checked = new WeakMap();
   function abortClose() { const j = closeJob; closeJob = null; if (j) { try { j.job.cancel(); } catch (e) { /* already finished */ } } }
+  // ── EVEN'S SENTENCE AFTER THE LEVEL, OFF THE PAGE (D678 repair, U6: on a 27.6 km closed lap the release waited 33 s for it) ──
+  // The release (and a typed width) says the first sentence at once (evenwords.js evenDone) and checks the new middle's line as a JOB (evenwords.js evenCheck):
+  // through the page's evenRunner (app/validate-ui/checkrunner.js createEvenRunner: the check job in a Web Worker), or, with none (the tests, a page with no
+  // Worker), on the page in a timer after the release. state.evenCheck says it is pending; its words are said only if the track is still the document the check
+  // was asked about (an edit, an Undo or another level meanwhile drops them). whenEvenChecked() is the promise of the state once it has landed.
+  let evenJob = null, evenLanded = null;
+  function abortEven() { const j = evenJob; evenJob = null; if (j && j.job) { try { j.job.cancel(); } catch (e) { /* already finished */ } } }
+  function beginEvenCheck(before, after, res) {
+    abortEven();
+    const req = Object.freeze({ before, after, window: res.window, value: res.value, hold: res.hold });
+    let job = null;
+    if (evenRunner) { try { job = evenRunner.start(req); } catch (e) { job = null; } }
+    const entry = Object.freeze({ after, status: 'checking', startedAt: now(), via: job ? 'worker' : 'page' });
+    evenJob = { entry, job };
+    const run = job ? job.promise : new Promise((resolve, reject) => timers.setTimeout(() => { try { resolve(EVW.evenCheck(req)); } catch (e) { reject(e); } }, 0));
+    const mine = () => evenJob && evenJob.entry === entry;
+    evenLanded = run.then((said) => {
+      if (!mine()) return st;   // replaced or cancelled meanwhile
+      evenJob = null;
+      if (doc() !== after) return set({ evenCheck: null });   // the track changed: the words were about a document no longer there
+      return set({ evenCheck: null, ...ok(said.message), evenLeaves: said.leaves });
+    }, (e) => {
+      if (!mine() || (e && e.cancelled)) return st;
+      evenJob = null;
+      if (doc() !== after) return set({ evenCheck: null });
+      return set({ evenCheck: null, message: `${EVW.evenDone(res)} The check of where the car runs on the new middle could not be made: ${(e && e.message) || e}`, messageKind: 'error' });
+    });
+    return entry;   // the caller puts it in the SAME state change as the level
+  }
   /** The boxes' values ({ forward, left, up, heading, pitch, bank }, in m and degrees) as the pose the core takes (radians). */
   const landingPose = (ui) => Object.assign({}, ...Object.entries(ui || {}).map(([k, v]) => LD.poseOf(k, v)));
   // the Jump button's document: the current piece placed as Extend would place it (extendOpts, or null: take off from the track's end as it is), a free flight to the default landing, a 60 m straight
@@ -735,10 +765,10 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (!span) return set({ message: 'EVEN_RUN: select the piece or the run to even first: click it on the track (Shift-click for a run)' });
       if (value == null || (typeof value === 'string' && value.trim() === '')) return set({ message: 'EVEN_VALUE: type the width to bring the run to, in metres, or pick the width of the road before or after the run' });
       const v = typeof value === 'string' ? Number(value) : value;
-      let res = null, words = null;
-      const done = commit('even', () => { res = EV.even(d, { ...span, value: v, hold }); words = EVW.evenWords(d, res); return res.doc; });
+      let res = null;
+      const done = commit('even', () => { res = EV.even(d, { ...span, value: v, hold }); return res.doc; });
       if (!res || doc() !== res.doc) return done;   // refused: the message says why, and nothing changed
-      return set({ ...ok(words.message), evenLeaves: words.leaves, lastEdited: res.changed, ...(s && s.base === d ? { selection: Object.freeze({ ...s, base: res.doc }) } : {}) });
+      return set({ ...ok(EVW.evenDone(res)), evenLeaves: null, evenCheck: beginEvenCheck(d, doc(), res), lastEdited: res.changed, ...(s && s.base === d ? { selection: Object.freeze({ ...s, base: res.doc }) } : {}) });
     },
     /** EVEN's picks: the width just before the selected run and just after it ({ before, after }, m; null where there is no road), for the typed field. */
     evenPicks() {
@@ -974,8 +1004,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (b.family === 'route' && b.closedBase) return releaseRoute(b);   // the pointer-up only starts the job
       // the direct check when a Sculpt drag ends: both centrelines built and compared bit for bit; a drag that moved it is dropped whole
       if (b.sculpt) { const moved = CL.pathMoved(CL.snapshot(b.baseResolved), st.resolved); if (moved) return set({ history: b.baseHistory, ...resolvedOf(b.baseHistory.present), brush: null, message: 'SCULPT_MOVES_CENTRELINE: Sculpt dropped this drag: when it ended, the track\'s centreline had moved (checked point by point), so the track is as it was.' }); }
-      // EVEN's release: one undo step, and what it did said in plain words (app/core/evenwords.js), with where the car now leaves the road on the new middle
-      if (b.mode === 'even') return attempt(() => { const words = b.evenRes && doc() !== b.base ? EVW.evenWords(b.base, b.evenRes) : null; return set({ brush: null, history: D.endDrag(st.history), lastEdited: b.pieces, ...(words ? ok(words.message) : {}), evenLeaves: words ? words.leaves : null }); });
+      // EVEN's release: one undo step, and what it did said in plain words at once (app/core/evenwords.js evenDone); where the car now leaves the road on the new
+      // middle is said when the check after the release lands (beginEvenCheck, D678 repair)
+      if (b.mode === 'even') return attempt(() => { const res = b.evenRes && doc() !== b.base ? b.evenRes : null; return set({ brush: null, history: D.endDrag(st.history), lastEdited: b.pieces, ...(res ? ok(EVW.evenDone(res)) : {}), evenLeaves: null, ...(res ? { evenCheck: beginEvenCheck(b.base, doc(), res) } : {}) }); });
       // the brushed pieces are what close() goes round (the brush's window)
       // (endDrag keeps the same present, so a Sculpt selection, re-based at each step, still belongs to it)
       return attempt(() => set({ history: D.endDrag(st.history), brush: null, lastEdited: piecesIn(doc(), b.s0 - b.r, b.s0 + b.r) }));
@@ -1060,6 +1091,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       });
     },
     cancelClose: () => { abortClose(); return set({ closePending: null, message: null }); },
+    /** The promise of the state once Even's pending sentence has landed (said, or dropped because the track changed); the state at once when none is pending. */
+    whenEvenChecked: () => (evenJob && evenLanded ? evenLanded : Promise.resolve(st)),
     /** the live checker's finished answer for document `d` (its reds, and whether CSP was on), kept for a press on that very document. */
     noteCheck(d, { csp = true, red = null } = {}) { if (d && typeof d === 'object' && Array.isArray(red)) checked.set(d, { csp: !!csp, red: red.map((x) => ({ reason: x.reason, s: x.s ?? x.s0 ?? 0 })) }); },
     /**
