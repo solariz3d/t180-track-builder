@@ -85,7 +85,7 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 - **Sharp's radius check reads the right edge as its own.** It used to probe the corner with the left edge on both sides, so a road whose right edge is
-  raised was checked as if it were not: on a 5° / 30° edge turning right, Sharp read 45.2 m and laid a corner at 90 m that the checker then flagged
+  raised was checked as if it were not: on a 5° / 30° edge turning left, Sharp read 45.2 m and laid a corner at 90 m that the checker then flagged
   (load-sustained); it now reads 114.5 m and refuses 90 m by name. Any track, with or without a jump. Found by pane A reading D677 C1. No saved track changes.
 
 - **Hovering Export to Assetto Corsa now shows in Aurora, Skyline and Skyline Night** (L255). It changed no pixel: each of those looks styles Export by name, and that rule outranked every hover. It now fills with the look's hover step for a solid fill. **SIGIL's menu titles hover** as every other look's do. **The File menu stays inside a narrow window:** from 900 to 950 px wide it ran up to 55 px off the window's left edge, its words cut (Edit 2 px at 900); under 1000 px File and Edit now open rightwards from their titles, and from 1000 up every menu opens as before. **A field clicked into wears one frame**, the focus ring, instead of an accent border and the ring together (a heavy double frame); its border keeps its resting colour. Found by pane P's read of L249.
