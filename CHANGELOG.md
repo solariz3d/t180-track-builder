@@ -48,9 +48,13 @@ All notable changes to this project are recorded here. The format follows
   unwound to −16 at the drag's first step, and a drag from 350 jumped to 0 as it crossed 360. They now send the change as given: −366 by −10 is −376,
   350 by +20 rolls on to 370, and a brush by +370 rolls on to about 370. The handle's label still shows the bank within one turn (−376 shows −16). So
   from a head past a turn every bank drag now lays in the head's turn: the ghost and extra handles since the change above, Sculpt's handle and the brush
-  since this one. Two holds at one turn are unchanged, for his ruling: the ghost handle, crossing a full turn from inside one, still writes the field
-  within one turn (350 + 20 lays 10), and the extra bank handle holds at one turn of its field. His saved tracks open, save and take the same Sculpt drags
-  and brushes as before (none is wound past a turn). To go back, revert the commit.
+  since this one. Sculpt's bank handle also stopped at ±720, the bank handle's range, until a read of this change measured it: a piece held at 710
+  dragged up stopped at 720, and on a piece past 720 (its middle at 730) the first step of a drag either way, an arrow key or a wheel notch moved the road
+  to 720 at once, against an outward drag. It now has no range, as the brush has none, so its drag, arrow keys and wheel roll on past ±720 as they do
+  past ±360 (730 by a wheel notch up is 730.01). Three holds are unchanged, for his ruling: the ghost handle, crossing a full turn from inside one, still writes the field
+  within one turn (350 + 20 lays 10); the extra bank handle holds at one turn of its field; and the ghost's bank handle keeps the range of ±720 (from a
+  typed 710 a drag up stops at 720). His saved tracks open, save and take the same Sculpt drags and brushes as before (none is wound past a turn). To go
+  back, revert the commits.
 
 ### Fixed
 - The File and Edit menus now open rightwards from their titles at every window width, as the leftmost menus of a bar usually do. They opened leftwards above

@@ -1025,7 +1025,7 @@ function mount(root, shell, mountOpts = {}) {
     const list = sculptSamples.list; if (list.length < 2) return null;
     const kinds = ['bank', 'width'].concat(si.hasCup ? ['cup'] : []), valueOf = { bank: si.values.phi, width: si.values.w, cup: si.values.c };
     const dots = st.brush || !zoneGrabOn() ? null : dotsOf(tr, si, list);
-    return { mode: 'sculpt', info: si, samples: list, s0: list[0].s, s1: list[list.length - 1].s, half: (f) => si.halfAt(f), at: { width: 1 }, kinds, base: (k) => valueOf[k], ctx: (k) => ({ half: si.halfAt(HD.KINDS[k].at) }), ...(dots ? { dots } : {}) };
+    return { mode: 'sculpt', info: si, samples: list, s0: list[0].s, s1: list[list.length - 1].s, half: (f) => si.halfAt(f), at: { width: 1 }, kinds, base: (k) => valueOf[k], ctx: (k) => ({ half: si.halfAt(HD.KINDS[k].at), ...(k === 'bank' ? { range: false } : {}) }), ...(dots ? { dots } : {}) };   // the bank mark has no range (handles.js rangeOf): it rolls on past ±720 as the brush does (D677 (2))
   };
   //: THE DOT ROWS on the selected run, for handles.js placeDots: the centre, the two rims and, on a cup piece, halfway out; at the run's stations
   // a knot span apart (src/core/document.js KNOT_M, the control points' spacing), which placeDots thins on screen. Kept while the track, the run and the radius are the same, so the
