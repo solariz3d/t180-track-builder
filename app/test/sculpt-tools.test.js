@@ -65,8 +65,11 @@ test('row 1: every tool resolves to its mode, channel and family; an unknown too
     'grab-up': ['local', 'height', 'local'], 'grab-side': ['local', 'lateral', 'local'], stretch: ['stretch', null, 'route'], bend: ['rate', 'kh', 'route'], climb: ['rate', 'kv', 'route'],
     twist: ['rate', 'phi', 'shape'], width: ['rate', 'w', 'shape'], cup: ['rate', 'c', 'shape'], edge: ['rate', 'e', 'shape'], 'edge-right': ['rate', 'er', 'shape'], 'edge-start': ['rate', 's', 'shape'],
     wall: ['rate', 'r', 'shape'], sweep: ['rate', 't', 'shape'], smooth: ['smooth', null, null],
+    // D678 (amended by name): the plan's 14 tools and Even, which brings a selected run's width to one value (src/core/even.js; its rows are
+    // app/test/sculpt-even.test.js). It changes the width, the middle and the height together, inside the window, so it is a local family.
+    even: ['even', 'w', 'local'],
   };
-  assert.deepEqual(Object.keys(SCULPT_TOOLS).sort(), Object.keys(want).sort(), 'the 14 tools of the plan');
+  assert.deepEqual(Object.keys(SCULPT_TOOLS).sort(), Object.keys(want).sort(), 'the 14 tools of the plan, and Even (D678)');
   for (const [t, [mode, channel, family]] of Object.entries(want)) assert.deepEqual([SCULPT_TOOLS[t].mode, SCULPT_TOOLS[t].channel, SCULPT_TOOLS[t].family], [mode, channel, family], t);
   const s = await lap(), before = s.getState().history.present;
   s.beginBrush({ tool: 'snake-hook', s0: 400, r: 60 });

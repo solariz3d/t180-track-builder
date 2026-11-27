@@ -1248,3 +1248,61 @@ test('row 25b (D519): with another key the press keeps that key\'s one channel w
   assert.equal(shell.zoneRefusal('e', 100, 60), 'no edge on piece p1: extend with an edge target first');
   assert.deepEqual(shell.zoneInfo(100), { id: 'p1', cup: false, edge: false, tube: false, family: 'bowl', s: null, walls: false }); assert.equal(shell.zoneInfo(-5), null);
 });
+// D678: Sculpt's EVEN through the panel's own path (app/core/panel.js: the tool under "other sculpt tool", the width handles' host, the "Even ▾" fields). The
+// core's rows are test/core_even.test.js, the shell's app/test/sculpt-even.test.js. A drag of one edge's width handle under Even holds the OTHER edge; the
+// typed width is taken as typed, with the edge picked under "keeps"; ◀ before and after ▶ write the road's width either side of the run into the field
+const EVF = require('../../test/even_fixtures.js');
+async function evenPanel() {
+  const P1 = await handlePanel(), { shell } = P1;
+  shell.setSculpt(true); P1.frame();
+  const other = P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'other sculpt tool');
+  assert.ok(other.children.some((o) => o.value === 'even'), 'Even is a tool under "other sculpt tool"');
+  other.value = 'even'; other.onchange(); P1.frame();
+  P1.click(400); P1.click(550, { shiftKey: true }); P1.frame(); P1.frame();
+  assert.deepEqual([shell.selectionInfo().from, shell.selectionInfo().to], [1, 2], 'control: the run p2 to p3 is selected');
+  return P1;
+}
+for (const [id, held] of [['width:1', 'right'], ['width:-1', 'left']]) {
+  test(`D678: Even through the panel: a drag of the run's ${id === 'width:1' ? 'left' : 'right'} width handle brings the run to one width on a 0.5 m step, holds the ${held} edge, and is one undo step`, async () => {
+    const P1 = await evenPanel(), { shell } = P1, d0 = shell.getState().history.present, past0 = shell.getState().history.past.length;
+    const w0 = EVF.at(d0, 'w', 450);
+    dragBy(P1, id, 20); P1.frame();
+    const d1 = shell.getState().history.present, w = EVF.at(d1, 'w', 450);
+    assert.equal(shell.getState().history.past.length, past0 + 1, 'one undo step'); assert.equal(shell.getState().brush, null, 'the drag is released');
+    assert.ok(w > w0 + 0.25 && Math.abs(w * 2 - Math.round(w * 2)) < 1e-9, `the width went out to a 0.5 m step: ${w0} → ${w}`);
+    assert.ok(EVF.spread(EVF.stations(300, 600).map((s) => EVF.at(d1, 'w', s))) <= 1e-4, 'one width from the run\'s first metre to its last');
+    const S = EVF.stations(300, 600), moved = Math.max(...S.map((s) => Math.abs(EVF.rimAcross(d1, s, held) - EVF.rimAcross(d0, s, held))));
+    assert.ok(moved <= 0.01, `the ${held} edge stays: it moved ${moved} m`);
+    assert.match(shell.getState().message, new RegExp(`^Even: ${w} m wide from 0\\.30 km to 0\\.60 km.*the ${held} edge stays where it was`));
+    assert.deepEqual([shell.selectionInfo().from, shell.selectionInfo().to], [1, 2], 'the run stays selected');
+    shell.undo(); assert.equal(shell.getState().history.present, d0, 'Undo gives back the very same document');
+    P1.panel.unmount();
+  });
+}
+test('D678: Even typed through the panel: the width as typed (no step) with the edge picked under "keeps"; ◀ before and after ▶ write the road\'s width either side of the run', async () => {
+  const P1 = await evenPanel(), { shell } = P1, d0 = shell.getState().history.present, past0 = shell.getState().history.past.length;
+  const field = fieldOf(P1, 'even to m'), keeps = P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'even keeps');
+  P1.button('◀ before').onclick(); assert.equal(Number(field.value), +EVF.at(d0, 'w', 300).toFixed(2), 'before: the road\'s width where the run starts');
+  P1.button('after ▶').onclick(); assert.equal(Number(field.value), +EVF.at(d0, 'w', 600).toFixed(2), 'after: the road\'s width where the run ends');
+  field.value = '9.25'; keeps.value = 'left';
+  P1.button('Even').onclick();
+  const d1 = shell.getState().history.present;
+  assert.equal(shell.getState().history.past.length, past0 + 1, `one undo step: ${shell.getState().message}`);
+  assert.ok(Math.abs(EVF.at(d1, 'w', 450) - 9.25) < 1e-9, `as typed: ${EVF.at(d1, 'w', 450)}`);
+  const S = EVF.stations(300, 600), moved = Math.max(...S.map((s) => Math.abs(EVF.rimAcross(d1, s, 'left') - EVF.rimAcross(d0, s, 'left'))));
+  assert.ok(moved <= 0.01, `the left edge stays: it moved ${moved} m`);
+  field.value = ''; P1.button('Even').onclick();
+  assert.match(shell.getState().message, /^EVEN_VALUE/); assert.equal(shell.getState().history.present, d1, 'an empty width changes nothing');
+  P1.panel.unmount();
+});
+test('D678: Even with nothing selected: the handles are not there, and the typed Even and the picks say to select a run, changing nothing', async () => {
+  const P1 = await handlePanel(), { shell } = P1, d0 = shell.getState().history.present;
+  shell.setSculpt(true); P1.frame();
+  const other = P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'other sculpt tool'); other.value = 'even'; other.onchange(); P1.frame();
+  assert.deepEqual(P1.panel.handles.handles(), [], 'no run, no handles');
+  fieldOf(P1, 'even to m').value = '16';
+  P1.button('Even').onclick();
+  assert.match(shell.getState().message, /^EVEN_RUN/); assert.equal(shell.getState().history.present, d0);
+  P1.button('◀ before').onclick(); assert.match(shell.getState().message, /^EVEN_RUN/); assert.equal(shell.getState().history.present, d0);
+  P1.panel.unmount();
+});
