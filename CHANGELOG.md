@@ -42,15 +42,17 @@ All notable changes to this project are recorded here. The format follows
   road's edge turns the edge toward the pointer, and the road loses bank: one 4 m pull out on a 20° turn left it 5.0° flatter. Now the sideways
   part of the drag moves the edge along the slope from the far edge (by its share along that slope), so the road widens and keeps its bank
   (0.0000° after one pull or eight, on three banked turns). Lifting or sinking the edge banks the road exactly as before. What he will notice:
-  - on a bank the grabbed edge no longer lands under the pointer. After a 4 m pull on a 20° turn it ends about 0.57 m short of the pointer and
-    1.45 m above it, where today's grab ends it 0.20 m off;
+  - on a bank the grabbed edge no longer lands under the pointer. After a 4 m pull up a 20° bank it ends about 0.57 m short of the pointer and
+    1.45 m above it; pulled down the bank, about 0.44 m short and 1.09 m below it. Today's grab ends it 0.20 m off;
   - the middle of the road follows the slope: up 0.43 m when the pull goes up the bank, down 0.86 m when it goes down (today it drops 0.24 m);
     the road widens 3.80 m for the 4 m pull, against 3.86 m today;
-  - on a flat road nothing changes, with or without a cup, for a press on the edge; a press inside the edge of a cupped road (partway up the
+  - on a flat road nothing changes, with or without a cup, for a press on the edge, except on an edge piece whose two rims sit at different
+    heights: the line between them slopes, so a pull at its rim follows that slope too (a non-author read measured the bank kept at 0 where
+    today it tips up to 0.41°, and the middle dropping 0.39 m at the low rim where today it drops 0.28 m); a press inside the edge of a cupped road (partway up the
     cup) pulled out no longer tips the road (today it banks it 0.08° at 95 % of the way out, about 1.1° halfway).
   A grab is a gesture, not something saved, so no saved track or undo step changes. To go back, it is one line in `app/core/zonegrab.js`
   (`follow`). Four tests that held the grabbed point under the pointer (zonegrab rows 14h, 14j and 14l on banked roads, and the panel's row 25,
-  a press just inside the edge of a cupped road) now hold it where the slope puts it, amended by name; rows 14o and 14p are new (a pull keeps the bank; a lift still banks the road).
+  a press just inside the edge of a cupped road, and now also the edge of a banked road, where the pull's share along the slope shows) now hold it where the slope puts it, amended by name; rows 14o and 14p are new (a pull keeps the bank; a lift still banks the road).
 - **A typed bank past a full turn rolls on into the next turn instead of unwinding.** He asked for it on 2026-11-26: past a full turn the bank
   shown resets to 0, and the road carries the extra degrees into the next turn. The bank field still shows the bank within one turn, its sign kept, but a
   typed bank (the field, an extra bank row, a flowing bank's mark) is now laid as typed, in the head's own turn. From a head at −340, a typed −392 rolls
