@@ -144,3 +144,15 @@ test('W2: the message says the road is back within the window\'s reach beyond ea
   assert.match(await said(base, { from: 0, to: 1 }, 'left'), /, from the track's start, and back to the road within 50 m after it;/);
   assert.doesNotMatch(await said(base, F.runPieces(base), 'right'), /over the 50 m|for 20 m/);
 });
+// W3 (D678, the packet's "Amended 17:4x" item 1, row X10 of the hand-back's 5.1): the words say what holds outside the stretch, and it holds there: beyond the
+// window every channel within one stored step (a tenth of a millimetre in width, offset and height; measured on a 27.6 km closed lap, the built road 0.0123 mm).
+// Not "20 m at the width": a road far from the value beyond the margin leaks into its outer metre (0.0288 m for a 31 m lead to 16; the hand-back's 5.3).
+test('W3: the message says the road\'s width, line and height beyond the stretch are as they were to a tenth of a millimetre, and outside the window nothing moves past one stored step', async () => {
+  const base = F.fixture('flat'), run = F.runPieces(base);
+  for (const hold of ['left', 'centre']) {
+    const sh = await F.shellOn(base); sh.selectPiece(run.from); sh.selectPiece(run.to, { extend: true }); sh.evenRun({ value: '16', hold });
+    assert.match(msg(sh), /; beyond the stretch the road's width, line and height are as they were, to a tenth of a millimetre \(Ctrl\+Z puts it back\)\./, `${hold}: ${msg(sh)}`);
+    assert.doesNotMatch(msg(sh), /20 m at|for 20 m/, `${hold}: no promise of 20 m at the width`);
+    assert.deepEqual(F.outsideChanges(F.present(sh), base).slice(0, 5), [], `${hold}: outside the window`);
+  }
+});

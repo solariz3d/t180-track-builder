@@ -725,14 +725,42 @@ function insertKnot(P, t) {
 }
 /** Several knots, in any order (each by insertKnot). */
 function insertKnots(P, ts) { return ts.reduce((acc, t) => insertKnot(acc, t), P); }
+/**
+ * The same knots, ROUNDED ONCE (D678, Even's window ends). insertKnots rounds the three new points after each knot, so a span cut into several pieces carries up to
+ * half a step per knot; Even's banked fixture measured 1.075 steps of the bank. Here every channel's points are carried through all the insertions at full precision,
+ * and only the new points are rounded, once, at the end, so every sample is within half a stored step of the road before. Points no insertion replaced are the same
+ * numbers. The knots are checked as insertKnot checks them.
+ */
+function insertKnotsRoundOnce(P, ts) {
+  if (!P || P.type !== 'road') throw new CoreError('NOT_ROAD', 'knots are inserted into road pieces only');
+  const add = ts.map((t) => q(t, DEC.m)).sort((x, y) => x - y);
+  add.forEach((tq, j) => {
+    if (!(tq > 0 && tq < P.length)) throw new CoreError('BAD_KNOT', `a knot must lie strictly inside (0, ${P.length}), got ${tq}`);
+    if (P.knots.includes(tq) || add[j - 1] === tq) throw new CoreError('BAD_KNOT', `${tq} is a knot already`);
+  });
+  const U0 = knotVector(P), channels = {};
+  for (const ch of CHANNELS) {
+    if (OPTIONAL[ch] && P.channels[ch] === undefined && !P[OPTIONAL[ch]]) continue;
+    let U = U0, C = P.channels[ch], kept = C.map(() => true);
+    for (const t of add) {
+      // boehm's k for t: the points k-2 and k-1 give way to three new ones, the rest are carried
+      let k = 3; while (k + 1 < U.length - 4 && U[k + 1] <= t) k++;
+      C = boehm(U, C, t); kept = [...kept.slice(0, k - 2), false, false, false, ...kept.slice(k)];
+      U = [...U.slice(0, k + 1), t, ...U.slice(k + 1)];
+    }
+    channels[ch] = C.map((x, i) => (kept[i] ? x : q(x, DEC[ch])));
+  }
+  return { ...P, knots: [...P.knots, ...add].sort((x, y) => x - y), channels };
+}
 
 /**
  * THE API FOR A NARROW BRUSH (src/core/README.md "knot insertion"). Every span of road piece `pieceId` that overlaps [a, b]
  * (the piece's own s) and is longer than maxSpan is cut into equal spans no longer than maxSpan, by exact insertion. Spans
  * outside [a, b] keep their knots and control points. Returns { doc: a new checked document, inserted: [t …] } (doc is the
- * same object when nothing was needed). Undo removes the knots like any other edit.
+ * same object when nothing was needed). Undo removes the knots like any other edit. opts.roundOnce: the new points are rounded once, at the end
+ * (insertKnotsRoundOnce), not after each knot. Sculpt's sharp brush does not ask for it, so the road it makes is as it was.
  */
-function refineKnots(doc, pieceId, a, b, maxSpan) {
+function refineKnots(doc, pieceId, a, b, maxSpan, { roundOnce = false } = {}) {
   const i = doc.pieces.findIndex((P) => P.id === pieceId);
   if (i < 0) throw new CoreError('NO_PIECE', `no piece ${pieceId}`);
   const P = doc.pieces[i];
@@ -748,12 +776,12 @@ function refineKnots(doc, pieceId, a, b, maxSpan) {
   }
   if (add.length > 20000) throw new CoreError('TOO_MANY', `refining would add ${add.length} knots; use a larger maxSpan`);
   if (!add.length) return { doc, inserted: [] };
-  const pieces = doc.pieces.slice(); pieces[i] = insertKnots(P, add);
+  const pieces = doc.pieces.slice(); pieces[i] = roundOnce ? insertKnotsRoundOnce(P, add) : insertKnots(P, add);
   return { doc: deepFreeze(checkDoc({ ...doc, pieces })), inserted: add.sort((u, v) => u - v) };
 }
 
 module.exports = {
-  boehm, insertKnot, insertKnots, refineKnots,
+  boehm, insertKnot, insertKnots, insertKnotsRoundOnce, refineKnots,
   fromPositionFit,
   SCHEMA, SCHEMA_SPLIT, isSplit, SCHEMA_NEG, isNegEdge, SCHEMA_WIDTH, isWidthSplit, EDGE_FLOOR, OLD_SCHEMAS, CHANNELS, OFFSETS, FAMILIES, DEC, KNOT_M, CUP_MAX, CUP_JOINT_DEG, legacyEdgeDeg, endIsCup, fillCup, CoreError,
   OPTIONAL, OPT_DEFAULT, EDGE_EPS, S_MIN, S_MAX, S_DEFAULT, TUBE_MAX, TUBE_EDGE_MAX, kindOf, endKind, tubeSlotMinDeg,

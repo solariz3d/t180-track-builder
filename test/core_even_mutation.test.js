@@ -26,8 +26,8 @@ const fs = require('fs'), os = require('os'), path = require('path');
 const IR = require('./inner_run.js');
 const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
-const EV = 'src/core/even.js', CS = 'app/core/coreshell.js', VI = 'src/validate/index.js';
-const CORE = ['test/core_even.test.js'], SHELL = ['app/test/sculpt-even.test.js'], SENT = ['app/test/sculpt-even-sentence.test.js'], LINES = ['test/validate_lines_between.test.js'];
+const EV = 'src/core/even.js', CS = 'app/core/coreshell.js', VI = 'src/validate/index.js', DOC = 'src/core/document.js';
+const PCLT = ['test/passclear.test.js'], CORE = ['test/core_even.test.js'], SHELL = ['app/test/sculpt-even.test.js'], SENT = ['app/test/sculpt-even-sentence.test.js'], LINES = ['test/validate_lines_between.test.js'], KNOTS = ['test/core_knots.test.js'];
 
 const MUTANTS = [
   // the held rim and the centre
@@ -44,6 +44,23 @@ const MUTANTS = [
   { id: 'W2 the ramp is a step: every control point in the window set to the value', pattern: 'one piece|designed ease', edits: [[EV, 'ctrl[i] = c[i] + g * (v - c[i]); changed.push(i);', 'ctrl[i] = v; changed.push(i);']] },
   { id: 'W3 the window is not stopped at the open end', pattern: 'open end', edits: [[EV, 'w0 = Math.max(0, w0); w1 = Math.min(L, w1);', '']] },
   { id: 'W4 the bank is levelled too', pattern: 'K5', edits: [[EV, 'const d1 = levelTo(doc, { w: value }, win);', 'const d1 = levelTo(doc, { w: value, phi: 0 }, win);']] },
+  // the window's ends (D678, the packet's "Amended 17:4x" item 1; the hand-back's section 5.1): the knots over the reaches cut to 3.75 m, rounded once
+  { id: 'X1m the knots over the window\'s reaches are not cut', pattern: 'X1|X3', edits: [[EV, 'const cut = refineEnds(doc, off, L, lo, hi, margin + ramp);', 'const cut = doc;']] },
+  { id: 'X2m the reaches are cut to 7.5 m, not 3.75', pattern: 'X1|X3', edits: [[EV, 'const EVEN_END_SPAN_M = 3.75;', 'const EVEN_END_SPAN_M = 7.5;']] },
+  { id: 'X3m the near reach is not cut', pattern: 'X1', edits: [[EV, 'for (const [a, b] of [[Math.max(0, lo - reach), lo], [hi, Math.min(L, hi + reach)]])', 'for (const [a, b] of [[hi, Math.min(L, hi + reach)]])']] },
+  { id: 'X4m the far reach is not cut', pattern: 'X1', edits: [[EV, 'for (const [a, b] of [[Math.max(0, lo - reach), lo], [hi, Math.min(L, hi + reach)]])', 'for (const [a, b] of [[Math.max(0, lo - reach), lo]])']] },
+  { id: 'X5m the window is not taken again on the cut track (the carry side still reaches back)', pattern: 'coarse knots', edits: [[EV, 'const W = cut === doc ? W0 : evenWindow(cut, { from, to, ramp, margin });', 'const W = W0;']] },
+  { id: 'X6m Even does not ask for one rounding (each knot rounds its new points)', pattern: 'X1', edits: [[EV, 'EVEN_END_SPAN_M, { roundOnce: true }).doc', 'EVEN_END_SPAN_M).doc']] },
+  { id: 'X7m refineKnots ignores roundOnce', pattern: 'roundOnce', files: KNOTS, edits: [[DOC, 'pieces[i] = roundOnce ? insertKnotsRoundOnce(P, add) : insertKnots(P, add);', 'pieces[i] = insertKnots(P, add);']] },
+  { id: 'X8m the round-once insertion leaves its new points unrounded', pattern: 'roundOnce', files: KNOTS, edits: [[DOC, 'kept = [...kept.slice(0, k - 2), false, false, false, ...kept.slice(k)];', 'kept = [...kept.slice(0, k - 2), true, true, true, ...kept.slice(k)];']] },
+  { id: 'X9m the round-once insertion reads every knot\'s span on the knots it started with', pattern: 'roundOnce', files: KNOTS, edits: [[DOC, '      U = [...U.slice(0, k + 1), t, ...U.slice(k + 1)];\n', '']] },
+  { id: 'X10m the first sentence does not say what holds beyond the stretch', pattern: 'W3', files: SENT, edits: [['app/core/evenwords.js', '; beyond the stretch the road\'s width, line and height are as they were, to a tenth of a millimetre (Ctrl+Z', ' (Ctrl+Z']] },
+  { id: 'X11m the release\'s check reads the old road on its own knots (the middle\'s l and h laid on the wrong control points)', pattern: 'E1 and E2|E5', files: SENT, edits: [['app/core/evenwords.js', 'const C = D.insertKnotsRoundOnce(P, A.knots.filter((k) => !P.knots.includes(k)));', 'const C = P;']] },
+  // Even's step bounded to its window (D678, the 23:26Z order's item 2; the hand-back's 5.2b): the guard reads only the window's stations, each against every station
+  { id: 'B1m the pass clearance ignores `to` (every station from `from` to the end leads)', pattern: 'row 11', files: PCLT, edits: [['src/validate/passclear.js', 'for (let i = from; i <= to; i++) {', 'for (let i = from; i < n; i++) {']] },
+  { id: 'B2m the guard on Even\'s step reads only the window\'s first station', pattern: 'B2', files: SHELL, edits: [[CS, '      while (to >= 0 && S[to].s > win.w1 + 1e-9) to--;', '      to = from;']] },
+  { id: 'B3m the guard on Even\'s step starts its read at the window\'s end', pattern: 'B2', files: SHELL, edits: [[CS, 'while (from < S.length && S[from].s < win.w0 - 1e-9) from++;', 'while (from < S.length && S[from].s < win.w1 - 1e-9) from++;']] },
+  { id: 'B4m Even\'s result is frozen shallow again (its changed pieces left unfrozen, so every offset read converts the whole lap)', pattern: 'B4', edits: [[EV, 'const out = freeze(D.checkDoc({ ...c1,', 'const out = Object.freeze(D.checkDoc({ ...c1,']] },
   // refusals by name
   { id: 'R1 a closed lap\'s start line inside the window is not refused', pattern: 'closed lap', edits: [[EV, 'if (doc.closed && (w0 < 0 || w1 > L)) refuse(', 'if (false) refuse(']] },
   { id: 'R2 a run across the start line is refused as no run, not by the line', pattern: 'closed lap', edits: [[EV, 'if (doc.closed && Number.isInteger(from) && Number.isInteger(to) && from > to', 'if (false && Number.isInteger(from) && Number.isInteger(to) && from > to']] },
@@ -67,8 +84,8 @@ const MUTANTS = [
   { id: 'E3m linesBetween stops a station short of its end', pattern: 'E3', files: LINES, edits: [[VI, 'b < 0 ? S.length : b).lines;', 'b < 0 ? S.length : b - 1).lines;']] },
   { id: 'E3n linesBetween reads the speed from its own stations, not the lap', pattern: 'E3', files: LINES, edits: [[VI, 'return core(path, segments, { ...opts, lap: false }, a, null, b < 0 ? S.length : b).lines;', 'const sub = { ...path, samples: S.slice(a, b < 0 ? S.length : b) }; return core(sub, segments, { ...opts, lap: false }, 0, null, sub.samples.length).lines;']] },
 ];
-const FILES = [...CORE, ...SHELL, ...SENT, ...LINES];
-const HELPERS = ['test/even_fixtures.js', 'test/inner_run.js'];
+const FILES = [...CORE, ...SHELL, ...SENT, ...LINES, ...KNOTS, ...PCLT];
+const HELPERS = ['test/even_fixtures.js', 'test/inner_run.js', 'test/core_helpers.js', 'test/geom_fixtures.js'];
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-even-mut-'));
   for (const d of ['src', 'tools', 'app/core', 'app/camera', 'app/lib', 'app/validate-ui', 'app/preview', 'app/export', 'app/share', 'app/testhook', 'app/menubar', 'app/texture', 'app/settings.js', 'app/index.html'])
@@ -86,7 +103,7 @@ function runTests(dir, pattern, files = FILES) {
   const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, ''), n = (k) => Number((out.match(new RegExp(`ℹ ${k} (\\d+)`)) || [])[1]);
   return { tests: n('tests'), pass: n('pass'), fail: n('fail'), skipped: n('skipped'), out };
 }
-test('CONTROL: core_even.test.js, sculpt-even.test.js, sculpt-even-sentence.test.js and validate_lines_between.test.js pass whole on an unmutated copy', () => {   // AMENDED BY NAME (D678 repair): the sentence's two files joined it
+test('CONTROL: core_even.test.js, sculpt-even.test.js, sculpt-even-sentence.test.js, validate_lines_between.test.js, core_knots.test.js and passclear.test.js pass whole on an unmutated copy', () => {   // AMENDED BY NAME (D678 repair): the sentence's two files joined it; (17:4x item 1) and core_knots.test.js, for refineKnots' roundOnce; (23:26Z item 2) and passclear.test.js, for the bounded read's `to`
   const dir = tree();
   try { const r = runTests(dir); assert.ok(r.tests >= 20 && r.fail === 0, `tests ${r.tests}, fail ${r.fail}\n${r.out.slice(-1500)}`); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

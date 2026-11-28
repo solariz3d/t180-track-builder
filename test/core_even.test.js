@@ -37,7 +37,9 @@ test('Even on a run of one piece levels that piece, eases into its neighbours an
   assert.ok(r.changed.includes(1) && r.changed.includes(3), `changed ${r.changed}`);
   const breaks = require('../src/core/continuity.js').jointSteps(r.doc, { channels: ['w', 'l', 'h'] }).filter((j) => Math.abs(j.dv) > 1e-4 || Math.abs(j.dm) > 1e-3);
   assert.deepEqual(breaks, [], 'no step at any joint');
-  for (const s of F.stations(0, F.endOf(base))) if (s < r.window.w0 || s > r.window.w1) for (const ch of ['w', 'l', 'h', 'phi']) assert.ok(Object.is(F.at(r.doc, ch, s), F.at(base, ch, s)), `${ch} at ${s}`);
+  // AMENDED (D678, the packet's "Amended 17:4x" item 1): outside the window every channel within one stored step, no longer bit for bit; Even cuts the knots over
+  // the window's reaches and the cut spans' new points are stored at each channel's step (it read w, l, h and the bank, Object.is, before the ruling)
+  assert.deepEqual(F.outsideChanges(r.doc, base, r.window.w0, r.window.w1).slice(0, 5), [], 'outside the window');
   base.pieces.forEach((P, i) => { if (off[i] + P.length < r.window.w0 || off[i] > r.window.w1) assert.equal(r.doc.pieces[i], P, `piece ${i} the same object`); });
   // the ramps EASE: halfway along each ramp the width is near halfway between the road's and the value, and it never passes either
   for (const [mid, road] of [[lo - 35, F.at(base, 'w', lo - 50)], [hi + 35, F.at(base, 'w', hi + 50)]]) {
@@ -93,9 +95,13 @@ test('after a piece with coarse knots (a plain Extend\'s 20 m spans), the run is
   assert.ok(widthSpread(r.doc, 300, 600) <= 1e-4 && Math.abs(F.at(r.doc, 'w', 450) - 9.25) <= 1e-4);
   const held = Math.max(...S.map((s) => Math.abs(F.rimAcross(r.doc, s, 'left') - F.rimAcross(d, s, 'left'))));
   assert.ok(held <= 0.01, `the held rim moved ${held} m`);
-  assert.equal(r.window.w0, 220, 'the window reaches back to the support of the straight\'s last span\'s first control point (260 at the value)');
+  // AMENDED (D678, the packet's "Amended 17:4x" item 1). Even now cuts the straight's last spans to 3.75 m before it levels, so they carry no slope into the run and
+  // the level's own window is the 20 m margin and the 30 m ramp: 250, where it was 220. The reach back is still the window's on the track as given, where the shell
+  // reads Even's refusals when a drag opens (a jump in it is refused). And outside the window: within one stored step, no longer bit for bit
+  assert.equal(EV.evenWindow(d, { from: 1, to: 2 }).win.w0, 220, 'on the uncut track the window reaches back to the support of the straight\'s last span\'s first control point (260 at the value)');
+  assert.equal(r.window.w0, 250, 'the level\'s window, on the cut track: the 20 m margin and the 30 m ramp');
   assert.equal(r.window.w1, 650, 'and after the run it is the 20 m margin and 30 m ramp');
-  for (const s of F.stations(0, F.endOf(d))) if (s < r.window.w0 || s > r.window.w1) for (const ch of ['w', 'l', 'h']) assert.ok(Object.is(F.at(r.doc, ch, s), F.at(d, ch, s)), `${ch} at ${s}`);
+  assert.deepEqual(F.outsideChanges(r.doc, d, r.window.w0, r.window.w1).slice(0, 5), [], 'outside the window');
 });
 
 test('where the road\'s own width changes across the window (a 31 m straight into a 12 m turn), the held rim is held where it is now, not read back from the window\'s ends', () => {
@@ -122,11 +128,50 @@ for (const fx of ['Bhold', 'B-', 'B-0']) {
   });
 }
 
-test('K5: Even keeps the bank as found: the bank channel the same values and the bank as built the same bits every metre', () => {
-  const base = F.fixture('B-'), run = F.runPieces(base), r = EV.even(base, { ...run, value: 16, hold: 'left' });
-  r.doc.pieces.forEach((P, i) => { if (P.type === 'road') assert.deepEqual(P.channels.phi, base.pieces[i].channels.phi, `piece ${i}`); });
-  for (const s of F.stations(0, F.endOf(base))) assert.ok(Object.is(F.builtBank(r.doc, s), F.builtBank(base, s)), `the built bank at ${s}`);
+// AMENDED (D678, the packet's "Amended 17:4x" item 1): the bank within one stored step (1e-9 rad) every metre, the channel and as built, no longer the same values and
+// bits. Even cuts the knots over the window's reaches, so the bank channel has new control points there, stored at its step (measured on B-: the channel 4.5e-10, the
+// bank as built 6.3e-10)
+test('K5: Even keeps the bank as found: the bank channel and the bank as built within one stored step every metre', () => {
+  const base = F.fixture('B-'), run = F.runPieces(base), r = EV.even(base, { ...run, value: 16, hold: 'left' }), step = F.stepOf('phi') * (1 + 1e-9);
+  for (const s of F.stations(0, F.endOf(base))) {
+    assert.ok(Math.abs(F.at(r.doc, 'phi', s) - F.at(base, 'phi', s)) <= step, `the bank channel at ${s}`);
+    assert.ok(Math.abs(F.builtBank(r.doc, s) - F.builtBank(base, s)) <= step, `the built bank at ${s}`);
+  }
 });
+
+// ── THE WINDOW'S ENDS (D678, the packet's "Amended 17:4x" item 1; the rows X1 to X8 of lighthouse exo_memory/handback/p-d678-even-build-A_2026-11-27.md, section 5.1).
+// Even cuts the knots over the window's two reaches to spans of at most 3.75 m before it levels (even.js EVEN_END_SPAN_M), so no control point a margin or the
+// height's fit needs is left as it was because its support reached past the window. Before it, the flat turn's exit margin read 13.28 m for a value of 16 (R1) and
+// the centre's height stood 0.05 m off its target after a grab near the window's end (R2).
+const inMargins = (s) => (s >= F.WIN.lo && s <= F.RUN.lo) || (s >= F.RUN.hi && s <= F.WIN.hi);
+for (const fx of ['flat', 'B-']) for (const hold of ['left', 'right']) {
+  test(`X1, X4, X8: on ${fx}, the ${hold} edge kept, the width is within 0.01 m of the value over both 20 m margins, nothing outside moves past one stored step and no joint steps`, () => {
+    const base = F.fixture(fx), r = EV.even(base, { ...F.runPieces(base), value: 16, hold });
+    const worst = Math.max(...F.stations(F.WIN.lo, F.WIN.hi).filter(inMargins).map((s) => Math.abs(F.at(r.doc, 'w', s) - 16)));
+    assert.ok(worst <= 0.01, `X1: the width is ${worst} m off 16 in the margins`);
+    assert.deepEqual([r.window.w0, r.window.w1], [F.WIN.w0, F.WIN.w1], 'the window is the registration\'s');
+    assert.deepEqual(F.outsideChanges(r.doc, base).slice(0, 5), [], 'X4: outside the window');
+    assert.deepEqual(F.jointBreaks(r.doc), [], 'X8: no joint steps');
+  });
+}
+// X2 on B- only. On the flat fixture the lead at s 180 is still in its taper from the empty track's 31 m head, and Even as built (A0) lays the kept edge on the 12 m
+// road it reads from the window's far end, about 0.25 m from the edge there (section 5.1, X2f): that is the reading, not the knots, and it is item 3's question.
+for (const hold of ['left', 'right']) {
+  test(`X2: on B-, the ${hold} edge kept, the kept edge is within 0.01 m of where it was over both margins`, () => {
+    const base = F.fixture('B-'), r = EV.even(base, { ...F.runPieces(base), value: 16, hold });
+    const worst = Math.max(...F.stations(F.WIN.lo, F.WIN.hi).filter(inMargins).map((s) => Math.abs(F.rimAcross(r.doc, s, hold) - F.rimAcross(base, s, hold))));
+    assert.ok(worst <= 0.01, `the kept edge moved ${worst} m in the margins`);
+  });
+}
+for (const grabs of [[470], [485], [175, 465]]) {
+  test(`X3, X4, X8: on B- after a grab at ${grabs.join(' and ')}, K3: the centre's height is within 0.01 m of its target over the window, nothing outside moves past one stored step and no joint steps`, async () => {
+    const sh = await F.shellOn(F.fixture('B-')); for (const s of grabs) F.grab(sh, s, 16);
+    const st = F.present(sh), r = EV.even(st, { ...F.runPieces(st), value: 16, hold: 'left' }), c = F.centreOff(r.doc, st);
+    assert.ok(c.off <= 0.01, `X3 (K3): ${c.off} m at ${c.at}`);
+    assert.deepEqual(F.outsideChanges(r.doc, st).slice(0, 5), [], 'X4: outside the window');
+    assert.deepEqual(F.jointBreaks(r.doc), [], 'X8: no joint steps');
+  });
+}
 
 test('Even refuses by name, and changes nothing: a run that is not one, a width out of range, a hold it does not know', () => {
   const base = F.fixture('flat'), n = base.pieces.length;
@@ -169,3 +214,15 @@ test('Even refuses by name on a closed lap when the run or its ramps reach the s
   assert.equal(r.doc.closed, true);
   assert.equal(r.doc.pieces[0], lap.pieces[0], 'the lap\'s first piece is the same object');
 });
+
+// B4 (D678, the 23:26Z order's item 2; lighthouse exo_memory/handback/p-d678-even-build-A_2026-11-27.md, 5.4): Even's result is frozen all the way down, as every
+// document the core returns is. The segment caches (sculpt.js pieceOffsets, Even's rim reader) are used only on a document whose pieces are all frozen; with its
+// changed pieces left unfrozen, every offset read on a 27.6 km lap converted the whole lap again (an Even drag step 5.2 s there, 5.4)
+const frozenDown = (o, at = 'doc') => { if (!o || typeof o !== 'object') return null; if (!Object.isFrozen(o)) return at; for (const k of Object.keys(o)) { const w = frozenDown(o[k], `${at}.${k}`); if (w) return w; } return null; };
+for (const hold of ['left', 'right', 'centre']) {
+  test(`B4: Even's result, the ${hold} kept, is frozen all the way down: the document, every piece, its channels and their control points`, async () => {
+    const sh = await F.startOf(F.fixture('B-'), 'T1'), st = F.present(sh), r = EV.even(st, { ...F.runPieces(st), value: 16, hold });
+    assert.ok(r.changed.length > 0, 'control: Even changed pieces');
+    assert.equal(frozenDown(r.doc), null, `not frozen: ${frozenDown(r.doc)}`);
+  });
+}

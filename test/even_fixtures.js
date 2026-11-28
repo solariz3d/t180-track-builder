@@ -88,11 +88,24 @@ function redsLacked(after, before, a = WIN.w0, b = WIN.w1) {
   const B = reds(before);
   return reds(after).filter((x) => x.s1 >= a && x.s0 <= b).filter((x) => !B.some((y) => y.reason === x.reason && x.s0 >= y.s0 - 2 && x.s1 <= y.s1 + 2));
 }
-/** F4/K4: outside the window nothing moved: the pieces wholly outside are the same objects, and w, l, h and the bank channel read the same bits every 1 m outside. */
-function outsideChanges(after, before) {
-  const off = SC.pieceOffsets(before), out = [];
-  before.pieces.forEach((P, p) => { const e = p + 1 < before.pieces.length ? off[p + 1] : off[p] + (P.length || 0); if ((e < WIN.w0 || off[p] > WIN.w1) && after.pieces[p] !== P) out.push(`piece ${p} is a new object`); });
-  for (const s of stations(0, endOf(before))) { if (s >= WIN.w0 && s <= WIN.w1) continue; for (const ch of ['w', 'l', 'h', 'phi']) { const a = at(after, ch, s), b = at(before, ch, s); if (!Object.is(a, b)) out.push(`${ch} at ${s}: ${b} -> ${a}`); } }
+/** One stored step of channel ch (document.js DEC: 1e-4 m for w, l, h; 1e-9 for the bank and the rates; 1e-6 for the cup and the edges). */
+const stepOf = (ch) => 10 ** -D.DEC[ch];
+/**
+ * F4/K4, AMENDED (D678, the packet's "Amended 17:4x" item 1, lighthouse exo_memory/loop/packet_t180_sculpt_even_build_on_D_2026-11-27.md:183): "nothing outside
+ * the stretch changes" was relaxed from bit for bit to WITHIN ONE STORED STEP OF EACH CHANNEL, because Even now cuts the knots over the window's reaches (src/core/even.js
+ * EVEN_END_SPAN_M) and a cut span's new control points are stored at the channel's step. Outside the window [w0, w1]: the pieces wholly outside are the same objects,
+ * and every channel the piece carries reads within one stored step of where it was, every 1 m (it read w, l, h and the bank, bit for bit, before the ruling).
+ */
+function outsideChanges(after, before, w0 = WIN.w0, w1 = WIN.w1) {
+  const off = SC.pieceOffsets(before), offA = SC.pieceOffsets(after), out = [];   // the offsets once per track (at() takes them at every call, about 1 ms each)
+  // at(), with the offsets given: the first road piece holding s
+  const read = (doc, o, ch, s) => { for (let i = 0; i < doc.pieces.length; i++) { const P = doc.pieces[i]; if (P.type === 'road' && s >= o[i] - 1e-9 && s <= o[i] + P.length + 1e-9) return D.channelAt(P, ch, Math.min(P.length, Math.max(0, s - o[i]))).v; } return NaN; };
+  before.pieces.forEach((P, p) => { const e = p + 1 < before.pieces.length ? off[p + 1] : off[p] + (P.length || 0); if ((e < w0 || off[p] > w1) && after.pieces[p] !== P) out.push(`piece ${p} is a new object`); });
+  for (const s of stations(0, endOf(before))) {
+    if (s >= w0 && s <= w1) continue;
+    const p = before.pieces.findIndex((P, i) => P.type === 'road' && s >= off[i] - 1e-9 && s <= off[i] + P.length + 1e-9); if (p < 0) continue;
+    for (const ch of Object.keys(before.pieces[p].channels)) { const a = read(after, offA, ch, s), b = read(before, off, ch, s); if (!(Math.abs(a - b) <= stepOf(ch) * (1 + 1e-9))) out.push(`${ch} at ${s}: ${b} -> ${a}`); }
+  }
   return out;
 }
 /** F5: the joints the window touches, where w, l or h steps (value more than one stored step, 1e-4 m; slope more than 1e-3 per metre). */
@@ -136,4 +149,4 @@ async function startOf(base, start) {
   return sh;
 }
 
-module.exports = { FLAT, LAYOUT, BANKED, RUN, WIN, STARTS, EIGHT, fixture, build, runPieces, at, endOf, stations, spread, geomOf, rimAcross, builtBank, weight, centreOff, reds, redsLacked, outsideChanges, jointBreaks, shellOn, present, grab, widthStroke, startOf };
+module.exports = { FLAT, LAYOUT, BANKED, RUN, WIN, STARTS, EIGHT, fixture, build, runPieces, at, endOf, stations, spread, geomOf, rimAcross, builtBank, weight, centreOff, reds, redsLacked, outsideChanges, stepOf, jointBreaks, shellOn, present, grab, widthStroke, startOf };

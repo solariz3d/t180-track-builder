@@ -6,9 +6,14 @@
 // The road pieces `from`..`to` (a run, or one piece) are brought to one width, `value`, even from the run's first metre to its last:
 //   - THE WINDOW: the run [lo, hi], then a MARGIN at the value beyond each end (20 m, one knot span), then a RAMP back to the road as it was (30 m, the
 //     brush's smootherstep). The margin is there because settle (sculpt.js) carries a joint's slope into the next piece (value, then slope): without it the
-//     run's first span would still be ramping. Before the run, where the piece before has knots coarser than that, the window reaches back to its last knot
-//     span's control points (evenWindow, the carry side). At an open track's ends the window stops, and a run that ends at the head gives the head the value. On a
-//     closed lap a window over the start line is refused: every brush holds the lap's first two control points, so a level across it would leave a step.
+//     run's first span would still be ramping. THE WINDOW'S ENDS (D678, the packet's "Amended 17:4x" item 1): first the knots over the window's two reaches
+//     (the margin and the ramp, 50 m beyond each end of the run) are cut to spans of at most 3.75 m (refineEnds, document.js refineKnots, rounded once), so no
+//     control point the margin or the ramp needs has a support reaching past the window and is left as it was; the window is then taken again on the cut track.
+//     Outside the window the road is the same to within one stored step of each channel (a tenth of a millimetre in width, offset and height), not bit for bit:
+//     the cut spans' new control points are stored at the channel's step. Where the window reaches a piece the reaches did not cover (the carry side: the
+//     piece before has knots coarser than the cut, evenWindow), it reaches back to that piece's last knot span's control points, as before. At an open
+//     track's ends the window stops, and a run that ends at the head gives the head the value. On a closed lap a window over the start line is refused: every
+//     brush holds the lap's first two control points, so a level across it would leave a step.
 //   - ONE RIM HELD (hold 'left' or 'right'; a drag on one rim's handle holds the other): the held rim is laid where the road, as read from the window's ends, has
 //     it with its bumps taken out (its width and sideways offset eased between the window's ends; an end still in a taper the road had before, such as an Extend
 //     easing from the empty track's head, takes the other end's value: restOf; where the two ends still disagree, the road's own width changes across the window
@@ -20,7 +25,8 @@
 //   - THE CENTRE'S HEIGHT (h) moves in the plane of the road AS BUILT (adapter.js bankPlan's roll, not the bank channel: the plan re-rounds the bank's corners),
 //     so on a banked road a sideways move rises or falls with the bank; on the run the height is eased between the window's ends. h is fitted by least
 //     squares at every quarter metre, because its target is a product (the sideways move times the bank's tangent) that no control point value carries.
-//   - THE BANK is not touched (the call: kept as found), nor any other channel.
+//   - THE BANK is not levelled (the call: kept as found), nor any other channel: where the window's reaches are cut, their new control points carry the bank
+//     as it was, within one stored step.
 // Pure: a document in, a new document out. Refusals are CoreErrors by name, and nothing changes.
 'use strict';
 const D = require('./document.js');
@@ -29,10 +35,19 @@ const { toSegments, bankPlan } = require('./adapter.js');
 const PR = require('../geom/profile.js');
 
 const EVEN_RAMP_M = 30, EVEN_MARGIN_M = 20, EVEN_SNAP_M = 0.5, EVEN_MIN_M = 0.5, EVEN_MAX_M = 400;
+// THE WINDOW'S ENDS (D678, the packet's "Amended 17:4x" item 1): before it levels, Even cuts the knots over the window's two reaches to spans of at most this
+// (refineEnds), so no control point the margin, the ramp or the height's fit needs is left as it was because its support reached past the window. 3.75 m is the
+// ruling's: measured as a prototype, it brought the flat turn's exit margin from 13.28 m to within 0.0083 m of a value of 16, and the centre's height after a grab
+// near the window's end from 0.05 m off its target to 0.0006 m (lighthouse exo_memory/handback/p-d678-even-build-A_2026-11-27.md, section 4.4).
+const EVEN_END_SPAN_M = 3.75;
 const HOLDS = Object.freeze(['left', 'right', 'centre']);
 const FIT_STEP_M = 0.25;   // the least-squares fit's sample step (each knot span gets at least 4)
 
 const refuse = (code, words) => { throw new D.CoreError(code, `Even: ${words}. Nothing changed.`); };
+// every document Even makes is frozen ALL THE WAY DOWN, as sculpt.js freezes its own (D678, the 23:26Z order's item 2; the hand-back's 5.4): the segment caches
+// (sculpt.js pieceOffsets, rimReader below) are used only when every piece is frozen, and with the changed pieces left unfrozen every offset read converted the
+// whole lap again (an Even drag step 5.2 s on a 27.6 km lap)
+const freeze = (o) => { if (o && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); for (const k of Object.keys(o)) freeze(o[k]); } return o; };
 const isNum = (x) => typeof x === 'number' && Number.isFinite(x);
 /** 1 on [lo, hi], a smootherstep to 0 over `ramp` metres beyond each end. */
 const weight = (s, lo, hi, ramp) => (s >= lo && s <= hi ? 1 : ((d) => (d >= ramp ? 0 : 1 - SC.smootherstep(d / ramp)))(s < lo ? lo - s : s - hi));
@@ -52,8 +67,12 @@ const builtPhi = (doc, plan, p, sl) => (plan[p].fn ? plan[p].fn(sl) : D.channelA
  * builder makes it: the cross-section of the segment holding s (profile.js readAt, as app/core/zonegrab.js frameAt reads it), its rim on the held side, turned
  * by the built bank. side: +1 the left rim, -1 the right.
  */
+// the adapter's per-piece segment cache (toSegments `cache`, exact: test/core_segcache.test.js), under src/core/sculpt.js SEG_CACHE's rule: only a document frozen
+// all the way down. A drag reruns Even on the SAME base at every step, and the rim reader converted the whole lap three times a step (D678: 1.6 s of an 8.2 s
+// step on a 27.6 km lap; lighthouse exo_memory/handback/p-d678-even-build-A_2026-11-27.md, 5.2b); with it, a piece converted before is not converted again.
+const SEG_CACHE = new WeakMap();
 function rimReader(doc, side) {
-  const segs = toSegments(doc), plan = bankPlan(doc), off = SC.pieceOffsets(doc), byId = new Map();
+  const segs = toSegments(doc, doc.pieces.every(Object.isFrozen) ? { cache: SEG_CACHE } : {}), plan = bankPlan(doc), off = SC.pieceOffsets(doc), byId = new Map();
   for (const g of segs) { let a = byId.get(g.id); if (!a) byId.set(g.id, (a = { list: [], acc: 0 })); a.list.push({ g, s0: a.acc }); a.acc += g.length; }
   return (s) => {
     const at = pieceAt(doc, off, s); if (!at) throw new Error(`even: no road at ${s}`);
@@ -82,7 +101,7 @@ function levelTo(doc, targets, win) {
       }
       return { ctrl, changed };
     });
-    cur = Object.freeze(D.checkDoc({ ...cur, pieces: SC.settle(cur, ch, res).pieces }));
+    cur = freeze(D.checkDoc({ ...cur, pieces: SC.settle(cur, ch, res).pieces }));
   }
   return cur;
 }
@@ -173,11 +192,32 @@ function fitHeight(doc, target, win) {
  * Returns { doc, changed (piece indices), window { lo, hi, w0, w1 } (lap distance), value, hold, shiftAt (s -> the centre's move across the road, in its built plane, m) }.
  */
 function even(doc, { from, to, value, hold = 'centre', ramp = EVEN_RAMP_M, margin = EVEN_MARGIN_M } = {}) {
-  const { off, L, lo, hi, win } = evenWindow(doc, { from, to, ramp, margin }), { w0, w1 } = win;
+  const W0 = evenWindow(doc, { from, to, ramp, margin }), { off, L, lo, hi } = W0;   // the refusals, read on the track as given (as the shell reads them when a drag opens)
   if (!isNum(value)) refuse('EVEN_VALUE', `the width must be a number of metres, got ${value}`);
   if (value < EVEN_MIN_M || value > EVEN_MAX_M) refuse('EVEN_VALUE', `the width must be between ${EVEN_MIN_M} and ${EVEN_MAX_M} m, got ${value}`);
   if (!HOLDS.includes(hold)) refuse('EVEN_HOLD', `hold is one of ${HOLDS.join(', ')}, got ${hold}`);
-  return evenIn(doc, { off, L, lo, hi, win, w0, w1, value, hold });
+  // the knots over the window's reaches cut first, then the window taken again on the cut track: with the piece before the run cut, its last span no longer
+  // carries a slope into the run, so the carry side (evenWindow) has nothing to reach back for and the window is the 20 m margin and the 30 m ramp
+  const cut = refineEnds(doc, off, L, lo, hi, margin + ramp);
+  const W = cut === doc ? W0 : evenWindow(cut, { from, to, ramp, margin });
+  return evenIn(cut, { off: W.off, L: W.L, lo: W.lo, hi: W.hi, win: W.win, w0: W.win.w0, w1: W.win.w1, value, hold, given: doc });
+}
+
+/**
+ * The window's two reaches, [lo − reach, lo] and [hi, hi + reach] clipped to the road, with every road piece's knots there cut to spans of at most EVEN_END_SPAN_M
+ * (document.js refineKnots with roundOnce: exact insertion, the new control points rounded once to each channel's step at the end, so the road moves by at most
+ * half a stored step; rounding after each knot carried the bank past one step on a banked turn). Returns `doc` itself when no span needed cutting.
+ */
+function refineEnds(doc, off, L, lo, hi, reach) {
+  let out = doc;
+  for (const [a, b] of [[Math.max(0, lo - reach), lo], [hi, Math.min(L, hi + reach)]]) {
+    doc.pieces.forEach((P, p) => {
+      if (P.type !== 'road') return;
+      const x = Math.max(0, a - off[p]), y = Math.min(P.length, b - off[p]);
+      if (y > x + 1e-6) out = D.refineKnots(out, P.id, x, y, EVEN_END_SPAN_M, { roundOnce: true }).doc;
+    });
+  }
+  return out;
 }
 
 /**
@@ -221,8 +261,8 @@ function evenWindow(doc, { from, to, ramp = EVEN_RAMP_M, margin = EVEN_MARGIN_M 
   return { off, L, lo, hi, win };
 }
 
-/** The level itself, on a window evenWindow gave. */
-function evenIn(doc, { off, L, lo, hi, win, w0, w1, value, hold }) {
+/** The level itself, on a window evenWindow gave. `given`: the track Even was handed, when `doc` is it with its window's reaches cut (refineEnds); `changed` is counted against it. */
+function evenIn(doc, { off, L, lo, hi, win, w0, w1, value, hold, given = doc }) {
   const fh = easeOf(doc, off, 'h', win), fl = easeOf(doc, off, 'l', win);
   const d1 = levelTo(doc, { w: value }, win);   // the width at the value, l and h as they were
   // l: the held rim where the road without bumps has it (C1b), or eased ('centre')
@@ -253,7 +293,7 @@ function evenIn(doc, { off, L, lo, hi, win, w0, w1, value, hold }) {
     }
     resL.push({ ctrl: l, changed });
   });
-  const c1 = Object.freeze(D.checkDoc({ ...d1, pieces: SC.settle(d1, 'l', resL).pieces }));
+  const c1 = freeze(D.checkDoc({ ...d1, pieces: SC.settle(d1, 'l', resL).pieces }));
   // h: in the plane of the road as built, fitted (Alt F)
   const plan = bankPlan(doc), offC = SC.pieceOffsets(c1);
   const phiAt = (s) => { const a = pieceAt(doc, off, s); return builtPhi(doc, plan, a.p, a.sl); };
@@ -261,8 +301,8 @@ function evenIn(doc, { off, L, lo, hi, win, w0, w1, value, hold }) {
     const g = weight(s, win.lo, win.hi, win.ramp), l = valueAt(c1, offC, 'l', s), hs = valueAt(doc, off, 'h', s), ls = valueAt(doc, off, 'l', s);
     return hs + g * (fh(s) - hs) + Math.tan(phiAt(s)) * ((1 - g) * (l - ls) + g * (l - fl(s)));
   };
-  const out = Object.freeze(D.checkDoc({ ...c1, pieces: SC.settle(c1, 'h', fitHeight(c1, target, win)).pieces }));
-  const changed = []; out.pieces.forEach((P, p) => { if (P !== doc.pieces[p]) changed.push(p); });
+  const out = freeze(D.checkDoc({ ...c1, pieces: SC.settle(c1, 'h', fitHeight(c1, target, win)).pieces }));
+  const changed = []; out.pieces.forEach((P, p) => { if (P !== given.pieces[p]) changed.push(p); });
   return { doc: out, changed, window: Object.freeze({ lo, hi, w0, w1 }), value, hold, shiftAt: shiftOf(doc, out, plan) };
 }
 
@@ -275,4 +315,4 @@ function shiftOf(before, after, plan = bankPlan(before)) {
   return (s) => { const a = pieceAt(before, off, s); if (!a) throw new Error(`even: no road at ${s}`); return (valueAt(after, offA, 'l', s) - valueAt(before, off, 'l', s)) / Math.cos(builtPhi(before, plan, a.p, a.sl)); };
 }
 
-module.exports = { even, evenWindow, shiftOf, HOLDS, EVEN_RAMP_M, EVEN_MARGIN_M, EVEN_SNAP_M, EVEN_MIN_M, EVEN_MAX_M, _internal: { weight, rimReader, levelTo, fitHeight, builtPhi } };
+module.exports = { even, evenWindow, shiftOf, HOLDS, EVEN_RAMP_M, EVEN_MARGIN_M, EVEN_SNAP_M, EVEN_MIN_M, EVEN_MAX_M, EVEN_END_SPAN_M, _internal: { weight, rimReader, levelTo, fitHeight, builtPhi, refineEnds } };

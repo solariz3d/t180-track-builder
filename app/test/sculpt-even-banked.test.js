@@ -33,9 +33,14 @@ for (const fx of ['Bhold', 'B-', 'B-0']) {
       assert.ok(held <= 0.01, `K2: the held edge is ${held} m from the untouched road's`);
       const c = F.centreOff(d, st0);
       assert.ok(c.off <= 0.01, `K3: the centre is ${c.off} m off its target at ${c.at}`);
-      assert.deepEqual(F.outsideChanges(d, st0), [], 'K4: nothing outside the window');
-      d.pieces.forEach((P, i) => { if (P.type === 'road') assert.deepEqual(P.channels.phi, st0.pieces[i].channels.phi, `K5: piece ${i}'s bank`); });
-      for (const s of F.stations(0, F.endOf(st0))) assert.ok(Object.is(F.builtBank(d, s), F.builtBank(st0, s)), `K5: the bank as built at ${s}`);
+      // K4 and K5 AMENDED (D678, the packet's "Amended 17:4x" item 1): within one stored step, no longer bit for bit. Even cuts the knots over the window's reaches,
+      // so the cut spans' new points (the bank's among them) are stored at each channel's step (test/even_fixtures.js outsideChanges)
+      assert.deepEqual(F.outsideChanges(d, st0).slice(0, 5), [], 'K4: outside the window, nothing past one stored step');
+      const step = F.stepOf('phi') * (1 + 1e-9);
+      for (const s of F.stations(0, F.endOf(st0))) {
+        assert.ok(Math.abs(F.at(d, 'phi', s) - F.at(st0, 'phi', s)) <= step, `K5: the bank channel at ${s}`);
+        assert.ok(Math.abs(F.builtBank(d, s) - F.builtBank(st0, s)) <= step, `K5: the bank as built at ${s}`);
+      }
       const w = F.spread(S.map((s) => F.at(d, 'w', s)));
       assert.ok(w <= 0.01, `K6: width spread ${w}`);
       if (start === 'U') assert.doesNotMatch(msg(sh), LEAVES, 'P4: no sentence where the road holds');
@@ -61,7 +66,10 @@ for (const fx of ['B+', 'B+0']) {
     const a = centreLoads(base), b = centreLoads(d), hit = [...b].filter(([s, v]) => s >= F.WIN.w0 && s <= F.WIN.w1 && v < 0 && a.get(s) >= 0);
     assert.ok(hit.length > 0, 'the fixture has a red the untouched road lacks (probe 3)');
     const [at] = hit.reduce((x, y) => (y[1] < x[1] ? y : x));
-    const middle = { ...base, pieces: base.pieces.map((P, i) => (d.pieces[i] === P || P.type !== 'road' ? P : { ...P, channels: { ...P.channels, l: d.pieces[i].channels.l, h: d.pieces[i].channels.h } })) };
+    // AMENDED BY NAME (D678, the packet's "Amended 17:4x" item 1): Even now cuts the knots over the window's reaches, so the old road's piece is cut to the level's
+    // knots first (document.js insertKnotsRoundOnce: the road as it was, within half a stored step) and then takes the new middle's l and h
+    const cutTo = (P, Q) => D.insertKnotsRoundOnce(P, Q.knots.filter((k) => !P.knots.includes(k)));
+    const middle = { ...base, pieces: base.pieces.map((P, i) => (d.pieces[i] === P || P.type !== 'road' ? P : { ...cutTo(P, d.pieces[i]), channels: { ...cutTo(P, d.pieces[i]).channels, l: d.pieces[i].channels.l, h: d.pieces[i].channels.h } })) };
     const line = centreLoads(middle).get(at), old = a.get(at), shift = Math.abs(F.at(d, 'l', at) - F.at(base, 'l', at)) / Math.cos(F.builtBank(base, at));
     assert.match(m, LEAVES, `P2: the sentence: ${m}`);
     for (const fig of [km(at), `${shift.toFixed(1)} m`, g(line), g(old)]) assert.ok(m.includes(fig), `P2: "${fig}" in: ${m}`);

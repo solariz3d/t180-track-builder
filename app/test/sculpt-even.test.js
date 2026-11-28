@@ -34,7 +34,8 @@ for (const start of ['T1', 'T2b']) {
     assert.ok(outer <= 0.01, `F2: outer edge spread ${outer}`);
     const inner = Math.max(...S.map((s) => Math.abs(F.rimAcross(d, s, 'left') - F.rimAcross(base, s, 'left'))));
     assert.ok(inner <= 0.01, `F3: the inner edge is ${inner} m from the untouched road's`);
-    assert.deepEqual(F.outsideChanges(d, st0), [], 'F4: nothing outside the window');
+    // F4 AMENDED (D678, the packet's "Amended 17:4x" item 1): outside the window every channel within one stored step, no longer bit for bit (test/even_fixtures.js outsideChanges)
+    assert.deepEqual(F.outsideChanges(d, st0).slice(0, 5), [], 'F4: outside the window, nothing past one stored step');
     assert.doesNotThrow(() => D.checkDoc(d), 'F5: checkDoc');
     assert.deepEqual(F.jointBreaks(d), [], 'F5: no step at the joints in w, l or h');
     const h = F.spread(S.map((s) => F.at(d, 'h', s)));
@@ -116,4 +117,32 @@ test('Even refuses by name and changes nothing: no run selected, a drag on the r
   sj.selectPiece(fl - 1); sj.beginSculpt({ tool: 'even', hold: 'left' });
   assert.match(msg(sj), /EVEN_JUMP/); assert.equal(sj.getState().brush, null); assert.equal(F.present(sj), j);
   sj.evenRun({ value: 16 }); assert.match(msg(sj), /EVEN_JUMP/); assert.equal(F.present(sj), j);
+});
+
+// B2 (D678, the 23:26Z order's item 2; lighthouse exo_memory/handback/p-d678-even-build-A_2026-11-27.md, 5.2b): the guard on Even's step reads only the stations
+// inside the level's window, each against every station of the lap. A straight laid back over the first at 1.5° (the core's own pieces, as
+// core-pass-clearance.test.js lays it), banked 0.15 rad in its middle, then widened from 31 m by Even: kept on one edge, the other rises toward the pass below
+// and is refused; kept on the other, it moves. bcedaaf's whole read gave the same verdicts on these cases and their mirrors (the hand-back's 5.3).
+test('B2: an Even step that brings the road too close to another pass inside its window is refused by name, and the drag stays at its last good step', async () => {
+  const { extendTurnBy } = require('../../src/core/turnby.js');
+  let d = extend(D.createDoc('crossing'), { length: 200, family: 'bowl' });
+  d = extendTurnBy(d, { length: 240, climbDeg: 1.5 }, (135 * Math.PI) / 180);
+  d = extendTurnBy(d, { length: 240, climbDeg: -1.5 }, (135 * Math.PI) / 180);
+  d = extend(d, { length: 300 });
+  d = D.refineKnots(d, d.pieces[3].id, 0, d.pieces[3].length, 20).doc;
+  d = D.checkDoc({ ...d, pieces: d.pieces.map((P, i) => (i === 3 ? { ...P, channels: { ...P.channels, phi: P.channels.phi.map((x, k, c) => (k < 2 || k >= c.length - 2 ? x : 0.15)) } } : P)) });
+  for (const [hold, refused] of [['left', true], ['right', false]]) {
+    const sh = await F.shellOn(d);
+    sh.selectPiece(3); sh.beginSculpt({ tool: 'even', hold });
+    assert.ok(sh.getState().brush && sh.getState().brush.mode === 'even', `${hold}: the drag opened: ${msg(sh)}`);
+    sh.sculptTo(4);
+    if (refused) {
+      assert.match(msg(sh), /^PASS_CLEARANCE: too close to another pass of the road: /, `${hold}: ${msg(sh)}`);
+      assert.equal(F.present(sh), d, `${hold}: the drag stays at its last good step`);
+    } else {
+      assert.doesNotMatch(msg(sh), /PASS_CLEARANCE/, `${hold}: control, the other edge kept is laid`);
+      assert.notEqual(F.present(sh), d, `${hold}: control, the step was laid`);
+    }
+    sh.endSculpt();
+  }
 });

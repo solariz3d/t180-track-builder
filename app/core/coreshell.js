@@ -477,7 +477,10 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   const CLEAR_SAME_M = 4, CLEAR_NEAR_M = 2, CLEAR_WORSE_M = 0.01;
   const clearancePath = (res, closed) => { const p0 = spawnPath(res.segments, closed, res.start); return res.lift ? res.lift(p0) : p0; };
   const kmAt = (s) => `${(s / 1000).toFixed(2)} km`;
-  function passClearanceGuard(before, after, res) {
+  // WIN (D678, Even's step only; lighthouse exo_memory/handback/p-d678-even-build-A_2026-11-27.md, 5.2b): the level's window { w0, w1 } (lap distance). Only the stations
+  // inside it are read, each against every station of the lap: outside it Even moves nothing past one stored step (0.0123 mm on a 27.6 km lap), and reading from the
+  // window to the lap's end cost 4 s a step there. commit and the level-end drag pass none, and read as before.
+  function passClearanceGuard(before, after, res, win = null) {
     if (!res.segments.length) return;
     const PCL = require('../../src/validate/passclear.js'), A = require('../../src/export/apron.js');
     const apronOf = (x) => (x.edgeApronM === undefined ? A.APRON_WIDTH_M : x.edgeApronM);
@@ -490,9 +493,15 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       while (from < m && A0[from].s === B0[from].s && A0[from].pos[0] === B0[from].pos[0] && A0[from].pos[1] === B0[from].pos[1] && A0[from].pos[2] === B0[from].pos[2]) from++;
       if (from >= B0.length) return;   // no station of the new track moved: nothing to read
     }
-    const now2 = PCL.passClearance(pa, res.segments, { apronM: apronOf(after), from });
+    let to = pa.samples.length - 1;
+    if (win) {
+      const S = pa.samples; while (from < S.length && S[from].s < win.w0 - 1e-9) from++;
+      while (to >= 0 && S[to].s > win.w1 + 1e-9) to--;
+      if (from > to) return;   // no station of the window: nothing to read
+    }
+    const now2 = PCL.passClearance(pa, res.segments, { apronM: apronOf(after), from, ...(win ? { to } : {}) });
     if (!now2.length) return;
-    const was = pb ? PCL.passClearance(pb, segsB, { apronM: apronOf(before), from: Math.min(from, pb.samples.length) }) : [];
+    const was = pb ? PCL.passClearance(pb, segsB, { apronM: apronOf(before), from: Math.min(from, pb.samples.length), ...(win ? { to: Math.min(to, pb.samples.length - 1) } : {}) }) : [];
     const same = (f, b) => f.shortM <= b.shortM + CLEAR_WORSE_M && ((Math.abs(f.s - b.s) <= CLEAR_SAME_M && Math.abs(f.otherS - b.otherS) <= CLEAR_SAME_M) || Math.hypot(f.at[0] - b.at[0], f.at[1] - b.at[1], f.at[2] - b.at[2]) <= CLEAR_NEAR_M);
     const fresh = now2.filter((f) => !was.some((b) => same(f, b)));
     if (!fresh.length) return;
@@ -979,7 +988,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return attempt(() => {
         const t0 = now(), res = brushed(b, delta), d = res.doc, r = resolvedOf(d), ms = now() - t0;
         // the exact, cheap guard at every step: nothing the path is made of may have moved (the drag stays at its last good step)
-        if (b.mode === 'even') passClearanceGuard(b.base, d, r.resolved);   // Even moves the road sideways: a new break of the pass clearance is refused at the step (D623), as the level's end drag is
+        if (b.mode === 'even') passClearanceGuard(b.base, d, r.resolved, res.even && res.even.window);   // Even moves the road sideways: a new break of the pass clearance is refused at the step (D623), as the level's end drag is
         if (b.sculpt) { const moved = CL.routeMovedDetail(b.base, b.baseResolved.segments, d, r.resolved.segments, b.baseResolved.start, r.resolved.start); if (moved) throw new D.CoreError('SCULPT_MOVES_CENTRELINE', `Sculpt can't do that: ${CL.plainWhy(moved)}. The drag stays at its last good step.`); }   // (F3: the reason in plain words, not the internal field)
         // the radius the brush really used (the core's brush widens a narrow one; always shown), and any note of its
         // the radius really used: the core's brush reports it as radiusUsed (sculpt.js), shown whenever it widened

@@ -10,11 +10,14 @@ All notable changes to this project are recorded here. The format follows
   brought a run to one width. Pick Even under "other sculpt tool", select a run (or one piece) and drag one edge's width handle: the run goes to that
   width in 0.5 m steps and the other edge is laid where Even reads the road's own edge (below); or type the width in "even to m" (taken as typed)
   and pick the edge Even lays (or the middle); "◀ before" and "after ▶" fill in the road's width either side of the run. It is one undo step. Beyond
-  each end of the run the width is back to the road within 50 m (it reaches further back where the piece before has coarser knots, whose last
-  span's slope would otherwise carry into the run); nothing outside that stretch changes, and the bank is kept as found. The plan is 20 m at the
-  value and a 30 m ease, but a control point whose reach crosses the stretch's end is left as it was, so on a piece with coarse knots the width
-  starts to ease inside those 20 m (on a 150 m exit piece, 13.28 m at the 20 m mark for a value of 16), and the kept edge and the middle's height
-  miss by up to 0.17 m and 0.05 m there. The middle moves sideways to put the kept edge where Even lays it, and on a banked road it rises or
+  each end of the run the width stays at the value for 20 m and eases back to the road over the next 30 m; beyond that stretch the road's width,
+  line and height are as they were to a tenth of a millimetre, and the bank is kept as found. To hold those 20 m, Even first cuts the knots over the stretch's two ends to
+  3.75 m spans (with coarse knots a control point reaching past the stretch's end was left as it was, and the width started to ease inside the
+  20 m: 13.28 m at the 20 m mark on a 150 m exit piece, for a value of 16). The cut spans' new control points are stored at each channel's step,
+  so outside the stretch the road is no longer the same bit for bit, but nothing moves by more than one stored step (on a 27.6 km closed lap the
+  built road moved 0.0123 mm at most). One exception in how the road is drawn: a 2 m stretch whose two ends had the same cross-section with a
+  bump between them (a grab's peak) can be redrawn as a chord, 1.03 cm narrower at the peak (measured once, 5 m outside the stretch). The 20 m are at the value to within 0.01 m, except where the road beyond is far from the value: a 31 m
+  lead levelled to 16 m is 0.03 m off over the outer metre. The middle moves sideways to put the kept edge where Even lays it, and on a banked road it rises or
   falls in the plane of the road as built, so the edge stays on the surface. **The kept edge can move, by metres.** Even reads the road's own width and offset at the stretch's two
   ends (an end still in a taper takes the other end's reading) and lays the kept edge on the road between them, bumps taken out; where the two ends
   disagree it keeps the edge where it is now, to within about 0.08 m. That reading is wrong where a stretch end sits on a grab, where a grab
@@ -24,9 +27,14 @@ All notable changes to this project are recorded here. The format follows
   middle's line leaves the road where the old one held, the message says where, how far the middle moved, and the load before and after, in the
   same words as before; it says so after the release, because that check now runs off the page in the checker's worker and reads the loads only
   over the stretch (on a 27.6 km closed lap the release had waited 33 s for it; now it returns in milliseconds and the words follow about 23 s
-  later). Refused by name, nothing changed: no run selected, a jump within reach, a tube, a
+  later). A step of Even's drag on that lap took 8.2 s; the check that the road does not come too close under another pass now reads only the
+  stations inside the stretch (each still against every station of the lap; `src/validate/passclear.js` `passClearance` takes `to` beside `from`),
+  and Even's documents are frozen all the way down as the rest of the core's are, so the segment caches hold and Even no longer converts the whole
+  lap at every offset it reads. Refused by name, nothing changed: no run selected, a jump within reach, a tube, a
   right side with its own width, a closed lap's start line within reach, a width under 0.5 m or over 400 m. The grab is unchanged. In the core: `src/core/even.js` (`even`,
-  `evenWindow`, `shiftOf`); `src/core/sculpt.js` now exports `settle` and `isLinked`; `src/validate/index.js` exports `linesBetween` (the load lines
+  `evenWindow`, `shiftOf`); `src/core/document.js` `refineKnots` takes `{ roundOnce }`, which inserts a span's knots exactly and rounds the new
+  control points once at the end (`insertKnotsRoundOnce`; rounding after each knot carried a banked road's bank past one stored step, and
+  Sculpt's sharp brush still rounds after each knot, as before); `src/core/sculpt.js` now exports `settle` and `isLinked`; `src/validate/index.js` exports `linesBetween` (the load lines
   between two lap distances, each the one a whole check makes there).
 - **A road's right side can have its own width (D677 (b)).** Type "right width m" in the panel (beside "width m"): the right side takes that width and
   the left side and the driven line stay exactly where they were, so a road can widen on one side only, as some real tracks do (one widens 3.5 m on
