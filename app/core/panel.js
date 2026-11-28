@@ -791,8 +791,8 @@ function mount(root, shell, mountOpts = {}) {
   const MORE_TOOLS = Object.freeze({
     wall: Object.freeze({ key: 'wall', label: 'Wall rise', tool: 'wall', channel: 'r', axis: 'y', hint: 'drag up or down to raise or lower the wall here; the road itself does not move' }),
     sweep: Object.freeze({ key: 'sweep', label: 'Tube sweep', tool: 'sweep', channel: 't', axis: 'y', hint: 'drag up or down to close the tube more or open it here; the road itself does not move' }),
-    // EVEN (D678): the selected run to one width, from its width handle (the far edge laid where Even reads the road's own edge, so it can move) or typed under "Even ▾"; a drag on the road is refused by name (app/core/coreshell.js)
-    even: Object.freeze({ key: 'even', label: 'Even', tool: 'even', channel: 'w', axis: 'y', hint: 'select a run (Shift-click), then drag one edge\'s width handle: the whole run comes to one width in 0.5 m steps, and the other edge is laid where Even reads the road\'s own edge from the stretch\'s ends, so it can move; or type the width under Even ▾' }),
+    // EVEN (D678): the selected run to one width, from its width handle (the far edge put back where the road had it, read from the stretch's ends where they support it; the message says how far it moved) or typed under "Even ▾"; a drag on the road is refused by name (app/core/coreshell.js)
+    even: Object.freeze({ key: 'even', label: 'Even', tool: 'even', channel: 'w', axis: 'y', hint: 'select a run (Shift-click), then drag one edge\'s width handle: the whole run comes to one width in 0.5 m steps, and the other edge is put back where the road had it, read from the stretch\'s ends (where Even cannot read them, that edge is kept where it is), and the message says which, and how far it moved; or type the width under Even ▾' }),
   });
   const EDGE_SIDE = Object.freeze({ edge: 'e', 'edge-right': 'er', 'edge-start': 's' });
   const SMOOTH_CH = Object.freeze(['kh', 'kv', 'height', 'lateral', 'phi', 'w', 'c', 'e', 'er', 's', 'r', 't']);
@@ -1224,7 +1224,7 @@ function mount(root, shell, mountOpts = {}) {
   // EVEN (D678), beside Bank the bend: the selected run brought to one width, typed (exact) with which edge Even lays, or picked from the road just before or just after the run;
   // one undo step. The drag is the run's width handle with the Even tool (under "other tool"), on a 0.5 m step, the far edge staying
   const evenW = num('', 0.5, 'even to, m: the width the selected run is brought to, from its first metre to its last');
-  const evenKeep = el('select', { 'aria-label': 'even keeps', title: 'which edge Even lays where it reads the road\'s own edge from the stretch\'s ends while the width changes (that edge can move); the middle: the middle is laid smooth between the stretch\'s ends, and both edges move' });
+  const evenKeep = el('select', { 'aria-label': 'even keeps', title: 'which edge Even puts back where the road had it, read from the stretch\'s ends, while the width changes (where it cannot read them, that edge is kept where it is; the message says which, and how far that edge moved); the middle: the middle is laid smooth between the stretch\'s ends, and both edges move' });
   evenKeep.replaceChildren(new win.Option('the middle', 'centre'), new win.Option('left edge', 'left'), new win.Option('right edge', 'right')); evenKeep.value = 'centre';
   const evenPick = (which) => () => { const p = shell.evenPicks(); if (!p) return shell.evenRun({});   /* no run selected: the shell says so */ const v = p[which]; if (Number.isFinite(v)) evenW.value = String(+v.toFixed(2)); };
   const evenBefore = el('button', { text: '◀ before', title: 'the width of the road just before the selected run', onclick: evenPick('before') });

@@ -31,12 +31,14 @@ const PCLT = ['test/passclear.test.js'], CORE = ['test/core_even.test.js'], SHEL
 
 const MUTANTS = [
   // the held rim and the centre
-  { id: 'H1 the held rim\'s reference eases from a window end still in a taper (the registered C1b rule, U4)', pattern: 'F1-F7: from T1', files: SHELL, edits: [[EV, 'if (ma === mb) return easeOf(doc, off, ch, win);', 'return easeOf(doc, off, ch, win);']] },
+  // H1 AMENDED BY NAME (L271): A0's restOf is gone; the same fault on A1's line (the end at rest no longer given to the whole window)
+  { id: 'H1 the held rim\'s reference eases from a window end still in a taper (the registered C1b rule, U4)', pattern: 'F1-F7: from T1', files: SHELL, edits: [[EV, 'if (ok) { const v = r.v; f = () => v; }', 'if (ok) f = easeOf(doc, off, ch, win);']] },
   { id: 'H2 the held rim is read on the other side of the section', pattern: 'rim held|K2 and K3', edits: [[EV, 'PR.offsetAt(X, side > 0 ? E[1] : E[0])', 'PR.offsetAt(X, side > 0 ? E[0] : E[1])']] },
   { id: 'H3 the held rim is read unturned by the bank (flat-road arithmetic on a banked road)', pattern: 'K2 and K3', edits: [[EV, 'return o[0] * Math.cos(phi) - o[1] * Math.sin(phi);', 'return o[0];']] },
   { id: 'H4 the centre does not rise or fall with the bank as it moves sideways', pattern: 'K2 and K3', edits: [[EV, '+ Math.tan(phiAt(s)) * (', '+ 0 * (']] },
   { id: 'H5 the centre moves in the plane of the bank channel, not the road as built (call 10)', pattern: 'K2 and K3', edits: [[EV, "const phiAt = (s) => { const a = pieceAt(doc, off, s); return builtPhi(doc, plan, a.p, a.sl); };", "const phiAt = (s) => { const a = pieceAt(doc, off, s); return D.channelAt(doc.pieces[a.p], 'phi', a.sl).v; };"]] },
-  { id: 'H9 the held rim is read back from the window\'s ends even where they disagree (the road\'s own width changing across the window)', pattern: 'changes across', edits: [[EV, 'one = [rw, rl].every((f) => Math.abs(f(w0) - f(w1)) <= EVEN_AGREE_M);', 'one = true;']] },
+  // H9 AMENDED BY NAME (L271): A0's agree rule is gone; the same fault on A1's line (two ends at rest read back however far apart they are)
+  { id: 'H9 the held rim is read back from the window\'s ends even where they disagree (the road\'s own width changing across the window)', pattern: 'A1-1|A1-4', edits: [[EV, 'if (Math.abs(a.v - b.v) <= EVEN_AGREE_M) f = easeOf(doc, off, ch, win);', 'f = easeOf(doc, off, ch, win);']] },
   { id: 'H8 the centre is not moved to hold the rim (hold is read as centre)', pattern: 'rim held', edits: [[EV, "const side = hold === 'left' ? 1 : hold === 'right' ? -1 : 0;", 'const side = 0;']] },
   // the window and the width
   { id: 'W1 no margin at the value beyond the run (its first span still ramping)', pattern: 'first metre|one piece', edits: [[EV, 'let vlo = lo - margin, w0', 'let vlo = lo, w0'], [EV, 'const win = { lo: vlo, hi: hi + margin, ramp, w0, w1 };', 'const win = { lo: vlo, hi, ramp, w0, w1 };']] },
@@ -45,11 +47,11 @@ const MUTANTS = [
   { id: 'W3 the window is not stopped at the open end', pattern: 'open end', edits: [[EV, 'w0 = Math.max(0, w0); w1 = Math.min(L, w1);', '']] },
   { id: 'W4 the bank is levelled too', pattern: 'K5', edits: [[EV, 'const d1 = levelTo(doc, { w: value }, win);', 'const d1 = levelTo(doc, { w: value, phi: 0 }, win);']] },
   // the window's ends (D678, the packet's "Amended 17:4x" item 1; the hand-back's section 5.1): the knots over the reaches cut to 3.75 m, rounded once
-  { id: 'X1m the knots over the window\'s reaches are not cut', pattern: 'X1|X3', edits: [[EV, 'const cut = refineEnds(doc, off, L, lo, hi, margin + ramp);', 'const cut = doc;']] },
+  { id: 'X1m the knots over the window\'s reaches are not cut', pattern: 'X1|X3', edits: [[EV, 'const cut0 = refineEnds(doc, off, L, lo, hi, margin + ramp), cut = cut0 === doc ? doc : freeze(cut0);', 'const cut0 = doc, cut = doc;']] },   // AMENDED BY NAME (L271: item 2 moved the line into cutOf)
   { id: 'X2m the reaches are cut to 7.5 m, not 3.75', pattern: 'X1|X3', edits: [[EV, 'const EVEN_END_SPAN_M = 3.75;', 'const EVEN_END_SPAN_M = 7.5;']] },
   { id: 'X3m the near reach is not cut', pattern: 'X1', edits: [[EV, 'for (const [a, b] of [[Math.max(0, lo - reach), lo], [hi, Math.min(L, hi + reach)]])', 'for (const [a, b] of [[hi, Math.min(L, hi + reach)]])']] },
   { id: 'X4m the far reach is not cut', pattern: 'X1', edits: [[EV, 'for (const [a, b] of [[Math.max(0, lo - reach), lo], [hi, Math.min(L, hi + reach)]])', 'for (const [a, b] of [[Math.max(0, lo - reach), lo]])']] },
-  { id: 'X5m the window is not taken again on the cut track (the carry side still reaches back)', pattern: 'coarse knots', edits: [[EV, 'const W = cut === doc ? W0 : evenWindow(cut, { from, to, ramp, margin });', 'const W = W0;']] },
+  { id: 'X5m the window is not taken again on the cut track (the carry side still reaches back)', pattern: 'coarse knots', edits: [[EV, 'W: cut === doc ? W0 : evenWindow(cut, { from, to, ramp, margin })', 'W: W0']] },   // AMENDED BY NAME (L271: item 2 moved the line into cutOf)
   { id: 'X6m Even does not ask for one rounding (each knot rounds its new points)', pattern: 'X1', edits: [[EV, 'EVEN_END_SPAN_M, { roundOnce: true }).doc', 'EVEN_END_SPAN_M).doc']] },
   { id: 'X7m refineKnots ignores roundOnce', pattern: 'roundOnce', files: KNOTS, edits: [[DOC, 'pieces[i] = roundOnce ? insertKnotsRoundOnce(P, add) : insertKnots(P, add);', 'pieces[i] = insertKnots(P, add);']] },
   { id: 'X8m the round-once insertion leaves its new points unrounded', pattern: 'roundOnce', files: KNOTS, edits: [[DOC, 'kept = [...kept.slice(0, k - 2), false, false, false, ...kept.slice(k)];', 'kept = [...kept.slice(0, k - 2), true, true, true, ...kept.slice(k)];']] },
@@ -61,6 +63,24 @@ const MUTANTS = [
   { id: 'B2m the guard on Even\'s step reads only the window\'s first station', pattern: 'B2', files: SHELL, edits: [[CS, '      while (to >= 0 && S[to].s > win.w1 + 1e-9) to--;', '      to = from;']] },
   { id: 'B3m the guard on Even\'s step starts its read at the window\'s end', pattern: 'B2', files: SHELL, edits: [[CS, 'while (from < S.length && S[from].s < win.w0 - 1e-9) from++;', 'while (from < S.length && S[from].s < win.w1 - 1e-9) from++;']] },
   { id: 'B4m Even\'s result is frozen shallow again (its changed pieces left unfrozen, so every offset read converts the whole lap)', pattern: 'B4', edits: [[EV, 'const out = freeze(D.checkDoc({ ...c1,', 'const out = Object.freeze(D.checkDoc({ ...c1,']] },
+  // L271 item 2: the guard once, at the release (G1), and the reaches cut once per drag (C1); each anchor occurs once in its file (checked when applied)
+  { id: "G1m the pass-clearance guard runs on Even's step again", pattern: 'G1', files: SHELL, edits: [[CS, "        // Even's pass clearance (D623) is read once, at the release", "        if (b.mode === 'even') passClearanceGuard(b.base, d, r.resolved, res.even && res.even.window); // Even's pass clearance (D623) is read once, at the release"]] },
+  { id: "G2m Even's release runs no pass-clearance guard", pattern: 'G1|B2', files: SHELL, edits: [[CS, 'try { passClearanceGuard(b.base, doc(), st.resolved, b.evenRes.window, b.evenBaseResolved); }', 'try { }']] },
+  { id: "G3m Even's release measures the road against itself (the dragged road), not the road before the drag", pattern: 'G1|B2', files: SHELL, edits: [[CS, ', b.evenRes.window, b.evenBaseResolved); }', ', b.evenRes.window); }']] },
+  { id: 'G4m a refused release keeps the dragged road', pattern: 'G1|B2', files: SHELL, edits: [[CS, 'return set({ history: b.baseHistory, ...resolvedOf(b.baseHistory.present), brush: null, message: e.message });', 'return set({ history: D.endDrag(st.history), brush: null, message: e.message });']] },
+  { id: 'C1m the cut track is not kept (every step cuts again)', pattern: 'C1', files: CORE, edits: [[EV, 'const keep = Object.isFrozen(doc) && Array.isArray(doc.pieces) && doc.pieces.every(frozenDown);', 'const keep = false;']] },
+  { id: 'C2m the cut is kept per document, whatever the run', pattern: 'C1', files: CORE, edits: [[EV, 'const key = `${from}|${to}|${ramp}|${margin}`, byDoc = CUT_MEMO.get(doc);', 'const key = `${ramp}|${margin}`, byDoc = CUT_MEMO.get(doc);']] },
+  // L271: A1's reading, its fallback A1B (the keeper's call), the kept edge's move and the banked claim, in the core and the words
+  { id: 'A1m1 an end is tested at 10 m only (a grab just beyond it reads as at rest)', pattern: 'A1-6', edits: [[EV, 'REST_AT_M = Object.freeze([10, 20, 30]);', 'REST_AT_M = Object.freeze([10]);']] },
+  { id: 'A1m2 an end with no road beyond it reads as at rest', pattern: 'A1-6', edits: [[EV, "return { kind: n ? 'rest' : 'edge', v };", "return { kind: 'rest', v };"]] },
+  { id: 'A1m3 the other end is not asked to head toward the end at rest (or match it, at the track\'s start)', pattern: 'A1-1|A1-3', edits: [[EV, "const ok = o.kind === 'edge' ? Math.abs(o.v - r.v) <= EVEN_AGREE_M : Math.abs(inward - r.v) <= Math.abs(o.v - r.v) + REST_M;", 'const ok = true;']] },
+  { id: 'A1m6 the fallback \'keep\' lays nothing (the edge moves with the width)', pattern: 'A1-3|A1-4', edits: [[EV, "const resL2 = reading === 'kept' ? fitChannel(", 'const resL2 = false ? fitChannel(']] },
+  { id: 'A1m7 the kept edge\'s move is read without the line\'s move', pattern: 'A1-5', edits: [[EV, "const e = Math.abs(valueAt(out, offO, 'l', s) + r(s) - valueAt(doc, off, 'l', s) - rim0(s));", 'const e = Math.abs(r(s) - rim0(s));']] },
+  { id: 'A1m8 a banked stretch is not said to be banked', pattern: 'A1-7', edits: [[EV, 'const banked = doc.pieces.some(', 'const banked = false && doc.pieces.some(']] },
+  { id: 'A1m10 the words drop how far the kept edge moved', pattern: 'W1|W4', files: SENT, edits: [['app/core/evenwords.js', 'it moved ${m} across at most, at ${km(k.at)}', 'it moved across']] },
+  { id: 'A1m11 the words drop the bank', pattern: 'W5', files: SENT, edits: [['app/core/evenwords.js', "${res.banked ? ' under the bank as Even finds it' : ''}", '']] },
+  { id: 'A1m12 the check job is sent no reading (its words cannot be said)', pattern: 'E5|E6', files: SENT, edits: [[CS, 'hold: res.hold, reading: res.reading, why: res.why,', 'hold: res.hold, why: res.why,']] },
+  { id: 'A1m13 the words say a kept edge with no reading as if read', pattern: 'W7', files: SENT, edits: [['app/core/evenwords.js', "if (!k || !Number.isFinite(k.m) || !(res.reading === 'road' || res.reading === 'kept'))", 'if (!k)']] },
   // refusals by name
   { id: 'R1 a closed lap\'s start line inside the window is not refused', pattern: 'closed lap', edits: [[EV, 'if (doc.closed && (w0 < 0 || w1 > L)) refuse(', 'if (false) refuse(']] },
   { id: 'R2 a run across the start line is refused as no run, not by the line', pattern: 'closed lap', edits: [[EV, 'if (doc.closed && Number.isInteger(from) && Number.isInteger(to) && from > to', 'if (false && Number.isInteger(from) && Number.isInteger(to) && from > to']] },

@@ -63,8 +63,9 @@ function newLeaves(before, res, { bounded = false } = {}) {
 
 /**
  * The first sentence after a level, said at once: what it did, where, and what became of the edges.
- * D678 repair (the librarian's 15:4x ruling, item 3): no sentence may say an edge "stays where it is" over code that moves it. The kept edge is laid where Even
- * READS the road's own edge from the stretch's ends (src/core/even.js evenIn: restOf and the agree rule), which can be metres from where it was; the middle
+ * D678 repair (the librarian's 15:4x ruling, item 3): no sentence may say an edge "stays where it is" over code that moves it. L271 (point 3): the kept edge
+ * is put back where the road had it, read from the stretch's ends where they support a reading (src/core/even.js readSupported), or, where they do not (A1B),
+ * kept where it is; the sentence says which, and how far it moved (keptWords), since the reading can be metres from where the edge was; the middle
  * ('centre') is laid smooth between the stretch's ends. And the stretch: the width is the value over the run and back to the road WITHIN the window's reach
  * beyond each end (50 m, more before it at the carry side). Not "20 m at the value, then a 30 m ease": the margin is at the value to 0.01 m where the road beyond
  * it is within about 5 m of the value, but a road farther off leaks into the margin's outer metre (0.0288 m for a 31 m lead levelled to 16; lighthouse
@@ -75,8 +76,21 @@ function newLeaves(before, res, { bounded = false } = {}) {
  * segment of the built road had the same cross-section at its two ends with a bump between (a grab's peak), a change within the step can make the builder
  * draw it as a chord (src/core/adapter.js legacySeg), 1.03 cm narrower at the peak (measured on the banked fixture after a grab 5 m outside the window).
  */
+/**
+ * What Even did with the kept edge, and how far it moved it (L271 point 3: a silent metre move is what that lap exists to stop). res.reading is 'road' (the road under
+ * the stretch read from its ends, A1) or 'kept' (no reading: the edge kept where it is, A1B, the keeper's call); the move is res.keptMove() (even.js) or, in the job, the
+ * plain res.kept { m, at }. Throws on a result that carries neither: a sentence with no figure would be the silent move again.
+ */
+function keptWords(res) {
+  const k = typeof res.keptMove === 'function' ? res.keptMove() : res.kept;
+  if (!k || !Number.isFinite(k.m) || !(res.reading === 'road' || res.reading === 'kept')) throw new Error('Even\'s words need the reading it used and how far the kept edge moved');
+  const m = `${k.m.toFixed(2)} m`;
+  if (res.reading === 'kept') return `the ${res.hold} edge is kept where it is (it moved ${m} at most), because Even could not read the road under the stretch from its ends: ${res.why}`;
+  return `the ${res.hold} edge is put back where the road had it, read from the stretch's ends${res.banked ? ' under the bank as Even finds it' : ''}: it moved ${m} across at most, at ${km(k.at)}`;
+}
+
 function evenDone(res) {
-  const where = res.hold === 'centre' ? 'the middle is laid smooth between the stretch\'s ends, and both edges move' : `the ${res.hold} edge is laid where Even reads the road's own edge from the stretch's ends, so it can move`;
+  const where = res.hold === 'centre' ? 'the middle is laid smooth between the stretch\'s ends, and both edges move' : keptWords(res);
   const { lo, hi, w0, w1 } = res.window, a = Math.round(lo - w0), b = Math.round(w1 - hi), full = EV.EVEN_MARGIN_M + EV.EVEN_RAMP_M;
   // a window end cut short by the track's start or its open end
   const before = a < 1 ? 'from the track\'s start' : a < full ? `eased toward the road over the ${a} m to the track's start` : `back to the road within ${a} m before it`;
@@ -103,10 +117,10 @@ function evenWords(before, res, opts = {}) {
  * level. Returns evenWords' { message, leaves }, the loads read inside the window only. Throws on a request that is not one.
  */
 function evenCheck(req) {
-  const { before, after, window: win, value, hold } = req || {};
+  const { before, after, window: win, value, hold, reading, why, kept, banked } = req || {};
   if (!before || !Array.isArray(before.pieces) || !after || !Array.isArray(after.pieces)) throw new Error('Even\'s check needs the track before and after the level');
   if (!win || ![win.lo, win.hi, win.w0, win.w1].every(Number.isFinite) || !(win.w0 <= win.w1)) throw new Error('Even\'s check needs the level\'s window');
-  return evenWords(before, { doc: after, window: win, value, hold, shiftAt: EV.shiftOf(before, after) }, { bounded: true });
+  return evenWords(before, { doc: after, window: win, value, hold, reading, why, kept, banked, shiftAt: EV.shiftOf(before, after) }, { bounded: true });
 }
 
 module.exports = { evenWords, evenDone, evenCheck, newLeaves, centreLoads, middleOnly, VOPTS };

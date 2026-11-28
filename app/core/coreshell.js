@@ -402,7 +402,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   function abortEven() { const j = evenJob; evenJob = null; if (j && j.job) { try { j.job.cancel(); } catch (e) { /* already finished */ } } }
   function beginEvenCheck(before, after, res) {
     abortEven();
-    const req = Object.freeze({ before, after, window: res.window, value: res.value, hold: res.hold });
+    const req = Object.freeze({ before, after, window: res.window, value: res.value, hold: res.hold, reading: res.reading, why: res.why, banked: res.banked, kept: res.keptMove ? res.keptMove() : null });   // plain data for the job (L271: the words carry the reading and the kept edge's move)
     let job = null;
     if (evenRunner) { try { job = evenRunner.start(req); } catch (e) { job = null; } }
     const entry = Object.freeze({ after, status: 'checking', startedAt: now(), via: job ? 'worker' : 'page' });

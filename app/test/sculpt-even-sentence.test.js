@@ -124,11 +124,12 @@ test('E5: B+: a typed width says the first sentence at once, and the check\'s wo
 // one grab), so no sentence says it "stays where it is" or "was"; and the stretch is 20 m at the width beyond each end, then a 30 m ease, not a "50 m" ease.
 // the first sentence, said at once after a typed width (the check is left to land on its own)
 const said = async (base, run, hold) => { const sh = await F.shellOn(base); sh.selectPiece(run.from); if (run.to !== run.from) sh.selectPiece(run.to, { extend: true }); sh.evenRun({ value: '16', hold }); return msg(sh); };
-test('W1: the message says the kept edge is laid where Even reads the road\'s own edge and can move, and the middle is laid smooth; never that an edge stays', async () => {
+// AMENDED BY NAME (L271, "Amended 02:5x" point 3): the kept edge's words say which reading Even used and how far that edge moved
+test('W1: the message says the kept edge is put back where the road had it, read from the stretch\'s ends, and how far it moved; the middle is laid smooth; never that an edge stays', async () => {
   const base = F.fixture('flat'), run = F.runPieces(base);
   for (const hold of ['left', 'right']) {
     const m = await said(base, run, hold);
-    assert.match(m, new RegExp(`the ${hold} edge is laid where Even reads the road's own edge from the stretch's ends, so it can move`), `${hold}: ${m}`);
+    assert.match(m, new RegExp(`the ${hold} edge is put back where the road had it, read from the stretch's ends: it moved \\d+\\.\\d\\d m across at most, at \\d+\\.\\d\\d km`), `${hold}: ${m}`);
     assert.doesNotMatch(m, /stays where it/, `${hold}: no edge "stays"`);
   }
   const m = await said(base, run, 'centre');
@@ -141,7 +142,8 @@ test('W2: the message says the road is back within the window\'s reach beyond ea
   const base = F.fixture('flat'), n = base.pieces.length;
   assert.match(await said(base, F.runPieces(base), 'left'), /m wide from 0\.20 km to 0\.44 km, back to the road within 50 m either side;/);
   assert.match(await said(base, { from: n - 1, to: n - 1 }, 'left'), /, back to the road within 50 m before it, and to the open end;/);
-  assert.match(await said(base, { from: 0, to: 1 }, 'left'), /, from the track's start, and back to the road within 50 m after it;/);
+  // AMENDED BY NAME (L271): read with the middle kept, so the window's words are tested apart from the kept edge's (from the track's start that edge is kept, U1)
+  assert.match(await said(base, { from: 0, to: 1 }, 'centre'), /, from the track's start, and back to the road within 50 m after it;/);
   assert.doesNotMatch(await said(base, F.runPieces(base), 'right'), /over the 50 m|for 20 m/);
 });
 // W3 (D678, the packet's "Amended 17:4x" item 1, row X10 of the hand-back's 5.1): the words say what holds outside the stretch, and it holds there: beyond the
@@ -155,4 +157,35 @@ test('W3: the message says the road\'s width, line and height beyond the stretch
     assert.doesNotMatch(msg(sh), /20 m at|for 20 m/, `${hold}: no promise of 20 m at the width`);
     assert.deepEqual(F.outsideChanges(F.present(sh), base).slice(0, 5), [], `${hold}: outside the window`);
   }
+});
+
+// W4 to W7 (L271, "Amended 02:5x" points 3 and 4): every Even with an edge kept says which reading it used and how far that edge moved, with the figure true to
+// the road; on a banked stretch the road is read "under the bank as Even finds it"; where there is no reading (A1B) the words say it kept the edge and why; and a result with no
+// reading cannot be said at all
+const moveOf = (after, before, hold, a, b) => Math.max(...F.stations(Math.ceil(a), Math.floor(b)).map((s) => Math.abs(F.rimAcross(after, s, hold) - F.rimAcross(before, s, hold))));
+test('W4: after one grab (T1), the words say the kept edge moved the metres it moved, and where', async () => {
+  const start = F.present(await F.startOf(F.fixture('flat'), 'T1')), m = await said(start, F.runPieces(start), 'right');
+  const x = m.match(/the right edge is put back where the road had it, read from the stretch's ends: it moved (\d+\.\d\d) m across at most, at (\d+\.\d\d) km/);
+  assert.ok(x, m);
+  const sh = await F.shellOn(start), run = F.runPieces(start); sh.selectPiece(run.from); sh.selectPiece(run.to, { extend: true }); sh.evenRun({ value: '16', hold: 'right' });
+  const moved = moveOf(F.present(sh), start, 'right', F.WIN.w0, F.WIN.w1);
+  assert.ok(moved > 1, `control: the edge moved metres (${moved} m)`);
+  assert.ok(Math.abs(Number(x[1]) - moved) <= 0.01, `said ${x[1]} m, measured ${moved} m`);
+  assert.ok(Number(x[2]) * 1000 >= F.WIN.w0 - 10 && Number(x[2]) * 1000 <= F.WIN.w1 + 10, `at ${x[2]} km, inside the window`);
+});
+test('W5: on a banked stretch the road is read "under the bank as Even finds it"; on a flat one it is not said', async () => {
+  for (const [fx, banked] of [['B-', true], ['flat', false]]) {
+    const base = F.fixture(fx), m = await said(base, F.runPieces(base), 'left');
+    (banked ? assert.match : assert.doesNotMatch)(m, /read from the stretch's ends under the bank as Even finds it:/, `${fx}: ${m}`);
+  }
+});
+test('W6: where Even has no reading (A1B), the words say the edge was kept where it is, how far it moved, and why the road could not be read', () => {
+  const base = F.fixture('flat'), r = EV.even(base, { from: 0, to: 1, value: 16, hold: 'left' });
+  assert.match(EVW.evenDone(r), /the left edge is kept where it is \(it moved 0\.0\d m at most\), because Even could not read the road under the stretch from its ends: the stretch reaches the track's start/);
+});
+test('W7: a result with an edge kept but no reading or no figure is not said (it throws): a sentence without the move would be the silent move again', () => {
+  const base = F.fixture('flat'), r = EV.even(base, { ...F.runPieces(base), value: 16, hold: 'left' });
+  assert.doesNotThrow(() => EVW.evenDone(r));
+  assert.throws(() => EVW.evenDone({ ...r, reading: undefined }), /need the reading/);
+  assert.throws(() => EVW.evenDone({ ...r, keptMove: null, kept: null }), /need the reading/);
 });

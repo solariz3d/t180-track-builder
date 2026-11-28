@@ -68,7 +68,8 @@ test('the drag snaps to 0.5 m, keeps the run selected through every step, and it
   assert.match(msg(sh), /^Even: 16 m wide from 0\.20 km to 0\.44 km/);
   // AMENDED BY NAME (D678 repair, the librarian's 15:4x ruling item 3): the words are made true to the code. The kept edge is laid where Even reads the road's
   // own edge from the stretch's ends and can move (B's read, 2.5: 3.96 m on the flat turn after a grab), so "stays where it was" is withdrawn.
-  assert.match(msg(sh), /the right edge is laid where Even reads the road's own edge from the stretch's ends, so it can move/);
+  // AMENDED BY NAME again (L271, "Amended 02:5x" point 3): the words say which reading Even used and how far the kept edge moved
+  assert.match(msg(sh), new RegExp(`the right edge is put back where the road had it, read from the stretch's ends: it moved \\d+\\.\\d\\d m across at most, at \\d+\\.\\d\\d km`));
   assert.doesNotMatch(msg(sh), /stays where it/);
   sh.undo(); assert.equal(D.serialize(F.present(sh)), D.serialize(F.fixture('flat')), 'the whole drag is one undo step');
 });
@@ -198,4 +199,15 @@ test('G2: a typed Even width that brings the road too close to another pass is r
   sh.evenRun({ value: w0 + 4, hold: 'left' });
   assert.match(msg(sh), /PASS_CLEARANCE: too close to another pass of the road: /, msg(sh));
   assert.equal(F.present(sh), d);
+});
+
+// L271 (the keeper's call, L271): a stretch whose road Even cannot read from its ends keeps the edge where it is (A1B), through the shell as in the core, and the
+// message says so (the hand-back p-l271-even-a0-A_2026-11-28.md 1.3: a run from the track's start, where A0 put the edge 9.31 m off, silently)
+test('U1: a run from the track\'s start with an edge kept: the drag opens, and the typed width keeps the edge where it is, said', async () => {
+  const base = F.fixture('flat'), sh = await F.shellOn(base);
+  sh.selectPiece(0); sh.selectPiece(1, { extend: true });
+  sh.beginSculpt({ tool: 'even', hold: 'left' });
+  assert.ok(sh.getState().brush, 'the drag opened'); sh.endSculpt();
+  sh.evenRun({ value: '16', hold: 'right' });
+  assert.match(msg(sh), /the right edge is kept where it is \(it moved 0\.0\d m at most\), because Even could not read the road under the stretch from its ends: /);
 });

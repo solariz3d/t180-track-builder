@@ -16,12 +16,13 @@
 //     brush holds the lap's first two control points, so a level across it would leave a step.
 //   - ONE RIM HELD (hold 'left' or 'right'; a drag on one rim's handle holds the other): the held rim is laid where the road, as read from the window's ends, has
 //     it with its bumps taken out (its width and sideways offset eased between the window's ends; an end still in a taper the road had before, such as an Extend
-//     easing from the empty track's head, takes the other end's value: restOf; where the two ends still disagree, the road's own width changes across the window
-//     and the rim is held where it is now), read from the cross-section the builder makes at the new width (profile.js readAt),
+//     easing from the empty track's head, takes the other end's value), read only WHERE THE ENDS SUPPORT IT (readSupported, L271's A1); where they do not, the
+//     rim is held where it is now (A1B, the keeper's call; fitChannel), read from the cross-section the builder makes at the new width (profile.js readAt),
 //     because on a cupped road the rim is not at l ± w/2. The centre moves sideways (l) to hold it. 'centre' holds neither: the centre is eased between the
-//     window's ends and both rims move. THE READING CAN BE WRONG, BY METRES (D678, lighthouse exo_memory/handback/p-d678-even-read-B_2026-11-27.md 2.2, 2.3):
-//     a window end on a grab, a grab straddling restOf's 10 m test, a road whose width changes inside the run. How the held rim should be read is a design
-//     pass the keeper decides (the librarian's 15:4x ruling); until then no sentence says it "stays where it is".
+//     window's ends and both rims move. A0, THE READING BEFORE L271, WAS WRONG BY METRES (D678, lighthouse exo_memory/handback/p-d678-even-read-B_2026-11-27.md 2.2, 2.3):
+//     a window end on a grab, a grab straddling its 10 m test, a run from the track's start. A1 reads only where the ends support it, and is still wrong,
+//     silently, on a road whose own width changes inside the run with no bump (lighthouse exo_memory/handback/p-l271-even-a0-A_2026-11-28.md 1.3: WC5 and
+//     WC6), so the result carries how far the kept edge moved (keptMove) and the words say it, every time.
 //   - THE CENTRE'S HEIGHT (h) moves in the plane of the road AS BUILT (adapter.js bankPlan's roll, not the bank channel: the plan re-rounds the bank's corners),
 //     so on a banked road a sideways move rises or falls with the bank; on the run the height is eased between the window's ends. h is fitted by least
 //     squares at every quarter metre, because its target is a product (the sideways move times the bank's tangent) that no control point value carries.
@@ -41,6 +42,9 @@ const EVEN_RAMP_M = 30, EVEN_MARGIN_M = 20, EVEN_SNAP_M = 0.5, EVEN_MIN_M = 0.5,
 // near the window's end from 0.05 m off its target to 0.0006 m (lighthouse exo_memory/handback/p-d678-even-build-A_2026-11-27.md, section 4.4).
 const EVEN_END_SPAN_M = 3.75;
 const HOLDS = Object.freeze(['left', 'right', 'centre']);
+// THE FALLBACK (L271; the keeper's call, L271): where the window's ends do not support a reading of the road under the stretch (readSupported), the kept edge is kept where it
+// is now, at the new width: B's line, one least-squares fit over the window (fitChannel; the hand-back's A1B), and the words say so. A1R, a refusal by name, was
+// built behind a switch for his answer and taken out with it: no stretch is refused for the road under it.
 const FIT_STEP_M = 0.25;   // the least-squares fit's sample step (each knot span gets at least 4)
 
 const refuse = (code, words) => { throw new D.CoreError(code, `Even: ${words}. Nothing changed.`); };
@@ -111,21 +115,50 @@ function easeOf(doc, off, ch, win) {
   const x0 = win.w0, x1 = win.w1, L = x1 - x0, a = valueAt(doc, off, ch, x0), b = valueAt(doc, off, ch, x1);
   return (s) => a + (b - a) * SC.smootherstep(Math.min(1, Math.max(0, (s - x0) / L)));
 }
-/** The same, for the HELD RIM's reference: where the road is still changing at one window end and at rest at the other (the end lies in a taper the road
- *  had before any bump: an Extend easing from the empty track's head, say), the end at rest gives the value for the whole window, since the taper's value at
- *  the end is not the road the run sits on. Both at rest, or both changing: eased between them. L is the road's length (a window end at the track's end
- *  looks inward). */
-const REST_SPAN_M = 10, REST_M = 1e-3;   // "changing": more than 1 mm over the 10 m beyond the end
-const EVEN_AGREE_M = 0.01;   // the window's two ends read as one road within 1 cm (evenIn)
-function moving(doc, off, ch, x, dir, L) {
-  const y = x + dir * REST_SPAN_M, z = y < 0 || y > L ? x - dir * REST_SPAN_M : y;
-  return Math.abs(valueAt(doc, off, ch, z) - valueAt(doc, off, ch, x)) > REST_M;
+/**
+ * A1 (L271 item 1; lighthouse exo_memory/handback/p-l271-even-a0-A_2026-11-28.md, 1.1 to 1.3): the road before any grab, the HELD RIM's reference, read from the
+ * window's two ends ONLY WHERE THE ENDS SUPPORT IT. The road before the grabs is not in the document, so no rule from the ends is right everywhere; this one keeps
+ * A0's reading wherever it was exact and says where it has none. An end is AT REST when its value holds within 1 mm at 10, 20 and 30 m beyond it (A0 tested 10 m
+ * only, and a grab centred just outside an end passed it); an end with no road at all beyond it (the track's start, its open end) is an EDGE; else MOVING. Per
+ * channel (w, then l) the reading is supported when both ends are at rest and agree within 1 cm (eased between them), or when one end is at rest and the other
+ * either heads toward its value over the 10 m inward (or is already within 1 mm of it) or is an edge within 1 cm of it (the value at rest, for the whole window).
+ * Anything else: { ok: false, why }. STILL WRONG, SILENTLY, ON SOME ROADS: a road whose own width changes inside the run with no bump, read as above (the
+ * hand-back's WC5, 1.47 m, and WC6, 2.92 m); so every Even says how far it moved the kept edge (keptMove), and none of it is silent.
+ */
+const REST_SPAN_M = 10, REST_M = 1e-3, REST_AT_M = Object.freeze([10, 20, 30]);   // "changing": more than 1 mm at 10, 20 or 30 m beyond the end
+const EVEN_AGREE_M = 0.01;   // the window's two ends read as one road within 1 cm
+function endState(doc, off, ch, x, dir, L) {
+  const v = valueAt(doc, off, ch, x); let n = 0;
+  for (const d of REST_AT_M) { const z = x + dir * d; if (z < 0 || z > L) continue; n++; if (Math.abs(valueAt(doc, off, ch, z) - v) > REST_M) return { kind: 'moving', v }; }
+  return { kind: n ? 'rest' : 'edge', v };
 }
-function restOf(doc, off, ch, win, L) {
-  const x0 = win.w0, x1 = win.w1, ma = moving(doc, off, ch, x0, -1, L), mb = moving(doc, off, ch, x1, 1, L);
-  if (ma === mb) return easeOf(doc, off, ch, win);
-  const v = valueAt(doc, off, ch, ma ? x1 : x0);
-  return () => v;
+const WHAT = { w: 'width', l: 'line' };
+function readSupported(doc, off, win, L) {
+  const x0 = win.w0, x1 = win.w1, fns = {};
+  for (const ch of ['w', 'l']) {
+    const a = endState(doc, off, ch, x0, -1, L), b = endState(doc, off, ch, x1, 1, L);
+    let f = null, why = null;
+    if (a.kind === 'rest' && b.kind === 'rest') {
+      if (Math.abs(a.v - b.v) <= EVEN_AGREE_M) f = easeOf(doc, off, ch, win);
+      else why = `the road's ${WHAT[ch]} differs at the stretch's two ends`;
+    } else if (a.kind === 'rest' || b.kind === 'rest') {
+      const [r, o, xo, dir] = a.kind === 'rest' ? [a, b, x1, 1] : [b, a, x0, -1];
+      const inward = valueAt(doc, off, ch, Math.min(L, Math.max(0, xo - dir * REST_SPAN_M)));
+      const ok = o.kind === 'edge' ? Math.abs(o.v - r.v) <= EVEN_AGREE_M : Math.abs(inward - r.v) <= Math.abs(o.v - r.v) + REST_M;
+      if (ok) { const v = r.v; f = () => v; }
+      else why = o.kind === 'edge' ? `the stretch reaches the track's ${dir < 0 ? 'start' : 'open end'}, where the road's ${WHAT[ch]} is still changing` : `the road's ${WHAT[ch]} is changing away from the road at the stretch's other end`;
+    } else why = a.kind === 'edge' || b.kind === 'edge' ? `the stretch reaches the track's ${a.kind === 'edge' ? 'start' : 'open end'}, and the road's ${WHAT[ch]} is still changing at its other end` : `the road's ${WHAT[ch]} is still changing at both ends of the stretch`;
+    if (!f) return { ok: false, why };
+    fns[ch] = f;
+  }
+  return { ok: true, w: fns.w, l: fns.l };
+}
+/** The road read from the window's ends (readSupported) laid over the window: { ok, why, dStar, offS }. */
+function refOf(doc, off, win, L) {
+  const rd = readSupported(doc, off, win, L);
+  if (!rd.ok) return { ok: false, why: rd.why };
+  const dS = levelTo(doc, { w: rd.w, l: rd.l }, win);
+  return { ok: true, why: null, dStar: dS, offS: SC.pieceOffsets(dS) };
 }
 
 /** Solve M x = r (M square, dense) by Gauss-Jordan with partial pivoting; throws on a singular M (a fit with no samples under a control point). */
@@ -138,6 +171,76 @@ function solve(M, r) {
     for (let q = 0; q < m; q++) if (q !== k) { const f = A[q][k] / A[k][k]; if (f !== 0) for (let c = k; c <= m; c++) A[q][c] -= f * A[k][c]; }
   }
   return A.map((row, k) => row[m] / row[k]);
+}
+
+/**
+ * The window's control points of channel `ch` fitted by least squares to `target` (lap distance -> value), the joints as settle (sculpt.js) will build them: a linked
+ * joint whose four points all change takes the piece's first two from the piece before (value, then slope); a joint the window covers only in part keeps all four
+ * as they were. The whole window is ONE fit: the first two points after a joint are written as the piece before's last two, so a joint's slope is fitted to the
+ * samples on both sides of it (fitted piece by piece, each piece's end slope was set by its own samples alone, and the kept edge missed by up to 0.054 m one metre
+ * past a joint after eight grabs). Each point is stored at the channel's step. Returns settle's input: per piece { ctrl, changed } or null.
+ * Copied whole from d678-even-b (B, D678 6.2). Here it fits only the sideways offset l, where Even has no reading (A1B): the kept edge where it is now.
+ */
+function fitChannel(doc, ch, target, win) {
+  const off = SC.pieceOffsets(doc), res = doc.pieces.map(() => null), q = (x) => { const v = Number(x.toFixed(D.DEC[ch])); return Object.is(v, -0) ? 0 : v; };
+  // the control points the window reaches, per road piece (the rule levelTo uses)
+  const reach = doc.pieces.map((P, p) => {
+    if (P.type !== 'road' || off[p] + P.length < win.w0 || off[p] > win.w1) return [];
+    const t = D.knotVector(P), out = [];
+    for (let i = 0; i < P.channels[ch].length; i++) if (!(off[p] + t[i] < win.w0 - 1e-9 || off[p] + t[i + 4] > win.w1 + 1e-9)) out.push(i);
+    return out;
+  });
+  const roads = doc.pieces.map((P, p) => p).filter((p) => doc.pieces[p].type === 'road');
+  // joint k between roads[k-1] and roads[k]: 'all' (value, then slope), 'part' (all four kept), or null (not linked: the piece after is free, as settle leaves it)
+  const joint = (a, b) => { if (!SC.isLinked(doc, a, b, ch)) return null; const na = doc.pieces[a].channels[ch].length; return reach[a].includes(na - 1) && reach[a].includes(na - 2) && reach[b].includes(0) && reach[b].includes(1) ? 'all' : 'part'; };
+  // every control point the window reaches as a linear form { c, t: [[column, coefficient]] } in the free points (the columns); a point held is a constant
+  const form = doc.pieces.map(() => null), cols = [], plan = [];
+  const lin = (x, kx, y, ky) => { const t = new Map(); for (const [F, k] of [[x, kx], [y, ky]]) for (const [j, v] of F.t) t.set(j, (t.get(j) || 0) + k * v); return { c: kx * x.c + ky * y.c, t: [...t] }; };
+  for (let k = 0; k < roads.length; k++) {
+    const p = roads[k], P = doc.pieces[p], changed = reach[p].slice(); if (!changed.length) continue;
+    const n = P.channels[ch].length, E = P.channels[ch].map((v) => ({ c: v, t: [] })), set = new Set();
+    const before = k > 0 ? joint(roads[k - 1], p) : null, after = k + 1 < roads.length ? joint(p, roads[k + 1]) : null;
+    let ratio = null;
+    if (before === 'all') {
+      const a = roads[k - 1], Pa = doc.pieces[a], na = Pa.channels[ch].length, Ea = form[a];
+      const hh = Pa.length - (Pa.knots.length ? Pa.knots[Pa.knots.length - 1] : 0), hb = P.knots.length ? P.knots[0] : P.length;
+      ratio = hb / hh; E[0] = Ea[na - 1]; E[1] = lin(Ea[na - 1], 1 + ratio, Ea[na - 2], -ratio); set.add(0); set.add(1);
+    } else if (before === 'part') { set.add(0); set.add(1); }
+    if (after === 'part') { set.add(n - 1); set.add(n - 2); }
+    const own = [];
+    for (const i of changed) if (!set.has(i)) { E[i] = { c: 0, t: [[cols.length, 1]] }; own.push([i, cols.length]); cols.push([p, i]); }
+    form[p] = E; plan.push({ p, changed, before, ratio, k, own });
+  }
+  if (!plan.length) return res;
+  const m = cols.length, A = Array.from({ length: m }, () => new Array(m).fill(0)), rhs = new Array(m).fill(0);
+  for (const { p } of plan) {
+    const P = doc.pieces[p], t = D.knotVector(P), n = P.channels[ch].length, E = form[p];
+    const unit = Array.from({ length: n }, (_, i) => { const e = new Array(n).fill(0); e[i] = 1; return { ...P, channels: { ...P.channels, [ch]: e } }; });
+    const lo = Math.max(0, win.w0 - off[p]), hi = Math.min(P.length, win.w1 - off[p]), spans = [...new Set([lo, ...t.filter((x) => x > lo && x < hi), hi])].sort((a, b) => a - b);
+    for (let sp = 0; sp + 1 < spans.length; sp++) {
+      const a = spans[sp], b = spans[sp + 1], N = Math.max(4, Math.ceil((b - a) / FIT_STEP_M));
+      for (let j = sp === 0 ? 0 : 1; j <= N; j++) {
+        const sl = a + ((b - a) * j) / N, row = new Map();
+        let r = target(off[p] + sl);
+        for (let i = 0; i < n; i++) {
+          if (sl < t[i] - 1e-9 || sl > t[i + 4] + 1e-9) continue;
+          const v = D.channelAt(unit[i], ch, sl).v; if (v === 0) continue;
+          r -= E[i].c * v; for (const [c, k] of E[i].t) row.set(c, (row.get(c) || 0) + k * v);
+        }
+        const B = [...row];
+        for (const [a2, va] of B) { rhs[a2] += va * r; for (const [b2, vb] of B) A[a2][b2] += va * vb; }
+      }
+    }
+  }
+  const x = m ? solve(A, rhs) : [];
+  // stored at the channel's step, in order, the points after a joint taken from the stored points before it (as settle builds them)
+  for (const { p, changed, before, ratio, k, own } of plan) {
+    const ctrl = doc.pieces[p].channels[ch].slice();
+    for (const [i, c] of own) ctrl[i] = q(x[c]);
+    if (before === 'all') { const pr = res[roads[k - 1]], na = pr.ctrl.length, v = q(pr.ctrl[na - 1]); ctrl[0] = v; ctrl[1] = v + (v - q(pr.ctrl[na - 2])) * ratio; }
+    res[p] = { ctrl, changed };
+  }
+  return res;
 }
 
 /**
@@ -189,7 +292,8 @@ function fitHeight(doc, target, win) {
 
 /**
  * EVEN: the run from..to brought to width `value`. `hold`: 'left' | 'right' | 'centre' (default). `ramp` and `margin` in metres (defaults 30 and 20).
- * Returns { doc, changed (piece indices), window { lo, hi, w0, w1 } (lap distance), value, hold, shiftAt (s -> the centre's move across the road, in its built plane, m) }.
+ * Returns { doc, changed (piece indices), window { lo, hi, w0, w1 } (lap distance), value, hold, shiftAt (s -> the centre's move across the road, in its built plane, m),
+ * reading ('road', 'kept' or 'centre'), why (no reading: the reason), banked, keptMove (() -> { m, at }: the kept edge's largest move, or null) }.
  */
 function even(doc, { from, to, value, hold = 'centre', ramp = EVEN_RAMP_M, margin = EVEN_MARGIN_M } = {}) {
   const C = cutOf(doc, { from, to, ramp, margin });   // the refusals first, read on the track as given (as the shell reads them when a drag opens)
@@ -289,17 +393,14 @@ function evenIn(doc, { off, L, lo, hi, win, w0, w1, value, hold, given = doc, me
   // l: the held rim where the road without bumps has it (C1b), or eased ('centre')
   const resL = [];
   const side = hold === 'left' ? 1 : hold === 'right' ? -1 : 0;
-  let rim0 = null, rim1 = null, rimS = null, dStar = null, offS = null;
+  let rim0 = null, rim1 = null, rimS = null, dStar = null, offS = null, reading = 'centre', why = null;
   if (side) {
-    // the road before any grab or stroke, read from the window's two ends; where they disagree (the road's own width or offset changes across the window, a
-    // 31 m straight into a 12 m turn) there is no one road to read back, and the held rim is held where it is now
-    const ref = once('ref', () => {
-      const rw = restOf(doc, off, 'w', win, L), rl = restOf(doc, off, 'l', win, L), one = [rw, rl].every((f) => Math.abs(f(w0) - f(w1)) <= EVEN_AGREE_M);
-      const dS = one ? levelTo(doc, { w: rw, l: rl }, win) : doc;
-      return { dStar: dS, offS: SC.pieceOffsets(dS) };
-    });
-    dStar = ref.dStar; offS = ref.offS;
-    rim0 = once(`rim0${side}`, () => rimReader(doc, side)); rim1 = rimReader(d1, side); rimS = once(`rimS${side}`, () => rimReader(dStar, side));
+    // the road before any grab or stroke, read from the window's two ends where they support it (A1, readSupported); where they do not, the edge is kept where it
+    // is now (A1B, the keeper's call; fitChannel below)
+    const ref = once('ref', () => refOf(doc, off, win, L));
+    reading = ref.ok ? 'road' : 'kept'; why = ref.why;
+    rim0 = once(`rim0${side}`, () => rimReader(doc, side)); rim1 = rimReader(d1, side);
+    if (ref.ok) { dStar = ref.dStar; offS = ref.offS; rimS = once(`rimS${side}`, () => rimReader(dStar, side)); }
   }
   doc.pieces.forEach((P, p) => {
     if (P.type !== 'road' || off[p] + P.length < w0 || off[p] > w1) { resL.push(null); return; }
@@ -310,7 +411,7 @@ function evenIn(doc, { off, L, lo, hi, win, w0, w1, value, hold, given = doc, me
       const dw = d1.pieces[p].channels.w[i] - P.channels.w[i];
       if (!(g > 0) && Math.abs(dw) < 1e-12) continue;
       if (!side) l[i] = (1 - g) * P.channels.l[i] + g * fl(sI);
-      else {
+      else if (reading === 'road') {
         const s = Math.min(L, Math.max(0, sI)), F0 = rim0(s), F1 = rim1(s), lamStar = valueAt(dStar, offS, 'l', s) + rimS(s);
         l[i] = (1 - g) * (P.channels.l[i] + F0 - F1) + g * (lamStar - F1);
       }
@@ -318,7 +419,9 @@ function evenIn(doc, { off, L, lo, hi, win, w0, w1, value, hold, given = doc, me
     }
     resL.push({ ctrl: l, changed });
   });
-  const c1 = freeze(D.checkDoc({ ...d1, pieces: SC.settle(d1, 'l', resL).pieces }));
+  // no reading (A1B, the keeper's call): the kept edge where it is now at the new width, one least-squares fit over the whole window (B's line, D678 6.2)
+  const resL2 = reading === 'kept' ? fitChannel(d1, 'l', (s) => { const x = Math.min(L, Math.max(0, s)); return valueAt(doc, off, 'l', x) + rim0(x) - rim1(x); }, win) : resL;
+  const c1 = freeze(D.checkDoc({ ...d1, pieces: SC.settle(d1, 'l', resL2).pieces }));
   // h: in the plane of the road as built, fitted (Alt F)
   const plan = once('plan', () => bankPlan(doc)), offC = SC.pieceOffsets(c1);
   const phiAt = (s) => { const a = pieceAt(doc, off, s); return builtPhi(doc, plan, a.p, a.sl); };
@@ -328,7 +431,18 @@ function evenIn(doc, { off, L, lo, hi, win, w0, w1, value, hold, given = doc, me
   };
   const out = freeze(D.checkDoc({ ...c1, pieces: SC.settle(c1, 'h', fitHeight(c1, target, win)).pieces }));
   const changed = []; out.pieces.forEach((P, p) => { if (P !== given.pieces[p]) changed.push(p); });
-  return { doc: out, changed, window: Object.freeze({ lo, hi, w0, w1 }), value, hold, shiftAt: shiftOf(doc, out, plan) };
+  // HOW FAR THE KEPT EDGE MOVED (L271 point 3: every Even says it): its largest move across the road, every 1 m over the window, the rim read on the
+  // cross-sections. Computed when asked (the release's words), not at every step of a drag, since it reads the whole new document once. { m, at }.
+  let kept = null;
+  const keptMove = side ? () => {
+    if (kept) return kept;
+    const r = rimReader(out, side), offO = SC.pieceOffsets(out); let m = 0, at = lo;
+    for (let s = Math.ceil(w0); s <= Math.floor(w1); s++) { const e = Math.abs(valueAt(out, offO, 'l', s) + r(s) - valueAt(doc, off, 'l', s) - rim0(s)); if (e > m) { m = e; at = s; } }
+    return (kept = Object.freeze({ m, at }));
+  } : null;
+  // a bank anywhere in the window: the road read from the ends is the road "under the bank as Even finds it" (L271 point 4; call 11 keeps the bank as found)
+  const banked = doc.pieces.some((P, p) => P.type === 'road' && off[p] + P.length >= w0 && off[p] <= w1 && (P.channels.phi || []).some((x) => Math.abs(x) > 1e-9));
+  return { doc: out, changed, window: Object.freeze({ lo, hi, w0, w1 }), value, hold, shiftAt: shiftOf(doc, out, plan), reading, why, banked, keptMove };
 }
 
 /**
@@ -340,4 +454,4 @@ function shiftOf(before, after, plan = bankPlan(before)) {
   return (s) => { const a = pieceAt(before, off, s); if (!a) throw new Error(`even: no road at ${s}`); return (valueAt(after, offA, 'l', s) - valueAt(before, off, 'l', s)) / Math.cos(builtPhi(before, plan, a.p, a.sl)); };
 }
 
-module.exports = { even, evenWindow, shiftOf, HOLDS, EVEN_RAMP_M, EVEN_MARGIN_M, EVEN_SNAP_M, EVEN_MIN_M, EVEN_MAX_M, EVEN_END_SPAN_M, _internal: { weight, rimReader, levelTo, fitHeight, builtPhi, refineEnds, cutOf } };
+module.exports = { even, evenWindow, shiftOf, HOLDS, EVEN_RAMP_M, EVEN_MARGIN_M, EVEN_SNAP_M, EVEN_MIN_M, EVEN_MAX_M, EVEN_END_SPAN_M, _internal: { weight, rimReader, levelTo, fitHeight, fitChannel, builtPhi, refineEnds, cutOf, readSupported, endState } };

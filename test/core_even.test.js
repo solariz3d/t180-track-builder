@@ -104,7 +104,9 @@ test('after a piece with coarse knots (a plain Extend\'s 20 m spans), the run is
   assert.deepEqual(F.outsideChanges(r.doc, d, r.window.w0, r.window.w1).slice(0, 5), [], 'outside the window');
 });
 
-test('where the road\'s own width changes across the window (a 31 m straight into a 12 m turn), the held rim is held where it is now, not read back from the window\'s ends', () => {
+// AMENDED BY NAME (L271; the hand-back p-l271-even-a0-A_2026-11-28.md 1.3, its WC1, and the keeper's call, L271): with A1 this road's ends do not support a
+// reading, so the rim is held where it is now, B's line (measured 0.0043 m, so the bar is 0.01 m, was 0.1 m for A0's 0.077), and Even says it kept it.
+test('where the road\'s own width changes across the window (a 31 m straight into a 12 m turn), the held rim is held where it is now (A1B), not read back from the window\'s ends', () => {
   // a plain Extend's 200 m straight keeps the empty track's 31 m; the turn's four pieces are laid at 12 m and the road narrows over the turn's first 60 m. Reading the
   // road back from the window's ends (31 m and 12 m) would put the held rim 6.7 m off (D678, found after the registration). Measured 0.077 m: the sideways offset is set
   // at its control points from the rim read on the road, and a 19 m narrowing in 60 m bends between them (a fit of the offset, as the height has, is not built)
@@ -113,7 +115,8 @@ test('where the road\'s own width changes across the window (a 31 m straight int
   assert.ok(F.at(d, 'w', 150) > 30 && Math.abs(F.at(d, 'w', 500) - 12) < 1e-6, 'control: 31 m before the turn, 12 m after it');
   const r = EV.even(d, { from: 1, to: 4, value: 16, hold: 'left' }), S = F.stations(200, 440);
   const held = Math.max(...S.map((s) => Math.abs(F.rimAcross(r.doc, s, 'left') - F.rimAcross(d, s, 'left'))));
-  assert.ok(held <= 0.1, `the held rim moved ${held} m`);
+  assert.ok(held <= 0.01, `the held rim moved ${held} m`);
+  assert.equal(r.reading, 'kept', 'no reading: the edge kept');
   assert.ok(widthSpread(r.doc, 200, 440) <= 1e-4, 'and the run is one width');
 });
 
@@ -163,6 +166,8 @@ for (const hold of ['left', 'right']) {
     assert.ok(worst <= 0.01, `the kept edge moved ${worst} m in the margins`);
   });
 }
+// L271: these rows measure the height, the outside and the joints, not the reading. After a grab at 470 the window's far end (490) sits on the grab, so A1 does
+// not read the road there and keeps the edge where it is (A1B); after 485, and 175 with 465, it reads the road.
 for (const grabs of [[470], [485], [175, 465]]) {
   test(`X3, X4, X8: on B- after a grab at ${grabs.join(' and ')}, K3: the centre's height is within 0.01 m of its target over the window, nothing outside moves past one stored step and no joint steps`, async () => {
     const sh = await F.shellOn(F.fixture('B-')); for (const s of grabs) F.grab(sh, s, 16);
@@ -238,6 +243,7 @@ test('C1: two Even calls on one base reuse one cut track and one reference road 
   assert.equal(a.doc, b.doc, 'the same cut track');
   const r1 = EV.even(base, { ...run, value: 16, hold: 'left' }), r2 = EV.even(base, { ...run, value: 17, hold: 'left' });
   assert.equal(I.cutOf(base, run).doc, a.doc, 'still the same after two levels');
+  assert.notEqual(I.cutOf(base, { from: run.from, to: run.from }).doc, a.doc, 'another run of the same base is cut afresh');
   assert.notEqual(r1.doc, r2.doc);
 });
 test('C2: Even with its cut and reference memoised gives the same bytes as Even run on a fresh copy of the base (no memo hit)', () => {
@@ -247,4 +253,83 @@ test('C2: Even with its cut and reference memoised gives the same bytes as Even 
     assert.equal(JSON.stringify(a.doc), JSON.stringify(b.doc), `${fx} ${hold}: memoised against fresh`);
     assert.equal(JSON.stringify(a2.doc), JSON.stringify(b.doc), `${fx} ${hold}: a second call on the same base`);
   }
+});
+
+// ── L271 (lighthouse exo_memory/loop/packet_t180_even_a0_and_slope_grab_on_L_2026-11-28.md, "Amended 02:5x"; the hand-back p-l271-even-a0-A_2026-11-28.md 1.1 to
+// 1.3): A1, the road under the stretch read from the window's ends ONLY where they support it; where they do not, the edge kept where it is now, B's line
+// (A1B, the keeper's call, L271; A1R, a refusal, is not built); how far the kept edge moved (keptMove); the banked claim ("under the bank as Even finds it"). The figures are the hand-back's table (a1_271.out, a1_built.out).
+const edgeMove = (after, before, hold, a, b) => Math.max(...F.stations(Math.ceil(a), Math.floor(b)).map((s) => Math.abs(F.rimAcross(after, s, hold) - F.rimAcross(before, s, hold))));
+const runEnd = (doc, p) => SC.pieceOffsets(doc)[p] + doc.pieces[p].length;
+// WC3 of the table: a road whose own width steps 12 -> 18 m inside the turn, with no grab; its window's near end is still in the lead's taper from the empty
+// track's 31 m head (14.97 m at s 150, the hand-back's why271.out), its far end at rest at 18 m, and the near end does not head toward it
+const wc3 = () => { let d = D.createDoc('wc3'); for (const p of [[200, 0, 12], [60, 30, 12], [60, 30, 12], [60, 30, 18], [60, 30, 18], [150, 0, 18]]) d = require('../src/core/turnby.js').extendCorner(d, require('../app/core/panel.js').extendOptions({ length: p[0], turn: p[1], climb: 0, bank: 0, width: p[2], turnAs: 'corner' })); return Object.freeze(d); };
+
+test('A1-1: no stretch is refused for the road under it (A1R is not built): from the track\'s start, a width stepping inside the run, and a window end on a grab, the edge is kept and Even says so', async () => {
+  const sh = await F.shellOn(F.fixture('B-')); F.grab(sh, 470, 16); const g = F.present(sh);
+  for (const [id, d, run] of [['start', F.fixture('flat'), { from: 0, to: 1 }], ['WC3', wc3(), { from: 1, to: 4 }], ['B- a grab at 470', g, F.runPieces(g)]]) {
+    for (const hold of ['left', 'right']) {
+      const r = EV.even(d, { ...run, value: 16, hold });
+      assert.equal(r.reading, 'kept', `${id} ${hold}`); assert.ok(typeof r.why === 'string' && r.why.length > 0, `${id} ${hold}: the reason`);
+    }
+  }
+});
+
+test('A1-3: a run from the track\'s start (A0: 9.31 m off, silently): Even says it kept the edge, and the edge is where it was within 0.01 m over the run', () => {
+  const base = F.fixture('flat');
+  for (const hold of ['left', 'right']) {
+    const r = EV.even(base, { from: 0, to: 1, value: 16, hold });
+    assert.equal(r.reading, 'kept', hold);
+    const m = edgeMove(r.doc, base, hold, 0, runEnd(base, 1));
+    assert.ok(m <= 0.01, `${hold}: the kept edge moved ${m} m over the run`);
+  }
+});
+
+test('A1-4: a road whose own width steps inside the run (WC3, no grab): the edge stays within 0.01 m (A0: 2.92 m off, silently)', () => {
+  const d = wc3(), run = { from: 1, to: 4 };
+  assert.ok(Math.abs(F.at(d, 'w', 290) - 12) < 1e-6 && Math.abs(F.at(d, 'w', 500) - 18) < 1e-6, `control: 12 m in the run's first half, 18 m after it (${F.at(d, 'w', 290)}, ${F.at(d, 'w', 500)})`);
+  for (const hold of ['left', 'right']) {
+    const r = EV.even(d, { ...run, value: 16, hold }), m = edgeMove(r.doc, d, hold, SC.pieceOffsets(d)[1], runEnd(d, 4));
+    assert.ok(m <= 0.01, `${hold}: ${m} m`);
+  }
+});
+
+test('A1-5: where the ends support a reading (flat, after one grab, T1), Even reads the road: the kept edge goes back to the untouched road within 0.01 m, and its own figure for the move is the move measured', async () => {
+  const base = F.fixture('flat'), start = F.present(await F.startOf(base, 'T1')), run = F.runPieces(start);
+  for (const hold of ['left', 'right']) {
+    const r = EV.even(start, { ...run, value: 16, hold });
+    assert.equal(r.reading, 'road', hold);
+    const back = edgeMove(r.doc, base, hold, F.RUN.lo, F.RUN.hi);
+    assert.ok(back <= 0.01, `${hold}: ${back} m from the untouched road`);
+    const k = r.keptMove(), moved = edgeMove(r.doc, start, hold, F.WIN.w0, F.WIN.w1);
+    assert.ok(Math.abs(k.m - moved) <= 0.01, `${hold}: Even says ${k.m} m, measured ${moved} m`);
+  }
+});
+
+test('A1-6: a grab centred 5 m outside the window\'s start (B-, at 145) fools a 10 m test but not A1\'s 10, 20 and 30 m: that end reads as moving; the track\'s start reads as an edge', async () => {
+  const sh = await F.shellOn(F.fixture('B-')); F.grab(sh, 145, 16);
+  const d = F.present(sh), off = SC.pieceOffsets(d), L = runEnd(d, d.pieces.length - 1), I = EV._internal, x0 = EV.evenWindow(d, F.runPieces(d)).win.w0;
+  assert.ok(Math.abs(F.at(d, 'w', x0) - F.at(d, 'w', x0 - 10)) <= 1e-3, `control: the width 10 m beyond the end equals the end's (${F.at(d, 'w', x0)}, ${F.at(d, 'w', x0 - 10)})`);
+  assert.equal(I.endState(d, off, 'w', x0, -1, L).kind, 'moving');
+  assert.equal(I.endState(d, off, 'w', 0, -1, L).kind, 'edge', 'the track\'s start has no road before it');
+});
+
+for (const id of ['T1', 'T2b']) {
+  test(`A1-7: B- ${id}: the road is read "under the bank as Even finds it": Even says the stretch is banked, and the kept edge is within 0.01 m of that road (L271 point 4)`, async () => {
+    const start = F.present(await F.startOf(F.fixture('B-'), id)), run = F.runPieces(start), I = EV._internal;
+    const C = I.cutOf(start, run), rd = I.readSupported(C.doc, C.W.off, C.W.win, C.W.L), ref = I.levelTo(C.doc, { w: rd.w, l: rd.l }, C.W.win);
+    for (const hold of ['left', 'right']) {
+      const r = EV.even(start, { ...run, value: 16, hold });
+      assert.equal(r.reading, 'road'); assert.equal(r.banked, true);
+      const m = edgeMove(r.doc, ref, hold, F.RUN.lo, F.RUN.hi);
+      assert.ok(m <= 0.01, `${hold}: ${m} m from the road read under the bank`);
+    }
+  });
+}
+test('A1-7: an unbanked stretch is not said to be banked', () => {
+  const base = F.fixture('flat'); assert.equal(EV.even(base, { ...F.runPieces(base), value: 16, hold: 'left' }).banked, false);
+});
+
+test("A1-8: the middle kept ('centre') reads nothing: a run from the track's start is levelled, with no kept edge to measure", () => {
+  const base = F.fixture('flat'), r = EV.even(base, { from: 0, to: 1, value: 16, hold: 'centre' });
+  assert.equal(r.reading, 'centre'); assert.equal(r.keptMove, null);
 });

@@ -1275,7 +1275,8 @@ for (const [id, held] of [['width:1', 'right'], ['width:-1', 'left']]) {
     assert.ok(moved <= 0.01, `the ${held} edge stays: it moved ${moved} m`);
     // AMENDED BY NAME (D678 repair, the librarian's 15:4x ruling item 3): the done sentence no longer says the kept edge "stays where it was" (it can move: B's
     // read, 2.5); it says where Even lays it. This road has no grab, so the edge's own measure above (moved <= 0.01) still holds here.
-    assert.match(shell.getState().message, new RegExp(`^Even: ${w} m wide from 0\\.30 km to 0\\.60 km.*the ${held} edge is laid where Even reads the road's own edge from the stretch's ends, so it can move`));
+    // AMENDED BY NAME again (L271, "Amended 02:5x" point 3): the words say the reading and how far the kept edge moved
+    assert.match(shell.getState().message, new RegExp(`^Even: ${w} m wide from 0\\.30 km to 0\\.60 km.*the ${held} edge is put back where the road had it, read from the stretch's ends: it moved \\d+\\.\\d\\d m across at most, at \\d+\\.\\d\\d km`));
     assert.deepEqual([shell.selectionInfo().from, shell.selectionInfo().to], [1, 2], 'the run stays selected');
     shell.undo(); assert.equal(shell.getState().history.present, d0, 'Undo gives back the very same document');
     P1.panel.unmount();
