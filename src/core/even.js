@@ -146,8 +146,10 @@ function readSupported(doc, off, win, L) {
       const inward = valueAt(doc, off, ch, Math.min(L, Math.max(0, xo - dir * REST_SPAN_M)));
       const ok = o.kind === 'edge' ? Math.abs(o.v - r.v) <= EVEN_AGREE_M : Math.abs(inward - r.v) <= Math.abs(o.v - r.v) + REST_M;
       if (ok) { const v = r.v; f = () => v; }
-      else why = o.kind === 'edge' ? `the stretch reaches the track's ${dir < 0 ? 'start' : 'open end'}, where the road's ${WHAT[ch]} is still changing` : `the road's ${WHAT[ch]} is changing away from the road at the stretch's other end`;
-    } else why = a.kind === 'edge' || b.kind === 'edge' ? `the stretch reaches the track's ${a.kind === 'edge' ? 'start' : 'open end'}, and the road's ${WHAT[ch]} is still changing at its other end` : `the road's ${WHAT[ch]} is still changing at both ends of the stretch`;
+      // an edge has no road beyond it, so it is never read as changing: only its value is known, and it differs from the other end's (L271, the second seat's read)
+      else why = o.kind === 'edge' ? `the stretch reaches the track's ${dir < 0 ? 'start' : 'open end'}, where the road's ${WHAT[ch]} differs from the road at the stretch's other end` : `the road's ${WHAT[ch]} is changing away from the road at the stretch's other end`;
+    } else why = a.kind === 'edge' && b.kind === 'edge' ? 'the stretch reaches both ends of the track, so there is no road beyond it to read'
+      : a.kind === 'edge' || b.kind === 'edge' ? `the stretch reaches the track's ${a.kind === 'edge' ? 'start' : 'open end'}, and the road's ${WHAT[ch]} is still changing at its other end` : `the road's ${WHAT[ch]} is still changing at both ends of the stretch`;
     if (!f) return { ok: false, why };
     fns[ch] = f;
   }

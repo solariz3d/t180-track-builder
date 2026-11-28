@@ -26,7 +26,7 @@ All notable changes to this project are recorded here. The format follows
   reading (a run from the track's start, a stretch end on a grab, a width changing away from the other end's), the kept edge is kept where it is now,
   one least-squares fit over the stretch (within 0.01 m on every case measured but one, 0.0138 m), and the message says so and why. On a banked
   stretch the road is read under the bank as Even finds it (the kept edge within 0.008 m of that road). Every message with an edge kept says which it
-  did, how far the edge moved and where. A road whose own width changes inside the run with no bump is still read from its ends, and wrongly (1.5 m
+  did and how far the edge moved, and, where the road is read, where. A road whose own width changes inside the run with no bump is still read from its ends, and wrongly (1.5 m
   and 2.9 m on two roads made to show it), so on such a road that figure is the warning. With the middle kept, the middle is laid smooth between the
   stretch's ends and both edges move. The height on the run is eased between the stretch's ends too, so a hill or dip there goes. Where the new
   middle's line leaves the road where the old one held, the message says where, how far the middle moved, and the load before and after, in the
@@ -37,8 +37,8 @@ All notable changes to this project are recorded here. The format follows
   and Even's documents are frozen all the way down as the rest of the core's are, so the segment caches hold and Even no longer converts the whole
   lap at every offset it reads. The check that the road does not come too close under another pass now runs once, when the drag is
   released (a break refuses the whole drag by name and puts the track back as it was), not at every step, and the stretch's cut track and the road
-  read from its ends are kept for the whole drag (L271): on the largest lap measured on that machine, 13.2 km, a step went from 1.09 s to 0.19 s
-  (the grab's step there is 0.10 s), and the release now pauses 0.74 s for that check. Refused by name, nothing changed: no run selected, a jump within reach, a tube, a
+  read from its ends are kept for the whole drag (L271): on a 13,233 m closed lap, measured in two sessions on one machine, a step went from 1.09 s to between 0.19 and
+  0.31 s (the grab's step there 0.10 to 0.13 s, so Even's is about twice it), and the release now pauses 0.74 to 1.25 s for that check. Refused by name, nothing changed: no run selected, a jump within reach, a tube, a
   right side with its own width, a closed lap's start line within reach, a width under 0.5 m or over 400 m. The grab is unchanged. In the core: `src/core/even.js` (`even`,
   `evenWindow`, `shiftOf`); `src/core/document.js` `refineKnots` takes `{ roundOnce }`, which inserts a span's knots exactly and rounds the new
   control points once at the end (`insertKnotsRoundOnce`; rounding after each knot carried a banked road's bank past one stored step, and

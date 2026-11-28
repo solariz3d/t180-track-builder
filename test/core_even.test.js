@@ -333,3 +333,22 @@ test("A1-8: the middle kept ('centre') reads nothing: a run from the track's sta
   const base = F.fixture('flat'), r = EV.even(base, { from: 0, to: 1, value: 16, hold: 'centre' });
   assert.equal(r.reading, 'centre'); assert.equal(r.keptMove, null);
 });
+
+// L271, the second seat's read (lighthouse exo_memory/handback/p-l271-read-even-E_2026-11-28.md, section 3): where Even keeps the edge it says why, and the reason
+// must be true of the road. Three roads where it was not: the width was said to be "still changing" where it is level (the two strings in readSupported for an end
+// with no road beyond it). The edge itself was right on all three (kept, 0.00 m).
+const levelRoad = (list) => { let d = D.createDoc('reason'); for (const [length, width] of list) d = require('../src/core/turnby.js').extendCorner(d, require('../app/core/panel.js').extendOptions({ length, turn: 0, climb: 0, bank: 0, width, turnAs: 'corner' })); return Object.freeze(d); };
+for (const [id, list, level, want] of [
+  ['R1: a run from the track\'s start whose first piece is typed 31 m', [[120, 31], [100, 12], [300, 12]], [0, 10, 20, 30], /^the stretch reaches the track's start, where the road's width differs from the road at the stretch's other end$/],
+  ['R2: a 150 m track evened whole (its open end level at 12 m)', [[90, 12], [60, 12]], [110, 120, 130, 140, 150], /^the stretch reaches both ends of the track, so there is no road beyond it to read$/],
+  ['R3: a 150 m track level at 31 m everywhere, evened whole', [[90, 31], [60, 31]], [0, 30, 60, 90, 120, 150], /^the stretch reaches both ends of the track, so there is no road beyond it to read$/],
+]) {
+  test(`${id}: Even keeps the edge and its reason is true of the road (no "still changing" where the width is level)`, () => {
+    const d = levelRoad(list), w = level.map((s) => F.at(d, 'w', s));
+    assert.ok(F.spread(w) <= 1e-6, `control: the width is level at ${level.join(', ')} m (${w.join(', ')})`);
+    const r = EV.even(d, { from: 0, to: 1, value: 14, hold: 'left' });
+    assert.equal(r.reading, 'kept');
+    assert.match(r.why, want);
+    assert.ok(edgeMove(r.doc, d, 'left', 0, runEnd(d, 1)) <= 0.01, 'the edge is kept where it is');
+  });
+}
