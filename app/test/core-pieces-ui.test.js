@@ -1199,15 +1199,17 @@ test('row D464: Sculpt\'s how-to line and value line read as instructions, not e
 // station; the drag is a SET of channels; and, built again from the document the drag made, the pressed point is under the pointer on the grab plane (the test that could fail) and a
 // rim press keeps the far rim. A press on a dot opens at the dot's station; off the road, or with no u, the press is Grab's one channel as before; never a re-route. The view is a
 // real one (app/camera/math.js) over the shell's own road, the preview's ray (preview.js rayAt) answering 't180-grab-ray'.
-test('row 25 (D519, amended D520): Grab on the road: the pressed point follows the pointer and a rim keeps the far rim (built again and read), a dot opens at its own station, off the road is Grab as before', async () => {
+test('row 25 (D519, amended D520, L271): Grab on the road: the pressed point follows the pointer (a rim press, along the road slope) and a rim keeps the far rim (built again and read), a dot opens at its own station, off the road is Grab as before', async () => {
   const PV = require('../preview/preview.js'), ZG = require('../core/zonegrab.js'), M = require('../camera/math.js');
   const P = await mountPanel(store(), { shellOpts: { brushFn: undefined } }), { shell, doc } = P, opened = [], follows = [], begin = shell.beginBrush, beginF = shell.beginFollow;   // brushFn undefined: the core's brush, as the app has it
   shell.beginBrush = (o) => { opened.push(o); return begin(o); }; shell.beginFollow = (o) => { follows.push(o); return beginF(o); };
   shell.setSculpt(true); P.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'sculpt tool').value = 'grab';
   const built = () => AD.toPath(shell.getState().history.present);
   doc.addEventListener('t180:track-request', (ev) => { const t = built(); ev.detail.reply({ segments: t.segments, path: t.path }); });   // after the panel's own (empty) one: the last reply wins
-  const m0 = built().path.samples.find((x) => x.s === 100), pose = { eye: [m0.pos[0] - m0.T[0] * 60, m0.pos[1] + 50, m0.pos[2] - m0.T[2] * 60], target: m0.pos.slice(), up: [0, 1, 0], fov: Math.PI / 3 };
-  const VP = M.viewProj(pose, 900 / 600), scr = (p) => { const c = M.apply(VP, p); return [(c[0] / c[3] * 0.5 + 0.5) * 900, (1 - (c[1] / c[3] * 0.5 + 0.5)) * 600]; };
+  const aim = (q) => ({ eye: [q.pos[0] - q.T[0] * 60, q.pos[1] + 50, q.pos[2] - q.T[2] * 60], target: q.pos.slice(), up: [0, 1, 0], fov: Math.PI / 3 });   // L271: re-aimed once, for the banked press
+  const m0 = built().path.samples.find((x) => x.s === 100);
+  let pose = aim(m0), VP = M.viewProj(pose, 900 / 600);
+  const scr = (p) => { const c = M.apply(VP, p); return [(c[0] / c[3] * 0.5 + 0.5) * 900, (1 - (c[1] / c[3] * 0.5 + 0.5)) * 600]; };
   doc.addEventListener('t180-grab-ray', (ev) => ev.detail.reply((x, y) => PV.rayAt(pose, x, y, 900, 600)));
   const gap = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   const press = (u, dx, dy, { s = 100, extra } = {}) => {
@@ -1216,8 +1218,13 @@ test('row 25 (D519, amended D520): Grab on the road: the pressed point follows t
     P.pointer('pointerdown', x, y); P.pointer('pointermove', x + dx, y + dy); P.frame();
     const b = shell.getState().brush, d = b ? b.delta : null, after = shell.getState().history.present; P.pointer('pointerup', x + dx, y + dy);
     const r0 = PV.rayAt(pose, x, y, 900, 600), r1 = PV.rayAt(pose, x + dx, y + dy, 900, 600), D3 = ZG.planePoint(r1, A.pos, r0.forward).map((v, k) => v - A.pos[k]);
-    const want = A.pos.map((v, k) => v + D3[k] - dot(D3, m.T) * m.T[k]), t2 = AD.toPath(after), m2 = t2.path.samples.find((q) => q.s === s), fu = u < 0 ? 1 : -1;
-    const out = { d, moved: Math.hypot(...D3), miss: gap(ZG.acrossAt(t2.path, t2.segments, m2, u).pos, want), far: gap(ZG.acrossAt(t2.path, t2.segments, m2, fu).pos, ZG.acrossAt(t.path, t.segments, m, fu).pos) };
+    const fu = u < 0 ? 1 : -1, want = A.pos.map((v, k) => v + D3[k] - dot(D3, m.T) * m.T[k]), t2 = AD.toPath(after), m2 = t2.path.samples.find((q) => q.s === s);
+    // L271 (the grab along the slope; his word, 01:35: "2. yes? I think?"): off the centre band the drag's horizontal part goes along the chord from the far rim to the point
+    // (its share along it) and its part along the unrolled up as before; read from the road (acrossAt), as zonegrab.test.js slopeWant
+    const F = ZG.frameAt(t.path, t.segments, s, u), Af = ZG.acrossAt(t.path, t.segments, m, fu), ch = A.pos.map((v, k) => v - Af.pos[k]), cR = dot(ch, F.R), cU = dot(ch, F.U0), cn = Math.hypot(cR, cU);
+    const pl = D3.map((v, k) => v - dot(D3, m.T) * m.T[k]), e = dot(pl, F.R), v = dot(pl, F.U0), cx = cR / cn, cy = cU / cn, slopeWant = A.pos.map((q, k) => q + F.R[k] * e * cx * cx + F.U0[k] * (e * cx * cy + v));
+    const wholeAcross = A.pos.map((q, k) => q + F.R[k] * e + F.U0[k] * (e * cx * cy + v));   // where the pull taken whole across (the rise kept) would put it: the row's own control
+    const out = { d, moved: Math.hypot(...D3), miss: gap(ZG.acrossAt(t2.path, t2.segments, m2, u).pos, want), slopeMiss: gap(ZG.acrossAt(t2.path, t2.segments, m2, u).pos, slopeWant), far: gap(ZG.acrossAt(t2.path, t2.segments, m2, fu).pos, ZG.acrossAt(t.path, t.segments, m, fu).pos), across: gap(wholeAcross, slopeWant) };
     if (shell.getState().history.present !== before) shell.undo();
     return out;
   };
@@ -1226,7 +1233,9 @@ test('row 25 (D519, amended D520): Grab on the road: the pressed point follows t
   assert.ok(r.moved > 1, `the pointer moved ${r.moved} m on the plane`); assert.ok(r.miss < 0.01, `the pressed point is ${r.miss} m from the pointer`);
   r = press(-0.95, -30, -25);
   assert.deepEqual(Object.keys(r.d).sort(), ['h', 'l', 'phi', 'w'], `the rim turns and stretches the road: ${JSON.stringify(r.d)}`);
-  assert.ok(r.miss < 0.01, `the rim point is ${r.miss} m from the pointer`); assert.ok(r.far < 0.01, `the far rim moved ${r.far} m`);
+  // AMENDED BY NAME (L271, the grab along the slope): this road is cupped, and a press at 0.95 sits inside the rim, so the chord from the far rim slopes with the cup and the drag's
+  // horizontal part now goes along it. It was: the rim point within 1 cm of the pointer; measured when amended, 0.031 m from it. The far rim's half is unchanged
+  assert.ok(r.slopeMiss < 0.01, `the rim point is ${r.slopeMiss} m from the slope grab's place (${r.miss} m from the pointer)`); assert.ok(r.far < 0.01, `the far rim moved ${r.far} m`);
   const at400 = (() => { const t = built(), m = t.path.samples.find((x) => x.s === 400); return ZG.acrossAt(t.path, t.segments, m, 0).pos; })();
   P.panel.handles.dotAt = () => ({ s: 400, u: 0, side: 1, axes: { U: [0, 0], L: [0, 0] }, at: at400 });   // a dot under the press: the grab opens at the dot, not at the station the pick finds
   press(0.05, 0, -30); assert.equal(follows[follows.length - 1].s0, 400, 'a press on a dot opens the follow at that dot'); delete P.panel.handles.dotAt;
@@ -1235,6 +1244,16 @@ test('row 25 (D519, amended D520): Grab on the road: the pressed point follows t
   press(0.05, 0, -30, { extra: null }); assert.deepEqual([opened[opened.length - 1].tool, opened[opened.length - 1].channel], ['grab-up', 'height'], 'a pick with no u: Grab as before');
   assert.equal(follows.length, n, 'neither opened the follow');
   for (const o of opened) assert.ok(!['kh', 'kv', 'length'].includes(o.channel) && !['bend', 'climb', 'stretch'].includes(o.tool), `never a re-route: ${o.tool}`);
+  // L271, AMENDED (C's read, C6): on the cupped road above the pull's share across (e·cx²) is within 1 cm of the whole pull, so that press pins the rise along the slope
+  // but cannot tell the share from the whole. The rim half is pressed again on a BANKED road, where the chord slopes with the bank: two pieces laid at the head
+  // (200 m banking to 20°, 150 m held), the view moved there, the rim at u -1 pulled level (no screen-vertical part) 40 px outward
+  shell.commitDoc(extend(extend(shell.getState().history.present, { length: 200, targets: { phi: 20 * DEG } }), { length: 150 }));
+  const tb = built(), Lb = tb.path.samples[tb.path.samples.length - 1].s, mb = tb.path.samples.reduce((a, q) => (Math.abs(q.s - (Lb - 75)) < Math.abs(a.s - (Lb - 75)) ? q : a));
+  pose = aim(mb); VP = M.viewProj(pose, 900 / 600);
+  const out = Math.sign(scr(ZG.acrossAt(tb.path, tb.segments, mb, -1).pos)[0] - scr(ZG.acrossAt(tb.path, tb.segments, mb, 0).pos)[0]);
+  r = press(-1, 40 * out, 0, { s: mb.s });
+  assert.ok(r.across > 0.05, `control: the pull whole across would land ${r.across} m from the slope grab's place, so this press tells the two apart`);
+  assert.ok(r.slopeMiss < 0.01, `on the banked road the rim point is ${r.slopeMiss} m from the slope grab's place (${r.miss} m from the pointer)`); assert.ok(r.far < 0.01, `and the far rim moved ${r.far} m`);
 });
 
 test('row 25b (D519): with another key the press keeps that key\'s one channel wherever it lands; the shell says what the piece is and why a channel would be refused', async () => {
