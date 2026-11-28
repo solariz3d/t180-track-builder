@@ -151,7 +151,15 @@ async function grabbed(doc, u, delta) {
   const { path, segments } = toPath(doc), F = ZG.frameAt(path, segments, S0, u), info = sh.zoneInfo(S0, u), d = ZG.follow(delta, F, info);
   sh.beginFollow({ s0: S0, r: RAD }); assert.ok(sh.getState().brush, sh.getState().message || 'the grab opened'); sh.brushTo(d); const out = sh.getState().history.present; sh.endBrush();
   const want = surface(doc, u).map((x, k) => x + delta[k] - dotv(delta, F.T) * F.T[k]);
-  return { d, F, out, sh, miss: gap(surface(out, u), want), far: gap(surface(out, u < 0 ? 1 : -1), surface(doc, u < 0 ? 1 : -1)) };
+  return { d, F, out, sh, miss: gap(surface(out, u), want), slopeMiss: gap(surface(out, u), slopeWant(doc, u, delta, F)), far: gap(surface(out, u < 0 ? 1 : -1), surface(doc, u < 0 ? 1 : -1)) };
+}
+// L271 (his word, 01:35: "2. yes? I think?"): THE GRAB ALONG THE SLOPE. Where the pressed point goes, read from the road and not from follow: the drag's along-the-road part
+// dropped, its horizontal part (along R) carried along the chord from the far rim to the point by its share along the chord, its part along the unrolled up (U0) as before.
+// On a level chord (a flat road, the point at the far rim's height) that is the pointer itself
+function slopeWant(doc, u, delta, F) {
+  const p0 = surface(doc, u), ch = p0.map((x, k) => x - surface(doc, u < 0 ? 1 : -1)[k]), cR = dotv(ch, F.R), cU = dotv(ch, F.U0), n = Math.hypot(cR, cU), cx = cR / n, cy = cU / n;
+  const p = delta.map((x, k) => x - dotv(delta, F.T) * F.T[k]), e = dotv(p, F.R), v = dotv(p, F.U0);
+  return p0.map((x, k) => x + F.R[k] * e * cx * cx + F.U0[k] * (e * cx * cy + v));
 }
 const MM = 5e-4;   // half a millimetre: the doubles stored to 0.1 mm (DEC.h, l, w) and the bank's smoothstep between the path's samples (measured 0.004 to 0.05 mm with a probe script)
 
@@ -195,9 +203,11 @@ test('row 14d (D520, amended D522): partway out on a cup piece or a plain road a
 test('row 14l (D522, the plan\'s far-rim rows): a press at u 0.25, 0.5 and 0.75, either side, on a flat road and at 60°, dragged up, out and both: the far rim stays within 1 cm', async () => {
   let worstFar = 0, worstMiss = 0;
   for (const phi of [0, 60]) for (const u of [0.25, 0.5, 0.75, -0.25, -0.5, -0.75]) for (const delta of [[0, 1.5, 0], [2, 0, 0], [-1, 1, 0.5]]) {
-    const r = await grabbed(road(phi), u, delta); worstFar = Math.max(worstFar, r.far); worstMiss = Math.max(worstMiss, r.miss);
+    const r = await grabbed(road(phi), u, delta); worstFar = Math.max(worstFar, r.far); worstMiss = Math.max(worstMiss, r.slopeMiss);
   }
-  assert.ok(worstFar < 0.01, `the far rim moves up to ${worstFar} m`); assert.ok(worstMiss < 0.01, `the point misses by up to ${worstMiss} m`);
+  // AMENDED BY NAME (L271, the grab along the slope; his word, 01:35: "2. yes? I think?"): at 60° a pull out no longer brings the point to the pointer; it goes along the chord's
+  // slope by the pull's share along it, and a lift as before (slopeWant). It was: the point within 1 cm of the pointer. Measured when amended: up to 1.73 m from the pointer
+  assert.ok(worstFar < 0.01, `the far rim moves up to ${worstFar} m`); assert.ok(worstMiss < 0.01, `the point misses the slope grab's place by up to ${worstMiss} m`);
 });
 
 test('row 14m (D522, decision 2): a 30 m grab on 20 m knots is sharp: the road changes by more than 0.1 mm only within the 30 m asked, and outside it by under 0.1 mm (Sharp\'s declared spill)', async () => {
@@ -246,9 +256,11 @@ test('row 14g (D520, plan item 2, "the forward component is dropped"): a drag al
 test('row 14h (D520, O\'s catch, D519 §6): on a road banked 60° and 85°, either way, a rim dragged any way keeps the FAR rim where it was, and the point follows', async () => {
   let worstFar = 0, worstMiss = 0;
   for (const phi of [60, -60, 85, -85]) for (const u of [1, -1, 0.95, -0.95]) for (const delta of [[0, 2, 0], [2, 0, 0], [1.5, -1, 0.7], [0, -3, 0]]) {
-    const r = await grabbed(road(phi), u, delta); worstFar = Math.max(worstFar, r.far); worstMiss = Math.max(worstMiss, r.miss);
+    const r = await grabbed(road(phi), u, delta); worstFar = Math.max(worstFar, r.far); worstMiss = Math.max(worstMiss, r.slopeMiss);
   }
-  assert.ok(worstFar < MM, `the far rim moves up to ${worstFar} m`); assert.ok(worstMiss < MM, `the point misses by up to ${worstMiss} m`);
+  // AMENDED BY NAME (L271, the grab along the slope, as row 14l): the point lands where the slope grab puts it, not on the pointer; it was within 0.5 mm of the pointer.
+  // Measured when amended: up to 1.99 m from the pointer. The far rim's half of the row is unchanged
+  assert.ok(worstFar < MM, `the far rim moves up to ${worstFar} m`); assert.ok(worstMiss < MM, `the point misses the slope grab's place by up to ${worstMiss} m`);
 });
 
 test('row 14i (D520, the control for 14h): the plan\'s flat-road rim rule (w += e, l += e/2 along world-horizontal left) moves the far rim of an 85° road by more than a metre', async () => {
@@ -266,7 +278,9 @@ test('row 14j (D520): on a road pitched up to 23°, where a lift along world up 
   };
   let worst = 0;
   for (const o of [{ kv: 0.002 }, { kv: 0.004 }, { kh: 0.004, kv: -0.002 }]) for (const phi of [-85, 60]) for (const u of [1, -0.95, 0, 0.5]) {
-    const doc = road(phi, o), r = await grabbed(doc, u, [1.2, 1.5, -0.8]), want = surface(doc, u).map((x, k) => x + [1.2, 1.5, -0.8][k] - dotv([1.2, 1.5, -0.8], r.F.T) * r.F.T[k]);
+    // AMENDED BY NAME (L271, the grab along the slope, as row 14l): off the centre band the point's place is the slope grab's (slopeWant), not the pointer's; it was the
+    // pointer's for every u. Measured when amended: 1.41 m off. The centre band (u 0) slides whole as before, so its place is still the pointer's
+    const doc = road(phi, o), r = await grabbed(doc, u, [1.2, 1.5, -0.8]), want = Math.abs(u) >= ZG.HINGE_U ? slopeWant(doc, u, [1.2, 1.5, -0.8], r.F) : surface(doc, u).map((x, k) => x + [1.2, 1.5, -0.8][k] - dotv([1.2, 1.5, -0.8], r.F.T) * r.F.T[k]);
     worst = Math.max(worst, toLine(r.out, u, want));
   }
   assert.ok(worst < 0.01, `the pointer is ${worst} m off the road`);
@@ -278,6 +292,29 @@ test('row 14k (D520): follow\'s boundaries: no frame, a delta that is not three 
   assert.equal(ZG.follow([0, 1, 0], { ...F, U0: [0, 0.01, 1] }), null);
   const d = ZG.follow(F.R.map((x) => x * -100), F, {}); assert.ok(Math.abs(d.w - 32 * (ZG.SQUEEZE_MIN - 1)) < 1e-6, `the width change ${d.w}`); assert.ok(Math.abs(d.phi) < 1e-9, `the bank change ${d.phi}`);
   assert.equal(ZG.frameAt(path, segments, NaN, 0), null); assert.equal(ZG.frameAt({ samples: [] }, segments, S0, 0), null);
+});
+
+// L271 (D678 probe 2, candidate 3; his word, 01:35: "2. yes? I think?"): THE GRAB ALONG THE SLOPE. A straight pull out or in at a rim stretches the road along its own
+// slope and does not turn it, so a banked road keeps its bank (it was flattened by a pull out: 4.998° off a 20° turn after one 4 m pull, D's probe); a straight lift turns
+// it as before, so a lift still banks a road and the point stays under the pointer. What would show it failing: a bank change from a pull, or a lift that no longer banks
+test('row 14o (L271): on a road banked 20° and 60°, either way, a straight pull out or in at a rim or partway out keeps the bank, and the far rim stays', async () => {
+  let worstPhi = 0, worstFar = 0;
+  for (const phi of [20, -20, 60, -60]) for (const u of [1, -1, 0.95, -0.95, 0.5]) for (const e of [2, -2]) {
+    const doc = road(phi), { path, segments } = toPath(doc), F = ZG.frameAt(path, segments, S0, u), side = u < 0 ? -1 : 1, r = await grabbed(doc, u, F.R.map((x) => x * e * side));
+    assert.ok(Math.sign(r.d.w) === Math.sign(e), `${phi}°, u ${u}: a pull ${e > 0 ? 'out widens' : 'in narrows'} the road: ${JSON.stringify(r.d)}`);
+    worstPhi = Math.max(worstPhi, Math.abs(r.d.phi)); worstFar = Math.max(worstFar, r.far);
+  }
+  assert.ok(worstPhi < 1e-12, `a pull turns the bank by up to ${worstPhi} rad`); assert.ok(worstFar < MM, `the far rim moves up to ${worstFar} m`);
+});
+
+test('row 14p (L271): on a road banked 20° and 60°, either way, a straight lift at a rim or partway out still banks the road, the far rim stays, and the point stays under the pointer', async () => {
+  let worstMiss = 0, worstFar = 0;
+  for (const phi of [20, -20, 60, -60]) for (const u of [1, -1, 0.95, -0.5]) for (const up of [1.5, -1]) {
+    const r = await grabbed(road(phi), u, [0, up, 0]);
+    assert.ok(Math.abs(r.d.phi) > 0.01 && Math.sign(r.d.phi) === Math.sign(u) * Math.sign(up), `${phi}°, u ${u}: a lift of ${up} m on the ${u > 0 ? 'left' : 'right'} banks the road that way: ${JSON.stringify(r.d)}`);
+    worstMiss = Math.max(worstMiss, r.miss); worstFar = Math.max(worstFar, r.far);
+  }
+  assert.ok(worstMiss < MM, `the point misses the pointer by up to ${worstMiss} m`); assert.ok(worstFar < MM, `the far rim moves up to ${worstFar} m`);
 });
 
 // 0.4.29 (found in the before-release review): the panel draws the dots and handles from shell.sculptInfo(), which reads the selection only while it

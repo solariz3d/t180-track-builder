@@ -1216,8 +1216,12 @@ test('row 25 (D519, amended D520): Grab on the road: the pressed point follows t
     P.pointer('pointerdown', x, y); P.pointer('pointermove', x + dx, y + dy); P.frame();
     const b = shell.getState().brush, d = b ? b.delta : null, after = shell.getState().history.present; P.pointer('pointerup', x + dx, y + dy);
     const r0 = PV.rayAt(pose, x, y, 900, 600), r1 = PV.rayAt(pose, x + dx, y + dy, 900, 600), D3 = ZG.planePoint(r1, A.pos, r0.forward).map((v, k) => v - A.pos[k]);
-    const want = A.pos.map((v, k) => v + D3[k] - dot(D3, m.T) * m.T[k]), t2 = AD.toPath(after), m2 = t2.path.samples.find((q) => q.s === s), fu = u < 0 ? 1 : -1;
-    const out = { d, moved: Math.hypot(...D3), miss: gap(ZG.acrossAt(t2.path, t2.segments, m2, u).pos, want), far: gap(ZG.acrossAt(t2.path, t2.segments, m2, fu).pos, ZG.acrossAt(t.path, t.segments, m, fu).pos) };
+    const fu = u < 0 ? 1 : -1, want = A.pos.map((v, k) => v + D3[k] - dot(D3, m.T) * m.T[k]), t2 = AD.toPath(after), m2 = t2.path.samples.find((q) => q.s === s);
+    // L271 (the grab along the slope; his word, 01:35: "2. yes? I think?"): off the centre band the drag's horizontal part goes along the chord from the far rim to the point
+    // (its share along it) and its part along the unrolled up as before; read from the road (acrossAt), as zonegrab.test.js slopeWant
+    const F = ZG.frameAt(t.path, t.segments, s, u), Af = ZG.acrossAt(t.path, t.segments, m, fu), ch = A.pos.map((v, k) => v - Af.pos[k]), cR = dot(ch, F.R), cU = dot(ch, F.U0), cn = Math.hypot(cR, cU);
+    const pl = D3.map((v, k) => v - dot(D3, m.T) * m.T[k]), e = dot(pl, F.R), v = dot(pl, F.U0), cx = cR / cn, cy = cU / cn, slopeWant = A.pos.map((q, k) => q + F.R[k] * e * cx * cx + F.U0[k] * (e * cx * cy + v));
+    const out = { d, moved: Math.hypot(...D3), miss: gap(ZG.acrossAt(t2.path, t2.segments, m2, u).pos, want), slopeMiss: gap(ZG.acrossAt(t2.path, t2.segments, m2, u).pos, slopeWant), far: gap(ZG.acrossAt(t2.path, t2.segments, m2, fu).pos, ZG.acrossAt(t.path, t.segments, m, fu).pos) };
     if (shell.getState().history.present !== before) shell.undo();
     return out;
   };
@@ -1226,7 +1230,9 @@ test('row 25 (D519, amended D520): Grab on the road: the pressed point follows t
   assert.ok(r.moved > 1, `the pointer moved ${r.moved} m on the plane`); assert.ok(r.miss < 0.01, `the pressed point is ${r.miss} m from the pointer`);
   r = press(-0.95, -30, -25);
   assert.deepEqual(Object.keys(r.d).sort(), ['h', 'l', 'phi', 'w'], `the rim turns and stretches the road: ${JSON.stringify(r.d)}`);
-  assert.ok(r.miss < 0.01, `the rim point is ${r.miss} m from the pointer`); assert.ok(r.far < 0.01, `the far rim moved ${r.far} m`);
+  // AMENDED BY NAME (L271, the grab along the slope): this road is cupped, and a press at 0.95 sits inside the rim, so the chord from the far rim slopes with the cup and the drag's
+  // horizontal part now goes along it. It was: the rim point within 1 cm of the pointer; measured when amended, 0.031 m from it. The far rim's half is unchanged
+  assert.ok(r.slopeMiss < 0.01, `the rim point is ${r.slopeMiss} m from the slope grab's place (${r.miss} m from the pointer)`); assert.ok(r.far < 0.01, `the far rim moved ${r.far} m`);
   const at400 = (() => { const t = built(), m = t.path.samples.find((x) => x.s === 400); return ZG.acrossAt(t.path, t.segments, m, 0).pos; })();
   P.panel.handles.dotAt = () => ({ s: 400, u: 0, side: 1, axes: { U: [0, 0], L: [0, 0] }, at: at400 });   // a dot under the press: the grab opens at the dot, not at the station the pick finds
   press(0.05, 0, -30); assert.equal(follows[follows.length - 1].s0, 400, 'a press on a dot opens the follow at that dot'); delete P.panel.handles.dotAt;

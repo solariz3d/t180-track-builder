@@ -170,7 +170,12 @@ function follow(delta, frame, piece = {}) {
   if (!(Math.abs(frame.u) >= HINGE_U)) return slide(e, v);
   const v0 = rot(oP[0] - oF[0], oP[1] - oF[1]), n0 = Math.hypot(v0[0], v0[1]);
   if (!(n0 > 1e-9)) return slide(e, v);
-  const v1 = [v0[0] + e, v0[1] + v], short = Math.max(0, SQUEEZE_MIN * n0 * n0 - (v1[0] * v0[0] + v1[1] * v0[1])) / (n0 * n0);   // never nearer the far rim than SQUEEZE_MIN along the chord
+  // L271 (D678 probe 2, candidate 3; his word, 01:35: "2. yes? I think?"): THE GRAB ALONG THE SLOPE. The drag's HORIZONTAL part (e) moves the point along the chord's
+  // own slope, by its share along the chord (e·cx along the chord's unit direction), so a pull out or in stretches the road and does not turn it: a banked road keeps its
+  // bank, and its middle follows the slope (up on a bank toward the pull, down on one away). The vertical part (v) is added as before, so a lift still turns the chord: that
+  // is how a lift banks the road (row 14f). On a level chord (cx ±1, cy 0) this is the drag as it was, to the bit
+  const cx = v0[0] / n0, cy = v0[1] / n0;
+  const v1 = [v0[0] + e * cx * cx, v0[1] + e * cx * cy + v], short = Math.max(0, SQUEEZE_MIN * n0 * n0 - (v1[0] * v0[0] + v1[1] * v0[1])) / (n0 * n0);   // never nearer the far rim than SQUEEZE_MIN along the chord
   v1[0] += short * v0[0]; v1[1] += short * v0[1];
   const k = Math.hypot(v1[0], v1[1]) / n0, dphi = Math.atan2(v0[0] * v1[1] - v0[1] * v1[0], v0[0] * v1[0] + v0[1] * v1[1]);
   const c1 = Math.cos(dphi) * cos - Math.sin(dphi) * sin, s1 = Math.sin(dphi) * cos + Math.cos(dphi) * sin;   // the bank after: φ + dφ
