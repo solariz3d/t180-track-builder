@@ -24,7 +24,7 @@
 // turn are amber), so a short sharp turn is the user's to judge by driving it; how sharp a builder turn can be is still to measure.
 'use strict';
 const D = require('./document.js');
-const { extend, bloss, checkBankAsBuilt } = require('./extend.js');
+const { extend, bloss, checkBankAsBuilt, layHold } = require('./extend.js');
 const { basisN } = require('../../tools/piecewise.cjs');
 
 const SEG_M = 2;               // the adapter's segment (toSegments segM): the heading is integrated on its ends
@@ -55,14 +55,19 @@ function withChannels(doc, cs) {
 /** The free columns: all but the joint's first two and the last two. */
 const freeOf = (m) => { const f = []; for (let i = 2; i <= m - 3; i++) f.push(i); return f; };
 
-/** Extend's piece with each channel aimed at (kh, kv) eased over it to a rate of 0 (its own at-start ramp dropped): its knots and its joint are the corner's. */
+/** Extend's piece with each channel aimed at (kh, kv) eased over it to a rate of 0 (its own at-start ramp dropped): its knots and its joint are the corner's.
+ *  D678: laid WITHOUT the width hold (extend's widthHold 'later'), with the hold to lay once the turn is solved (`hold`, null when the head's width is level or a
+ *  width is typed): the ease is read at the piece's knot averages and the corner list inserts its own, so the hold's knots would move the turn (E's read of L268, F4). */
 function easedPiece(doc, opts, chs) {
   if (doc.closed) throw new D.CoreError('CLOSED', 'the loop is closed: there is no open end to turn from');
   const targets = { ...(opts.targets || {}) }, o = { ...opts, targets };
   for (const ch of chs) targets[ch] = 0;
   if (o.transition && typeof o.transition === 'object') { const rest = { ...o.transition }; for (const ch of chs) delete rest[ch]; if (Object.keys(rest).length) o.transition = rest; else delete o.transition; }
-  return extend(doc, { ...o, bankCheck: false });   // the bank changes are checked on the piece as it is returned, once its turn and climb are solved (checked, below)
+  // the bank changes are checked on the piece as it is returned, once its turn and climb are solved (checked, below)
+  return { doc: extend(doc, { ...o, bankCheck: false, widthHold: 'later' }), hold: extend(doc, { ...o, bankCheck: false, widthHold: 'plan' }) };
 }
+/** D678: the document with the width hold laid on its head piece (extend.js layHold), after the turn is solved; the document itself when there is none. */
+const withHold = (d, hold) => (hold ? freeze(D.checkDoc({ ...d, pieces: [...d.pieces.slice(0, -1), layHold(d.pieces[d.pieces.length - 1], hold)] })) : d);
 const headOf = (d) => d.pieces[d.pieces.length - 1];
 const turnOf = (w, c) => w.reduce((a, wi, i) => a + wi * c[i], 0);
 /** The symmetric ease, 0 → 1 → 0 over u in [0, 1]: the Bloss blend up over the first half and down over the second (1 at u = ½; slope 0 at both ends and at the peak). */
@@ -92,7 +97,7 @@ function startOf(doc, opts, chs) {
   const key = memoKey([opts, chs]);
   let memo = key === null || !keepable(doc) ? null : START.get(doc);
   if (memo && memo.has(key)) return memo.get(key);
-  const d0 = easedPiece(doc, opts, chs), P0 = headOf(d0), out = { d0, P0, w: turnWeights(P0), free: freeOf(P0.channels.kh.length) };
+  const e = easedPiece(doc, opts, chs), d0 = e.doc, P0 = headOf(d0), out = { d0, P0, w: turnWeights(P0), free: freeOf(P0.channels.kh.length), hold: e.hold };
   if (key !== null && keepable(doc) && Object.isFrozen(d0)) {
     if (!memo) START.set(doc, memo = new Map());
     if (memo.size >= START_MAX) memo.delete(memo.keys().next().value);
@@ -102,7 +107,7 @@ function startOf(doc, opts, chs) {
 }
 function solve(doc, opts, aims) {
   for (const [ch, a] of Object.entries(aims)) if (!Number.isFinite(a)) throw new D.CoreError('BAD_TARGET', `${ch === 'kh' ? 'Turn by' : 'Climb by'} needs a finite angle, got ${a}`);
-  const chs = Object.keys(aims), { d0, P0, w, free } = startOf(doc, opts, chs), cs = {};
+  const chs = Object.keys(aims), { d0, P0, w, free, hold } = startOf(doc, opts, chs), cs = {};
   for (const ch of chs) {
     const st = symmetricEase(P0, ch), t1 = st ? turnOf(w, st.shape) : 0;
     if (!st || !(Math.abs(t1) > 0)) return { doc: null, converged: false, short: true };
@@ -122,11 +127,11 @@ function solve(doc, opts, aims) {
       for (const i of free) c[i] += (w[i] * -r) / ww;
       cs[ch] = c;
     }
-    if (done) return { doc: d, converged: true };
+    if (done) return { doc: d, converged: true, hold };
     d = withChannels(d0, cs);
   }
   const converged = chs.every((ch) => Math.abs(turnOf(w, headOf(d).channels[ch]) - aims[ch]) <= TURN_TOL);
-  return { doc: d, converged };
+  return { doc: d, converged, hold };
 }
 
 /** The shortest whole-metre length whose piece has a free control point (and converges), from this head with these fields; aims as solve's (a number: the turn). */
@@ -137,11 +142,12 @@ function shortestTurnBy(doc, opts, aims = 0) {
   return null;
 }
 const DEGS = (x) => `${((x * 180) / Math.PI).toFixed(1)}°`;
-/** Extend with the piece solve(aims) makes, or refuse by name (TURN_TOO_SHORT with a turn aimed at, CLIMB_TOO_SHORT for a climb alone) with the shortest length that does it. */
-function extendBy(doc, opts, aims) {
+/** Extend with the piece solve(aims) makes, or refuse by name (TURN_TOO_SHORT with a turn aimed at, CLIMB_TOO_SHORT for a climb alone) with the shortest length that does it.
+ *  The width hold is laid on it after the solve (withHold); `later` (solveList) returns the solve's { doc, hold } instead, for the corners' knots to go in first. */
+function extendBy(doc, opts, aims, later = false) {
   for (const k of ['turnDeg', 'climbDeg']) if (opts && k in opts) { const { [k]: _, ...rest } = opts; opts = rest; }   // the fields read as corners are extendCorner's
   const r = solve(doc, opts, aims);
-  if (r.converged) return r.doc;
+  if (r.converged) return later ? r : withHold(r.doc, r.hold);
   const need = shortestTurnBy(doc, opts, aims), what = [aims.kh !== undefined ? `turn by ${DEGS(aims.kh)}` : null, aims.kv !== undefined ? `climb by ${DEGS(aims.kv)}` : null].filter(Boolean).join(' and ');
   const ends = aims.kh !== undefined ? 'end straight' : 'end at a steady pitch';
   throw Object.assign(new D.CoreError(aims.kh !== undefined ? 'TURN_TOO_SHORT' : 'CLIMB_TOO_SHORT', need === null ? `a ${opts.length} m piece cannot be shaped to ${what}` : `a ${opts.length} m piece is too short to ${what} and ${ends}: it needs at least ${need} m`), { needM: need });
@@ -263,7 +269,7 @@ function cornerLists(opts) {
  *  [its mark, the next mark or the end] at the height that turns (or pitches) exactly its deg. Knots go only across the extras' spans, so the piece before the first mark is
  *  the corner's own. The whole change is then exact (the base's angle plus every extra's) by the least-norm step on the columns of the last extra's span. */
 function solveList(doc, opts, lists, aims) {
-  const d0 = extendBy(doc, opts, aims), P0 = headOf(d0), L = P0.length, ts = [];
+  const { doc: d0, hold } = extendBy(doc, opts, aims, true), P0 = headOf(d0), L = P0.length, ts = [];   // D678: the hold is laid after the corners (extendList)
   for (const ch of Object.keys(lists)) { const b = [...lists[ch].marks, L]; for (let j = 0; j + 1 < b.length; j++) for (let i = 0; i < CORNER_SUB; i++) ts.push(+(b[j] + ((b[j + 1] - b[j]) * i) / CORNER_SUB).toFixed(4)); }
   const add = [...new Set(ts)].filter((k) => k > 0.5 && k < L - 0.5 && P0.knots.every((h) => Math.abs(h - k) > 1e-3)).sort((x, y) => x - y);
   const P = add.length ? D.insertKnots(P0, add) : P0, d1 = freeze(D.checkDoc({ ...d0, pieces: [...d0.pieces.slice(0, -1), P] }));
@@ -293,10 +299,10 @@ function solveList(doc, opts, lists, aims) {
       for (const i of cols[ch]) c[i] += (w[i] * -r) / ww;
       cs[ch] = c;
     }
-    if (done) return { doc: d, converged: true };
+    if (done) return { doc: d, converged: true, hold };
     d = withChannels(d1, cs);
   }
-  return { doc: d, converged: Object.keys(lists).every((ch) => Math.abs(turnOf(w, headOf(d).channels[ch]) - want[ch]) <= TURN_TOL) };
+  return { doc: d, converged: Object.keys(lists).every((ch) => Math.abs(turnOf(w, headOf(d).channels[ch]) - want[ch]) <= TURN_TOL), hold };
 }
 /** Extend with the corner lists laid, or refuse by name: an extra corner whose span is shorter than cornerChangeMinM (the knot floor); the base corner as turnDeg alone (extendBy, in solveList). */
 function extendList(doc, opts, rest, lists, aims) {
@@ -311,7 +317,7 @@ function extendList(doc, opts, rest, lists, aims) {
     });
   }
   const r = solveList(doc, o, lists, aims);
-  if (r.converged) return r.doc;
+  if (r.converged) return withHold(r.doc, r.hold);
   const first = lists.kh || lists.kv;
   throw new D.CoreError(first.code, `a ${o.length} m piece cannot lay the ${Object.values(lists).map((x) => x.word).join(' and ')} corners asked for, exact in all and ending straight`);
 }

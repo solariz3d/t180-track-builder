@@ -103,14 +103,32 @@ test('row 4: the cheap ghost: at most 64 stations on its new piece, the same end
   assert.equal(small.path.samples.length, smallFull.path.samples.length, 'a ghost of 96 m or less keeps its chords and stations');
 });
 
-test('row 5: the documents are byte for byte what they were: pieces placed and corners solved, hashed (taken at c2d7cb5), and basisN is basis, channelValue is channelAt(...).v, and extendCorner answers the same fields with the same object', async () => {
+test('row 5: the documents are byte for byte what they were: pieces placed and corners solved, hashed (taken at c2d7cb5; since L264 the corners\' width holds the head\'s), and basisN is basis, channelValue is channelAt(...).v, and extendCorner answers the same fields with the same object', async () => {
   const sh0 = await bowl(); sh0.extend({ length: 1000, targets: { kh: 1 / 700, kv: 0.0004, phi: 0.2, w: 40, c: 20 } }); sh0.extend({ length: 75, transition: 30, targets: { w: 25 } });
   const doc0 = sh0.exportDoc(), parts = [doc0.pieces, TB.extendCorner(doc0, { length: 1500, turnDeg: 33, targets: { phi: 0.1 } }).pieces.at(-1), TB.extendCorner(doc0, { length: 400, turnDeg: -75, climbDeg: 4 }).pieces.at(-1), TB.extendCorner(doc0, { length: 2200 }).pieces.at(-1)];
   // AMENDED, D677 (b), pane B: every road piece now carries the right width's channel wd in memory, all 0 where it is not used (as it carries c, e, s, t and er), so the
   // hash of the pieces as objects moved (to c1db95d19d372697). The rule kept is the same: with wd taken out, the pieces are c2d7cb5's (D459's pin) to the byte, and wd is 0
   const noWd = (P) => { const { wd, ...channels } = P.channels; return { ...P, channels }; }, each = [...parts[0], ...parts.slice(1)];
   assert.ok(each.every((P) => P.channels.wd && P.channels.wd.every((v) => v === 0)), 'wd is 0 on every piece here (none has a right width)');
-  assert.equal(crypto.createHash('sha256').update(JSON.stringify([parts[0].map(noWd), ...parts.slice(1).map(noWd)])).digest('hex').slice(0, 16), 'e79334c4029711ec', 'the placed pieces and three solved corners, as c2d7cb5 made them (re-pinned at D459, 2026-10-25: the pieces carry a bank target, laid by the C2 quintic now, src/core/extend.js)');
+  // AMENDED, L264, pane B: the 75 m piece's width ends 25.1049 m still widening, +0.0839 m per m (its 30 m ramp, given as a number transition, the fit ends off level),
+  // and the three corners after it, with no width typed, carried that on: at c522ea6 their width ended 150.96, 58.67 and 209.69 m (e79334c4029711ec pinned that).
+  // Extend now holds a width left as shown at a head where it is still changing (src/core/extend.js holdW), so the corners' width channel moved and this hash with it.
+  // The rule kept: with the corners' width taken out as well as wd, the placed pieces and the corners are c522ea6's to the byte (eb3501a2c3eec581, the same hash on
+  // c522ea6 and on this branch: pane B's scratch dg5hash.js), and each corner's width holds the head's, level
+  // AMENDED, L268, pane B: the hold is now LAID as a short ramp on knots of its own (src/core/extend.js rampControl), 3 more in each corner's first 20 m, and a
+  // piece's channels share its knots, so the corners' other channels are fitted on those too and their bytes moved (eb3501a2c3eec581 became 5e302d1023e4f078). As
+  // curves, sampled every metre against e112a14 (pane B's scratch dg5curves.js): the turn moves at most 3.2e-5 per m (the 400 m corner), the climb 9.3e-7, the bank
+  // 1.8e-8 rad, the rest float noise. What is not a corner is held as strictly as before: the placed pieces, wd out, are c522ea6's to the byte (24bcdf657190c0cd)
+  // AMENDED, D678, pane B (E's read of L268, F4; the ruling: the path a turn lays must not depend on whether the width was still changing at the head): every
+  // channel is laid on the piece's own knots as from a level head and the hold's knots are inserted after (src/core/extend.js layHold, turnby.js withHold), so the
+  // corners' other channels are c522ea6's again as curves: sampled every 0.05 m, every channel but w within 0.685 of a step of its stored decimals and each corner's
+  // end within 6.3e-6 m of c522ea6's and e112a14's (L268's moved the 400 m corner's end 12.5 cm). The bytes are not c522ea6's: each corner keeps the hold's 3
+  // inserted knots (77/22/112 against 74/19/109), and their re-rounded points (5e302d1023e4f078 became 015881f53acdbc5f; pane B's scratch dg5curves678.js)
+  const noW = (P) => { const { w, ...channels } = noWd(P).channels; return { ...P, channels }; };
+  const hashOf = (x) => crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex').slice(0, 16);
+  assert.equal(hashOf(parts[0].map(noWd)), '24bcdf657190c0cd', 'the placed pieces, as c522ea6 made them (c2d7cb5\'s, re-pinned at D459 and D677 (b))');
+  assert.equal(hashOf([parts[0].map(noWd), ...parts.slice(1).map(noW)]), '015881f53acdbc5f', 'the placed pieces and three solved corners but the corners\' width, as D678 lays them (the hold\'s knots inserted after each corner is laid)');
+  for (const P of parts.slice(1)) assert.deepEqual(D.pieceEnd(P).w, { v: D.pieceEnd(doc0.pieces.at(-1)).w.v, m: 0 }, 'each corner holds the head\'s width (L264)');
   let n = 0;
   for (let t = 0; t < 120; t++) {
     const L = 10 + ((t * 7919) % 3000), m = 1 + (t % 90), kn = []; for (let j = 1; j < m; j++) kn.push((j * L) / m);
