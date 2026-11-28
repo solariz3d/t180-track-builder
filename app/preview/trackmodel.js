@@ -383,10 +383,14 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       const st = mesh._state, m = { ...mesh, _state: { ...st, pieces: st.pieces.slice(), seams: st.seams.slice() } };
       p.step = step; if (step > STEP) p.substep = CHEAP_SUBSTEP;   // the ghost's own copy: the placed path keeps its stations
       yield* geom.extendPathSteps(p, segs);   // a slice at a time when run as steps
-      const gm = yield* meshNew(p, () => geom.extendMeshSteps(m, p, segs)), from = keys.length;
+      // D678 N5 (pane B's read 2.4): the candidate's own lift (the shell hands it on, coreshell.js liftFor), as placing lifts (update's extend: the mesh made on the lifted
+      // path). A grab or an Even that moved the head's middle hands its offset to the next piece, which placing lays from the offset head; the ghost was meshed on the unlifted
+      // path, so it began beside the head (1.94 m in B's read). With no offset anywhere the lift returns the very same path, and the ghost is built as it always was.
+      const pl = typeof candidate.lift === 'function' ? candidate.lift(p) : p, msegs = pl === p ? segs : meshSegs(segs, segs.map((_, j) => liftOf(p, pl, j)));
+      const gm = yield* meshNew(pl, () => geom.extendMeshSteps(m, pl, msegs)), from = keys.length;
       yield; const bs = batchesOf(gm, from); if (!cheap) yield* warmLines(bs);
-      lastFull = !cheap && detail === 1 && segs === all ? { base: path, mesh0: mesh, from, segs, p, gm, bs } : null;
-      return { batches: bs, path: p, head: p.head, segments: segs };   // only the NEW pieces' batches are built (it built every batch and kept the new ones)
+      lastFull = !cheap && detail === 1 && segs === all ? { base: path, mesh0: mesh, from, segs, p: pl, gm, bs } : null;   // a lifted one is never adopted (adoptable: shown !== path)
+      return { batches: bs, path: pl, head: pl.head, segments: segs };   // only the NEW pieces' batches are built (it built every batch and kept the new ones)
     },
     /**
      * The GHOST of a close PROPOSAL (the shell's closeProposal: a closed track that rewrites pieces, not one that extends the placed track, so
