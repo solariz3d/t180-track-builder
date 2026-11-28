@@ -517,6 +517,26 @@ test('a CHANGED value is a target in the core\'s units; a value typed back to ex
 // CHECKED, NOT ASSUMED: a blank field CONTINUES a channel (its end value AND slope, src/core/extend.js), and a target equal to
 // the shown value would NOT: it bends a channel still changing at the head, and any cup target turns a legacy piece into a cup piece. So a
 // field left as shown sends no target. This test builds a head where turn and bank are still changing, and shows both halves.
+// AMENDED (D678 N5, L270, the librarian's ruling of 01:1x): since N5 a candidate carries `lift` (coreshell.js liftFor), a NEW function each call, and
+// deepEqual compares functions by identity, so "the same piece" could never hold. The rule did not change, only what a candidate is: every other field is
+// still compared as data, and `lift` by what it DOES. Both carry one or neither does, and both, applied to ONE path (the one the preview builds from `a`,
+// as trackmodel.js ghostSteps does), give the same path. A candidate whose lift moves the road differently is not the same piece. The two lifted paths are
+// compared whole (util.isDeepStrictEqual, the test of deepEqual) but reported short: a failing deepEqual prints both paths, over a megabyte of TAP.
+const G = require('../../src/geom/index.js');
+const { isDeepStrictEqual } = require('node:util');
+function sameCandidate(a, b, msg) {
+  const { lift: la, ...ra } = a, { lift: lb, ...rb } = b;
+  assert.deepEqual(ra, rb, msg);
+  assert.equal(typeof la, typeof lb, `${msg}: both carry a lift, or neither does`);
+  if (typeof la !== 'function') return;
+  const p = G.buildPath(a.segments, { step: 2, closed: !!a.closed, ...(a.start ? { start: a.start } : {}) });
+  const qa = la(p), qb = lb(p);
+  if (isDeepStrictEqual(qa, qb)) return;
+  const i = qa.samples.findIndex((x, k) => !isDeepStrictEqual(x, qb.samples[k]));
+  const at = i < 0 ? 'the samples agree; another field differs' : `first apart at sample ${i} (s ${qa.samples[i].s}), ${Math.hypot(...qa.samples[i].pos.map((v, j) => v - (qb.samples[i] ? qb.samples[i].pos[j] : NaN))).toFixed(4)} m`;
+  assert.fail(`${msg}: the two lifts lift one path the same (${at})`);
+}
+
 test('a field left as shown builds the SAME piece, ghost and readout as a blank, even where turn and bank are still changing at the head; a literal target would not', async () => {
   const P = await mountPanel();
   P.shell.extend({ length: 200 });
@@ -528,9 +548,9 @@ test('a field left as shown builds the SAME piece, ghost and readout as a blank,
   P.type('length m', 100);
   const blank = extendOptions({ length: 100, ...BLANK }), untouched = P.opts();
   assert.deepEqual(untouched, blank, 'the options are the blank ones');
-  assert.deepEqual(P.shell.candidate(untouched), P.shell.candidate(blank), 'the same piece');
+  sameCandidate(P.shell.candidate(untouched), P.shell.candidate(blank), 'the same piece');
   assert.deepEqual(P.shell.candidateReadout(untouched), P.shell.candidateReadout(blank), 'the same readout');
-  assert.deepEqual(ghosts.at(-1), P.shell.candidate(blank), 'the ghost drawn is the blank one');
+  sameCandidate(ghosts.at(-1), P.shell.candidate(blank), 'the ghost drawn is the blank one');
   // the other half: the shown values taken LITERALLY as targets make a different piece (bank ramps back to the shown value)...
   const s = shownAll(P), literal = extendOptions({ length: 100, ...s });
   assert.notDeepEqual(extendDoc(d, literal).pieces.at(-1).channels.phi, extendDoc(d, blank).pieces.at(-1).channels.phi, 'a bank target equal to the shown value is not a blank');
