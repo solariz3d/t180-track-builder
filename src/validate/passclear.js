@@ -100,7 +100,8 @@ function sectionOf(prof, apronM, ring = false) {
 /**
  * THE RULE, over a path (src/geom/path.js buildPath's samples: s, seg, pos, T, L, U) and its segments (kind, profile).
  * opts: apronM (the track's edge apron width, doc.edgeApronM; default apron.js APRON_WIDTH_M), marginM (CAR_MARGIN_M), minSeparationM (SEPARATION_M),
- * from (only stations from this index are QUERIED, each against every other: an edit's new road against the whole track; default 0).
+ * from (only stations from this index are QUERIED, each against every other: an edit's new road against the whole track; default 0), to (the last station
+ * queried, default the path's last: D678, Even's step reads only its window's stations; a pair with neither end queried is not read).
  * Each finding is the station of the road whose car room is reached: s, u (where across it), otherS and otherU (the other pass's point that reaches it), gapM (how far
  * over this road's surface, along its normal, the other's solid comes: negative when it is through), needM (marginM), shortM (needM − gapM, > 0), surfaceGapM (the
  * other's own SURFACE there over this one: its road, or its plank when `apron`), apron (the other's point is on its apron), onApron (this road's point is on ITS apron: the car room a wheel off the road reaches), hullM (the other's hull depth there), clip
@@ -108,9 +109,10 @@ function sectionOf(prof, apronM, ring = false) {
  */
 function passClearance(path, segments, opts = {}) {
   const S = path.samples, n = S.length, apronM = opts.apronM === undefined ? APRON_WIDTH_M : opts.apronM, margin = opts.marginM === undefined ? CAR_MARGIN_M : opts.marginM;
-  const sep = opts.minSeparationM === undefined ? SEPARATION_M : opts.minSeparationM, from = Math.max(0, opts.from || 0), L = path.lengthM || (n ? S[n - 1].s - S[0].s : 0);
+  const sep = opts.minSeparationM === undefined ? SEPARATION_M : opts.minSeparationM, from = Math.max(0, opts.from || 0), to = opts.to === undefined ? n - 1 : Math.min(n - 1, opts.to), L = path.lengthM || (n ? S[n - 1].s - S[0].s : 0);
   if (!(margin > 0)) throw new Error('passClearance: marginM must be above 0');
   if (!(apronM >= 0)) throw new Error('passClearance: apronM must be 0 or more');
+  if (opts.to !== undefined && !Number.isInteger(opts.to)) throw new Error(`passClearance: to must be a station index, got ${opts.to}`);
   const isRoad = (i) => { const g = segments[S[i].seg]; return !!g && g.kind !== 'gap' && !!g.profile; };
   const secMemo = new Map(), secOf = (j) => { let e = secMemo.get(j); if (!e) { e = sectionOf(P.normalize(segments[j].profile), apronM, closedRing(segments[j])); secMemo.set(j, e); } return e; };
   // each station's points in world space, built when a pair needs them
@@ -160,13 +162,13 @@ function passClearance(path, segments, opts = {}) {
     // the other's surface on both sides of this one, or on it: the two meet (their surfaces cross between the points read)
     if ((above && below) || on) { const e = best.get(i); if (e && !e.clip) best.set(i, { ...e, clip: true }); }
   };
-  for (let i = from; i < n; i++) {   // only the queried stations lead; each meets every other station, before `from` too
+  for (let i = from; i <= to; i++) {   // only the queried stations lead; each meets every other station, before `from` and after `to` too
     if (!isRoad(i)) continue;
     const pi = S[i].pos, [cx, cy, cz] = [Math.floor(pi[0] / reach), Math.floor(pi[1] / reach), Math.floor(pi[2] / reach)];
     for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
       const list = grid.get(`${cx + a},${cy + b},${cz + c}`); if (!list) continue;
       for (const j of list) {
-        if (j >= from && j <= i) continue;   // a pair of two queried stations is measured once; a station before `from` is met by each queried one
+        if (j >= from && j <= i) continue;   // a pair of two queried stations is measured once; a station before `from` or after `to` is met by each queried one
         let ds = Math.abs(S[j].s - S[i].s); if (path.closed) ds = Math.min(ds, L - ds);
         // THE SAME PASS: closer along the lap than opts.minSeparationM, or than the two sections' lateral reach (road and apron) added: a wide cupped road's rim, across a
         // joint into a turn, reads as over its own road a few stations on (the panel's default road, 300 m then a 750 m turn: two stations 28 m apart, one road)

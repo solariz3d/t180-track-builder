@@ -126,6 +126,20 @@ test('row 8: from: only stations from that index lead, each against every other'
   assert.deepEqual(passClearance(p, segs, { from: S.length }), [], 'from past every station: nothing');
 });
 
+// row 11 (D678, Even's step bounded to its window: lighthouse exo_memory/handback/p-d678-even-build-A_2026-11-27.md, 5.2b row B1)
+test('row 11: to: only stations from `from` to `to` lead, each against every other', () => {
+  const segs = F.crossing(0), p = pathOf(segs), all = passClearance(p, segs), S = p.samples;
+  const firstOver = S.findIndex((q) => segs[q.seg].id === 'over'), lastOver = S.length - 1 - [...S].reverse().findIndex((q) => segs[q.seg].id === 'over');
+  assert.ok(all.length > 0 && firstOver > 0, 'control: the crossing is found');
+  assert.deepEqual(passClearance(p, segs, { from: firstOver, to: lastOver }), all, 'the upper pass alone: the same findings');
+  // a stretch of the lower road that does not reach the crossing: nothing, though every station of the lap is met by it
+  const near = all.map((f) => S.findIndex((q) => q.s === f.s)).filter((i) => i >= 0 && i < firstOver), lead0 = 0, lead1 = Math.min(...near) - 10;
+  assert.ok(near.length > 0 && lead1 > lead0, `control: the lower road's findings lie past station ${lead1}`);
+  assert.deepEqual(passClearance(p, segs, { from: lead0, to: lead1 }), [], 'a stretch away from the crossing: nothing');
+  assert.deepEqual(passClearance(p, segs, { from: firstOver, to: S.length - 1 }), passClearance(p, segs, { from: firstOver }), 'to at the last station: as from alone');
+  assert.throws(() => passClearance(p, segs, { to: NaN }), /to must be a station index/, 'a to that is not a station index is refused by name');
+});
+
 // row 10 reads the section the rule builds against the export's own rule for the hull's depth (src/export/underskin.js rowDepths: UNDERSKIN_OFFSET_M, deepened toward
 // an edge that rises by hullDepth(rim) times x², x = 1 − (distance in from the edge) / HULL_EDGE_SPAN_M) and the apron (src/export/apron.js: 2 m out at 25° down,
 // its box down to the edge's own depth), on a cup whose rim rises 30°, computed here from those constants

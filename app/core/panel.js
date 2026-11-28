@@ -791,6 +791,8 @@ function mount(root, shell, mountOpts = {}) {
   const MORE_TOOLS = Object.freeze({
     wall: Object.freeze({ key: 'wall', label: 'Wall rise', tool: 'wall', channel: 'r', axis: 'y', hint: 'drag up or down to raise or lower the wall here; the road itself does not move' }),
     sweep: Object.freeze({ key: 'sweep', label: 'Tube sweep', tool: 'sweep', channel: 't', axis: 'y', hint: 'drag up or down to close the tube more or open it here; the road itself does not move' }),
+    // EVEN (D678): the selected run to one width, from its width handle (the far edge put back where the road had it, read from the stretch's ends where they support it; the message says how far it moved) or typed under "Even ▾"; a drag on the road is refused by name (app/core/coreshell.js)
+    even: Object.freeze({ key: 'even', label: 'Even', tool: 'even', channel: 'w', axis: 'y', hint: 'select a run (Shift-click), then drag one edge\'s width handle: the whole run comes to one width in 0.5 m steps, and the other edge is put back where the road had it, read from the stretch\'s ends (where Even cannot read them, that edge is kept where it is), and the message says which, and how far it moved; or type the width under Even ▾' }),
   });
   const EDGE_SIDE = Object.freeze({ edge: 'e', 'edge-right': 'er', 'edge-start': 's' });
   const SMOOTH_CH = Object.freeze(['kh', 'kv', 'height', 'lateral', 'phi', 'w', 'c', 'e', 'er', 's', 'r', 't']);
@@ -1096,7 +1098,7 @@ function mount(root, shell, mountOpts = {}) {
       return { ...G, mode: 'extend+landing', kinds: [...L.kinds, ...G.kinds], free: L.free, base: (k) => (LAND_FIELD[k] ? L.base(k) : G.base(k)), ctx: (k) => (LAND_FIELD[k] ? L.ctx(k) : G.ctx(k)) };
     },
     pose: () => { const v = askOf('t180:view'); return v ? v.pose : null; },
-    begin: (h) => { if (LAND_FIELD[h.kind]) { shell.beginLanding(); landDrag = !!shell.getState().landingDrag; return; } const m = sculptModel(); if (!m) { scrubbing = true; scrubKind = h.kind; } if (m) { shell.beginSculpt({ channel: SCULPT_CH[h.kind], piece: m.info.index, ...(Number.isInteger(m.info.from) && Number.isInteger(m.info.to) ? { from: m.info.from, to: m.info.to } : {}) }); sculptDrag = shell.getState().brush ? { kind: h.kind, base: m.base(h.kind) } : null; } },
+    begin: (h) => { if (LAND_FIELD[h.kind]) { shell.beginLanding(); landDrag = !!shell.getState().landingDrag; return; } const m = sculptModel(); if (!m) { scrubbing = true; scrubKind = h.kind; } if (m) { const run = Number.isInteger(m.info.from) && Number.isInteger(m.info.to) ? { from: m.info.from, to: m.info.to } : {}; if (h.kind === 'width' && toolNow().key === 'even') shell.beginSculpt({ tool: 'even', hold: h.side > 0 ? 'right' : 'left', piece: m.info.index, ...run }); else shell.beginSculpt({ channel: SCULPT_CH[h.kind], piece: m.info.index, ...run }); sculptDrag = shell.getState().brush ? { kind: h.kind, base: m.base(h.kind) } : null; } },
     apply: (h, value, mods, final) => {
       if (HD.KINDS[h.kind] && HD.KINDS[h.kind].extra) { secondExtra(h.kind, value); return; }   // L140: an extra handle's amount
       if (LAND_FIELD[h.kind]) { if (landDrag) shell.landingTo({ [LAND_FIELD[h.kind]]: value }); return; }
@@ -1219,7 +1221,19 @@ function mount(root, shell, mountOpts = {}) {
   const bankBend = el('details', { class: 'sculpt-more', 'aria-label': 'bank the bend' }, el('summary', { text: 'Bank the bend ▾', style: 'cursor:pointer', title: 'lay the bank over a whole bend as one smooth swing, across every joint: select the bend (shift-click for a run), type the peak bank, Preview, Apply' }),
     el('div', { class: 'pickers' }, field('peak bank °', swingPeak), field('peak at', swingAt), field('lead-in m', swingIn), field('run-out m', swingOut), field('exit bank °', swingExit)),
     el('div', { class: 'actions' }, swingPreview, swingApply, swingCancel));
-  const sculptStrip = el('div', { 'aria-label': 'sculpt strip', class: 'brush-strip' }, el('div', { class: 'pickers' }, field('tool', toolSel), field('radius m', radius), moreTools, bankBend), sculptHint, valueLine);
+  // EVEN (D678), beside Bank the bend: the selected run brought to one width, typed (exact) with which edge Even lays, or picked from the road just before or just after the run;
+  // one undo step. The drag is the run's width handle with the Even tool (under "other tool"), on a 0.5 m step, the far edge staying
+  const evenW = num('', 0.5, 'even to, m: the width the selected run is brought to, from its first metre to its last');
+  const evenKeep = el('select', { 'aria-label': 'even keeps', title: 'which edge Even puts back where the road had it, read from the stretch\'s ends, while the width changes (where it cannot read them, that edge is kept where it is; the message says which, and how far that edge moved); the middle: the middle is laid smooth between the stretch\'s ends, and both edges move' });
+  evenKeep.replaceChildren(new win.Option('the middle', 'centre'), new win.Option('left edge', 'left'), new win.Option('right edge', 'right')); evenKeep.value = 'centre';
+  const evenPick = (which) => () => { const p = shell.evenPicks(); if (!p) return shell.evenRun({});   /* no run selected: the shell says so */ const v = p[which]; if (Number.isFinite(v)) evenW.value = String(+v.toFixed(2)); };
+  const evenBefore = el('button', { text: '◀ before', title: 'the width of the road just before the selected run', onclick: evenPick('before') });
+  const evenAfter = el('button', { text: 'after ▶', title: 'the width of the road just after the selected run', onclick: evenPick('after') });
+  const evenGo = el('button', { text: 'Even', title: 'bring the selected run to this width, back to the road within 50 m beyond each end (more before it after a piece with coarse knots): one undo step', onclick: () => shell.evenRun({ value: evenW.value, hold: evenKeep.value }) });
+  const evenBox = el('details', { class: 'sculpt-more', 'aria-label': 'even the width' }, el('summary', { text: 'Even ▾', style: 'cursor:pointer', title: 'bring a run to one width: select it (Shift-click for a run), type the width or pick the road\'s before or after it, Even' }),
+    el('div', { class: 'pickers' }, field('even to m', evenW), field('keeps', evenKeep)),
+    el('div', { class: 'actions' }, evenBefore, evenAfter, evenGo));
+  const sculptStrip = el('div', { 'aria-label': 'sculpt strip', class: 'brush-strip' }, el('div', { class: 'pickers' }, field('tool', toolSel), field('radius m', radius), moreTools, bankBend, evenBox), sculptHint, valueLine);
   // SMOOTH'S RADIUS (measured: at a bump's own radius Smooth moves ONE control point, nothing to see; 10 at r 160, 29 at r 300):
   // picking Smooth puts 3x the last tool's radius in the field, so the smooth reaches past the bump it is taking out and scales with it (a fixed 300 m would swallow a
   // 60 m bump's neighbours and fall short of a 500 m bend); leaving Smooth puts the other tools' radius back. The field only: an open drag keeps its r
@@ -1243,12 +1257,13 @@ function mount(root, shell, mountOpts = {}) {
   // (part 4: the units are handles.js BRUSH_CHANNELS', read by the glyph too; roadWords is what the glyph says, valueWords the strip's "at the centre")
   const FOLLOW_CH = Object.freeze({ h: 'height', l: 'lateral', w: 'w', phi: 'phi', c: 'c' });
   const roadWords = (b, T) => {
+    if (b && b.mode === 'even') return b.evenRes ? `width ${b.evenRes.value} m along the run` : '';   // Even: the value the run is at, on its 0.5 m step
     if (b && b.mode === 'follow') return b.delta ? Object.keys(FOLLOW_CH).filter((k) => Number.isFinite(b.delta[k]) && Math.abs(b.delta[k]) > 1e-9).map((k) => HD.brushFormat(FOLLOW_CH[k], b.delta[k])).join(' · ') : '';   // what the point's drag changed there
     if (!b || !T || !Number.isFinite(b.delta)) return '';
     if (T.key === 'smooth') return `smoothing the ${CHANNEL_NAMES[T.channel]}, strength ${b.delta.toFixed(2)}`;
     return HD.brushFormat(T.channel, b.delta);
   };
-  const valueWords = (b, T) => { const v = roadWords(b, T); return v && T.key !== 'smooth' ? `${v} ${b.mode === 'follow' ? 'at the point' : 'at the centre'}` : v; };
+  const valueWords = (b, T) => { const v = roadWords(b, T); return v && T.key !== 'smooth' && b.mode !== 'even' ? `${v} ${b.mode === 'follow' ? 'at the point' : 'at the centre'}` : v; };
   // THE VALUE LINE, in this order: the tool's word for the way the drag goes, the value at the centre, the widened note, the pieces in the window and, on a
   // closed lap under a route tool, the two the release may also move (the lap's last road piece and its first: the seam tries, app/core/coreshell.js)
   const valueLineOf = (st, T) => {

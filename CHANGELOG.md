@@ -5,6 +5,45 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 ### Added
+- **Sculpt has an Even tool: a selected run's width brought to one value, from the run's first metre to its last (D678).** Grabs and width strokes
+  leave a run's edge scalloped (four grabs of one edge out to 16 m left a turn's width 4 m uneven, eight left 2 m, and no snap evens it), and no tool
+  brought a run to one width. Pick Even under "other sculpt tool", select a run (or one piece) and drag one edge's width handle: the run goes to that
+  width in 0.5 m steps and the other edge is laid where Even reads the road's own edge (below); or type the width in "even to m" (taken as typed)
+  and pick the edge Even lays (or the middle); "◀ before" and "after ▶" fill in the road's width either side of the run. It is one undo step. Beyond
+  each end of the run the width stays at the value for 20 m and eases back to the road over the next 30 m; beyond that stretch the road's width,
+  line and height are as they were to a tenth of a millimetre, and the bank is kept as found. To hold those 20 m, Even first cuts the knots over the stretch's two ends to
+  3.75 m spans (with coarse knots a control point reaching past the stretch's end was left as it was, and the width started to ease inside the
+  20 m: 13.28 m at the 20 m mark on a 150 m exit piece, for a value of 16). The cut spans' new control points are stored at each channel's step,
+  so outside the stretch the road is no longer the same bit for bit, but nothing moves by more than one stored step (on a 27.6 km closed lap the
+  built road moved 0.0123 mm at most). One exception in how the road is drawn: a 2 m stretch whose two ends had the same cross-section with a
+  bump between them (a grab's peak) can be redrawn as a chord, 1.03 cm narrower at the peak (measured once, 5 m outside the stretch). The 20 m are at the value to within 0.01 m, except where the road beyond is far from the value: a 31 m
+  lead levelled to 16 m is 0.03 m off over the outer metre. The middle moves sideways to put the kept edge where Even lays it, and on a banked road it rises or
+  falls in the plane of the road as built, so the edge stays on the surface. **The kept edge is put back where the road had it, and the message says how far it moved.** Even
+  reads the road's own width and offset at the stretch's two ends and lays the kept edge on the road between them, bumps taken out, only where those
+  ends support a reading: an end is at rest when the road holds within 1 mm at 10, 20 and 30 m beyond it, and either both ends are at rest and agree
+  within 1 cm, or one is at rest and the other heads toward it (L271; the first reading tested 10 m only, and put the edge 9.31 m off on a run from the
+  track's start, 3.94 m after a row of grabs, and 2.92 m where the road's width steps inside the run, saying nothing). Where the ends do not support a
+  reading (a run from the track's start, a stretch end on a grab, a width changing away from the other end's), the kept edge is kept where it is now,
+  one least-squares fit over the stretch (within 0.01 m on every case measured but one, 0.0138 m), and the message says so and why. On a banked
+  stretch the road is read under the bank as Even finds it (the kept edge within 0.008 m of that road). Every message with an edge kept says which it
+  did and how far the edge moved, and, where the road is read, where. A road whose own width changes inside the run with no bump is still read from its ends, and wrongly (1.5 m
+  and 2.9 m on two roads made to show it), so on such a road that figure is the warning. With the middle kept, the middle is laid smooth between the
+  stretch's ends and both edges move. The height on the run is eased between the stretch's ends too, so a hill or dip there goes. Where the new
+  middle's line leaves the road where the old one held, the message says where, how far the middle moved, and the load before and after, in the
+  same words as before; it says so after the release, because that check now runs off the page in the checker's worker and reads the loads only
+  over the stretch (on a 27.6 km closed lap the release had waited 33 s for it; now it returns in milliseconds and the words follow about 23 s
+  later). A step of Even's drag on that lap took 8.2 s; the check that the road does not come too close under another pass now reads only the
+  stations inside the stretch (each still against every station of the lap; `src/validate/passclear.js` `passClearance` takes `to` beside `from`),
+  and Even's documents are frozen all the way down as the rest of the core's are, so the segment caches hold and Even no longer converts the whole
+  lap at every offset it reads. The check that the road does not come too close under another pass now runs once, when the drag is
+  released (a break refuses the whole drag by name and puts the track back as it was), not at every step, and the stretch's cut track and the road
+  read from its ends are kept for the whole drag (L271): on a 13,233 m closed lap, measured in two sessions on one machine, a step went from 1.09 s to between 0.19 and
+  0.31 s (the grab's step there 0.10 to 0.13 s, so Even's is about twice it), and the release now pauses 0.74 to 1.25 s for that check. Refused by name, nothing changed: no run selected, a jump within reach, a tube, a
+  right side with its own width, a closed lap's start line within reach, a width under 0.5 m or over 400 m. The grab is unchanged. In the core: `src/core/even.js` (`even`,
+  `evenWindow`, `shiftOf`); `src/core/document.js` `refineKnots` takes `{ roundOnce }`, which inserts a span's knots exactly and rounds the new
+  control points once at the end (`insertKnotsRoundOnce`; rounding after each knot carried a banked road's bank past one stored step, and
+  Sculpt's sharp brush still rounds after each knot, as before); `src/core/sculpt.js` now exports `settle` and `isLinked`; `src/validate/index.js` exports `linesBetween` (the load lines
+  between two lap distances, each the one a whole check makes there).
 - **A road's right side can have its own width (D677 (b)).** Type "right width m" in the panel (beside "width m"): the right side takes that width and
   the left side and the driven line stay exactly where they were, so a road can widen on one side only, as some real tracks do (one widens 3.5 m on
   its right within about 5 m). Blank, the right side follows the width, and the width typed alone still moves both sides. Typed as the width is

@@ -398,4 +398,4 @@ function smooth(doc, channel, s0, r, lambda) {
   return { doc: out, changed, radiusUsed: rUsed, passes, note, reclose: !!(doc.closed && RATE_CHANNELS.includes(channel) && changed.length) };
 }
 
-module.exports = { smootherstep, falloff, knotAverage, brushControls, sculpt, pieceOffsets, brush, MODES, SHARP_BOUND, SHARP_NOTE, stretch, smooth, STRETCH_MIN_M, STRETCH_SPAN_MIN_M, SMOOTH_MAX, SMOOTH_SPANS };
+module.exports = { smootherstep, falloff, knotAverage, brushControls, sculpt, pieceOffsets, brush, MODES, SHARP_BOUND, SHARP_NOTE, stretch, smooth, STRETCH_MIN_M, STRETCH_SPAN_MIN_M, SMOOTH_MAX, SMOOTH_SPANS, settle, isLinked };

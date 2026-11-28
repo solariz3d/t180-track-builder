@@ -73,6 +73,8 @@ const GHOST_CHORDS = 48, GHOST_TURN = 0.03, GHOST_PROBES = 16;   // the drag's g
 const PC = require('../../src/core/piece.js');   // saved pieces (save a run, put one at the head, mirror it, delete pieces)
 const BS = require('../../src/core/bankswing.js');   // Bank the bend: one bank swing laid across a stretch of road
 const SR = require('../../src/core/smoothramps.js');   // Track ▸ Smooth ramps
+const EV = require('../../src/core/even.js');   // Sculpt's Even: a run's width brought to one value (D678)
+const EVW = require('./evenwords.js');   // what Even says when it lands
 const { bankLapWith, budgetNote } = require('../../src/core/finish.js');   // Track ▸ Bank the lap
 const RAMP_WORD = Object.freeze({ phi: 'bank', c: 'cup', e: 'edge', er: 'right edge' });
 // the offset channels h and l: offsetPath(doc, segments, path) lifts a path and recomputes its frame.
@@ -178,6 +180,8 @@ const SCULPT_TOOLS = Object.freeze({
   wall: Object.freeze({ mode: 'rate', channel: 'r', family: 'shape' }),
   sweep: Object.freeze({ mode: 'rate', channel: 't', family: 'shape' }),
   smooth: Object.freeze({ mode: 'smooth', channel: null, family: null }),
+  // EVEN (D678): the selected run's width to one value, the far rim held when the drag starts from a rim (src/core/even.js); it moves l and h with w, so it is local
+  even: Object.freeze({ mode: 'even', channel: 'w', family: 'local' }),
 });
 /** The family a channel's edit belongs to: the rates steer the road after them, the offsets move only the road under the window, the rest shape it. */
 const familyOf = (ch) => (ch === 'kh' || ch === 'kv' ? 'route' : ch === 'height' || ch === 'lateral' || ch === 'h' || ch === 'l' ? 'local' : 'shape');
@@ -223,7 +227,7 @@ const coreChannel = (ch) => (ch === 'height' ? 'h' : ch === 'lateral' ? 'l' : ch
 const callTimers = { setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (t) => clearTimeout(t) };
 const exportError = (code, message) => Object.assign(new Error(message), { name: 'ExportError', code });
 
-async function createCoreShell({ storage = null, exporter = null, brushFn = typeof SC.brush === 'function' ? SC.brush : null, stretchFn = typeof SC.stretch === 'function' ? SC.stretch : null, smoothFn = typeof SC.smooth === 'function' ? SC.smooth : null, now = () => Date.now(), autosaveMs = 1500, timers = callTimers, overlapRunner = null, closeRunner = null } = {}) {
+async function createCoreShell({ storage = null, exporter = null, brushFn = typeof SC.brush === 'function' ? SC.brush : null, stretchFn = typeof SC.stretch === 'function' ? SC.stretch : null, smoothFn = typeof SC.smooth === 'function' ? SC.smooth : null, now = () => Date.now(), autosaveMs = 1500, timers = callTimers, overlapRunner = null, closeRunner = null, evenRunner = null } = {}) {
   const ok = (msg) => ({ message: msg, messageKind: 'ok' });
   // AUTOSAVE: what the last session left behind, read once at the start (the header says what happens to each kind)
   const canAutosave = !!storage && typeof storage.saveAutosave === 'function';
@@ -267,6 +271,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     sculpt: false,   // the Sculpt switch: the brush and the handles on a placed piece change its shape only, never the route
     lastToolChannel: null,   // the channel of the Sculpt tool used last, which Smooth works on
     closePending: null,   // 2026-10-15: a close the worker is working out, { base, finish, startedAt }: no preview yet (closeRunner)
+    evenCheck: null,   // D678 repair: Even's sentence being checked after the level, { after, status 'checking', startedAt, via }: its words not said yet (evenRunner)
   };
   // a Pieces autosave that could not be kept aside is never overwritten: this session simply does not autosave
   const mayAutosave = canAutosave && !(recovery && recovery.blocked);
@@ -388,6 +393,35 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   // the open track again (64 s of a 25 km press). Only a check with CSP on counts, as the press checks with it on
   const checked = new WeakMap();
   function abortClose() { const j = closeJob; closeJob = null; if (j) { try { j.job.cancel(); } catch (e) { /* already finished */ } } }
+  // ── EVEN'S SENTENCE AFTER THE LEVEL, OFF THE PAGE (D678 repair, U6: on a 27.6 km closed lap the release waited 33 s for it) ──
+  // The release (and a typed width) says the first sentence at once (evenwords.js evenDone) and checks the new middle's line as a JOB (evenwords.js evenCheck):
+  // through the page's evenRunner (app/validate-ui/checkrunner.js createEvenRunner: the check job in a Web Worker), or, with none (the tests, a page with no
+  // Worker), on the page in a timer after the release. state.evenCheck says it is pending; its words are said only if the track is still the document the check
+  // was asked about (an edit, an Undo or another level meanwhile drops them). whenEvenChecked() is the promise of the state once it has landed.
+  let evenJob = null, evenLanded = null;
+  function abortEven() { const j = evenJob; evenJob = null; if (j && j.job) { try { j.job.cancel(); } catch (e) { /* already finished */ } } }
+  function beginEvenCheck(before, after, res) {
+    abortEven();
+    const req = Object.freeze({ before, after, window: res.window, value: res.value, hold: res.hold, reading: res.reading, why: res.why, banked: res.banked, kept: res.keptMove ? res.keptMove() : null });   // plain data for the job (L271: the words carry the reading and the kept edge's move)
+    let job = null;
+    if (evenRunner) { try { job = evenRunner.start(req); } catch (e) { job = null; } }
+    const entry = Object.freeze({ after, status: 'checking', startedAt: now(), via: job ? 'worker' : 'page' });
+    evenJob = { entry, job };
+    const run = job ? job.promise : new Promise((resolve, reject) => timers.setTimeout(() => { try { resolve(EVW.evenCheck(req)); } catch (e) { reject(e); } }, 0));
+    const mine = () => evenJob && evenJob.entry === entry;
+    evenLanded = run.then((said) => {
+      if (!mine()) return st;   // replaced or cancelled meanwhile
+      evenJob = null;
+      if (doc() !== after) return set({ evenCheck: null });   // the track changed: the words were about a document no longer there
+      return set({ evenCheck: null, ...ok(said.message), evenLeaves: said.leaves });
+    }, (e) => {
+      if (!mine() || (e && e.cancelled)) return st;
+      evenJob = null;
+      if (doc() !== after) return set({ evenCheck: null });
+      return set({ evenCheck: null, message: `${EVW.evenDone(res)} The check of where the car runs on the new middle could not be made: ${(e && e.message) || e}`, messageKind: 'error' });
+    });
+    return entry;   // the caller puts it in the SAME state change as the level
+  }
   /** The boxes' values ({ forward, left, up, heading, pitch, bank }, in m and degrees) as the pose the core takes (radians). */
   const landingPose = (ui) => Object.assign({}, ...Object.entries(ui || {}).map(([k, v]) => LD.poseOf(k, v)));
   // the Jump button's document: the current piece placed as Extend would place it (extendOpts, or null: take off from the track's end as it is), a free flight to the default landing, a 60 m straight
@@ -450,12 +484,17 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   const CLEAR_SAME_M = 4, CLEAR_NEAR_M = 2, CLEAR_WORSE_M = 0.01;
   const clearancePath = (res, closed) => { const p0 = spawnPath(res.segments, closed, res.start); return res.lift ? res.lift(p0) : p0; };
   const kmAt = (s) => `${(s / 1000).toFixed(2)} km`;
-  function passClearanceGuard(before, after, res) {
+  // WIN (D678, Even's step only; lighthouse exo_memory/handback/p-d678-even-build-A_2026-11-27.md, 5.2b): the level's window { w0, w1 } (lap distance). Only the stations
+  // inside it are read, each against every station of the lap: outside it Even moves nothing past one stored step (0.0123 mm on a 27.6 km lap), and reading from the
+  // window to the lap's end cost 4 s a step there. commit and the level-end drag pass none, and read as before.
+  // BEFORE_RES (L271 item 2 (a)): the resolved road the edit is measured against, st.resolved unless given; Even's release passes the road before its drag, since by
+  // then st.resolved is the dragged road.
+  function passClearanceGuard(before, after, res, win = null, beforeRes = st.resolved) {
     if (!res.segments.length) return;
     const PCL = require('../../src/validate/passclear.js'), A = require('../../src/export/apron.js');
     const apronOf = (x) => (x.edgeApronM === undefined ? A.APRON_WIDTH_M : x.edgeApronM);
-    const pa = clearancePath(res, !!after.closed), segsB = st.resolved && st.resolved.segments;
-    const pb = before && before.pieces.length && segsB && segsB.length ? clearancePath(st.resolved, !!before.closed) : null;
+    const pa = clearancePath(res, !!after.closed), segsB = beforeRes && beforeRes.segments;
+    const pb = before && before.pieces.length && segsB && segsB.length ? clearancePath(beforeRes, !!before.closed) : null;
     // the first station the edit moved: the two paths share their stations, to the bit, up to it
     let from = 0;
     if (pb && apronOf(before) === apronOf(after)) {
@@ -463,9 +502,15 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       while (from < m && A0[from].s === B0[from].s && A0[from].pos[0] === B0[from].pos[0] && A0[from].pos[1] === B0[from].pos[1] && A0[from].pos[2] === B0[from].pos[2]) from++;
       if (from >= B0.length) return;   // no station of the new track moved: nothing to read
     }
-    const now2 = PCL.passClearance(pa, res.segments, { apronM: apronOf(after), from });
+    let to = pa.samples.length - 1;
+    if (win) {
+      const S = pa.samples; while (from < S.length && S[from].s < win.w0 - 1e-9) from++;
+      while (to >= 0 && S[to].s > win.w1 + 1e-9) to--;
+      if (from > to) return;   // no station of the window: nothing to read
+    }
+    const now2 = PCL.passClearance(pa, res.segments, { apronM: apronOf(after), from, ...(win ? { to } : {}) });
     if (!now2.length) return;
-    const was = pb ? PCL.passClearance(pb, segsB, { apronM: apronOf(before), from: Math.min(from, pb.samples.length) }) : [];
+    const was = pb ? PCL.passClearance(pb, segsB, { apronM: apronOf(before), from: Math.min(from, pb.samples.length), ...(win ? { to: Math.min(to, pb.samples.length - 1) } : {}) }) : [];
     const same = (f, b) => f.shortM <= b.shortM + CLEAR_WORSE_M && ((Math.abs(f.s - b.s) <= CLEAR_SAME_M && Math.abs(f.otherS - b.otherS) <= CLEAR_SAME_M) || Math.hypot(f.at[0] - b.at[0], f.at[1] - b.at[1], f.at[2] - b.at[2]) <= CLEAR_NEAR_M);
     const fresh = now2.filter((f) => !was.some((b) => same(f, b)));
     if (!fresh.length) return;
@@ -478,9 +523,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     throw new D.CoreError('PASS_CLEARANCE', `too close to another pass of the road: ${what}; a road over another must keep its underside ${w.needM.toFixed(1)} m clear for a car${fresh.length > 1 ? ` (${fresh.length} places)` : ''}. Nothing changed.`);
   }
   /** Commit a new document as one undo step, timing the operation plus the adapter. */
-  const commit = (op, make, extra = {}) => attempt(() => {
+  const commit = (op, make, extra = {}, guardWin = null) => attempt(() => {
     const t0 = now(), d = make(), r = resolvedOf(d), ms = now() - t0;
-    passClearanceGuard(doc(), d, r.resolved);   // D623: a new break of the pass clearance is refused by name (CoreError: the message, nothing changes)
+    passClearanceGuard(doc(), d, r.resolved, typeof guardWin === 'function' ? guardWin() : guardWin);   // D623: a new break of the pass clearance is refused by name (CoreError: the message, nothing changes)
     return set({ history: D.commit(st.history, d), ...r, dirty: true, message: null, lastStep: { op, ms }, ...extra });
   });
   const lastRoad = (d) => { for (let i = d.pieces.length - 1; i >= 0; i--) if (d.pieces[i].type === 'road') return i; return -1; };
@@ -493,6 +538,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     if (b.mode === 'follow') return followed(b, delta);
     if (b.mode === 'stretch') return stretched(b, delta);
     if (b.mode === 'smooth') return smoothed(b, delta);
+    if (b.mode === 'even') return evened(b, delta);
     const at = { s0: b.s0, r: b.r, delta, ...(b.sharp ? { sharp: true } : {}) };   // sharp: an opt-in, off by default
     if (b.mode === 'local') return brushFn(b.base, { mode: b.channel === 'lateral' ? 'swerve' : 'hill', ...at });
     if (brushFn) return brushFn(b.base, { mode: b.channel === 'kh' || b.channel === 'kv' ? 'rate' : 'value', channel: b.channel, ...at });
@@ -533,6 +579,10 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     const note = res && res.note ? res.note.split(' · ').filter((x) => x !== SC.SHARP_NOTE).join(' · ') || null : null;
     return res ? { ...res, note } : res;
   };
+  // EVEN, the drag of a selected run's width handle (D678): the run brought to the width at its centre plus the drag, on a 0.5 m snap (the call: snap while
+  // dragging), within the width handle's range; the far rim held as the drag began (b.hold). The core's result rides along for the release's words
+  const evenValue = (b, delta) => Math.min(EV.EVEN_MAX_M, Math.max(EV.EVEN_MIN_M, Math.round((b.value0 + delta) / EV.EVEN_SNAP_M) * EV.EVEN_SNAP_M));
+  const evened = (b, delta) => { const res = EV.even(b.base, { from: b.span.from, to: b.span.to, value: evenValue(b, delta), hold: b.hold }); return { doc: res.doc, changed: res.changed.map((piece) => ({ piece })), even: res }; };
   // SMOOTH, one channel's Laplacian relax under the window, the drag's delta its strength; the core returns a document or { doc, changed, note }
   const smoothed = (b, lambda) => { const res = smoothFn(b.base, coreChannel(b.channel), b.s0, b.r, lambda); return res && res.doc ? res : { doc: res, changed: [] }; };
   /**: the road piece holding lap distance s, and how far into it: { piece, u }, or null. A run's handles read their values here, at the run's centre,
@@ -632,7 +682,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   // the RIGHT edge er beside the left (e) in headState and pieceState, so the panel's "right edge °" shows its own side (the panel cannot read the document:
   // src/core/document.js pulls node's fs). Where the document has no er, the right follows the left, as src/core/extend.js makes it
   /** open a TOOL drag: resolve the tool, its channel and family; the window; the guard by family. */
-  const openTool = ({ tool, channel, s0, r, sharp, piece, run, keepRate }) => {
+  const openTool = ({ tool, channel, s0, r, sharp, piece, run, keepRate, hold }) => {
     const T = SCULPT_TOOLS[tool];
     if (!T) return set({ message: `BAD_TOOL: "${tool}" is not a Sculpt tool (${Object.keys(SCULPT_TOOLS).join(', ')})` });
     if (st.brush) return set({ message: 'a brush drag is already open' });
@@ -641,7 +691,12 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     if (T.mode === 'local' && !brushFn) return set({ message: 'the height/lateral brush is not in this build yet: use the rate brush' });
     if (T.mode === 'stretch' && !stretchFn) return set({ message: 'NOT_YET: Stretch is not in this build yet' });
     if (T.mode === 'smooth' && !smoothFn) return set({ message: 'NOT_YET: Smooth is not in this build yet' });
+    // EVEN works on a selected piece or run (its handles, or the typed width), never on a radius on the road
+    if (T.mode === 'even' && !Number.isInteger(piece) && !run) return set({ message: 'EVEN_RUN: Even works on a selected piece or run: select it (Shift-click for a run), then drag its width handle, or type the width under "Even ▾"' });
+    if (T.mode === 'even' && hold !== undefined && !EV.HOLDS.includes(hold)) return set({ message: `EVEN_HOLD: hold is one of ${EV.HOLDS.join(', ')}, got ${hold}` });
     const d = doc();
+    // a run Even refuses (a jump, a tube or a split width in reach, a closed lap's start line) is said as the drag opens, not at its first step
+    if (T.mode === 'even' && attempt(() => EV.evenWindow(d, run || { from: piece, to: piece })) === null) return st;
     if (T.mode === 'stretch' && !Number.isInteger(piece) && !run) {   // the piece under the brush, as the hint says
       const c = Number.isFinite(s0) ? centreOf(d, s0) : null;
       if (!c) return set({ message: 'Stretch: there is no road under the brush to stretch' });
@@ -654,9 +709,11 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     // the guard by family: SHAPE keeps the shape guard (every step and at the end); local and route have none
     const guard = family === 'shape' ? { sculpt: true, baseResolved: st.resolved, sculptPiece: Number.isInteger(piece) && !run ? piece : undefined, ...(run ? { ratioAt: centreOf(d, w.s0) || undefined } : {}) } : {};
     const mode = T.mode === 'smooth' ? 'smooth' : T.mode;
+    // Even's drag is measured from the run's width at its centre, where the run's handle reads it (sculptInfo)
+    const evenAt = T.mode === 'even' ? (() => { const c = centreOf(d, w.s0); return { hold: hold || 'centre', value0: c ? D.channelAt(d.pieces[c.piece], 'w', c.u).v : NaN, evenBaseResolved: st.resolved }; })() : {};
     return attempt(() => set({
       history: D.beginDrag(st.history),
-      brush: { mode, channel: ch, s0: w.s0, r: w.r, sharp: !!(sharp && brushFn), base, delta: 0, tool, family, pieces: w.pieces, span: run || (Number.isInteger(piece) ? { from: piece, to: piece } : null), keepRate: !!keepRate, baseHistory: st.history, ...(closedRoute ? { closedBase: d } : {}), ...guard },
+      brush: { mode, channel: ch, s0: w.s0, r: w.r, sharp: !!(sharp && brushFn), base, delta: 0, tool, family, pieces: w.pieces, span: run || (Number.isInteger(piece) ? { from: piece, to: piece } : null), keepRate: !!keepRate, baseHistory: st.history, ...(closedRoute ? { closedBase: d } : {}), ...guard, ...evenAt },
       lastToolChannel: T.mode === 'smooth' || !ch ? st.lastToolChannel : ch,
       message: null,
     }));
@@ -677,13 +734,13 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
      */
     sculptChannels: () => SCULPT_CHANNELS.slice(),
     setSculpt(on) { if (st.brush) return set({ message: 'finish the brush drag first' }); return set({ sculpt: !!on, message: null }); },
-    beginSculpt({ channel, piece, sharp = false, tool, keepRate = false, from, to } = {}) {
+    beginSculpt({ channel, piece, sharp = false, tool, keepRate = false, from, to, hold } = {}) {
       if (!st.sculpt) return set({ message: 'SCULPT_OFF: turn Sculpt on first' });
       const d = doc(); let i = piece;
       // a RUN given as from..to (the page's handles on a run): the run is the window; a tool's family sets the guard, and with no tool it is a shape channel's, guarded as shape
       if (Number.isInteger(from) && Number.isInteger(to) && from !== to) {
         if (from < 0 || to >= d.pieces.length || from > to) return set({ message: `SCULPT_PIECE: pieces ${from} to ${to} are not a run of this track` });
-        if (tool !== undefined) return api.beginBrush({ tool, run: { from, to }, sharp, keepRate });
+        if (tool !== undefined) return api.beginBrush({ tool, run: { from, to }, sharp, keepRate, hold });
         if (!SCULPT_CHANNELS.includes(channel)) return set({ message: `SCULPT_CHANNEL: Sculpt offers only the shape channels (${SCULPT_CHANNELS.join(', ')}); "${channel}" would move the track after it. Turn Sculpt off to use it` });
         const w = toolWindow(d, { run: { from, to } }); if (w.message) return set({ message: w.message });
         if (st.brush) return set({ message: 'a brush drag is already open' });
@@ -692,13 +749,13 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       // with a tool, the window may be the selected RUN: the run, centred on its middle, as wide as it; the selection's longWay rule already keeps it inside the lap
       if (tool !== undefined && i === undefined) {
         const s = st.selection; if (!s || s.base !== d) return set({ message: 'select a piece or a run first: click it on the track' });
-        if (s.from !== s.to) return api.beginBrush({ tool, run: { from: s.from, to: s.to }, sharp, keepRate });
+        if (s.from !== s.to) return api.beginBrush({ tool, run: { from: s.from, to: s.to }, sharp, keepRate, hold });
         i = s.from;
       }
       if (i === undefined) { const s = st.selection; if (!s || s.base !== d || s.from !== s.to) return set({ message: 'select ONE piece first: click it on the track' }); i = s.from; }
       const P = d.pieces[i];
       if (!P || P.type !== 'road') return set({ message: `SCULPT_PIECE: piece ${i} is not a road piece` });
-      if (tool !== undefined) return api.beginBrush({ tool, s0: pieceOffsets(d)[i] + P.length / 2, r: P.length / 2, sharp, piece: i, keepRate });
+      if (tool !== undefined) return api.beginBrush({ tool, s0: pieceOffsets(d)[i] + P.length / 2, r: P.length / 2, sharp, piece: i, keepRate, hold });
       return api.beginBrush({ mode: 'rate', channel, s0: pieceOffsets(d)[i] + P.length / 2, r: P.length / 2, sharp, piece: i });
     },
     /** The piece the Sculpt handles are on, for the panel: { index, id, length, hasCup, values: { phi (degrees), w (m), c (degrees) } at its middle, halfAt(f) the half-width (m) at a share of its length }, or null (Sculpt off, or not ONE road piece selected). */
@@ -716,6 +773,28 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
     sculptTo: (delta) => api.brushTo(delta),
     endSculpt: () => api.endBrush(),
+    /**
+     * EVEN, TYPED (D678): the selected piece or run (or from..to) brought to width `value` (m, exact: no snap), `hold` 'left' | 'right' | 'centre' (src/core/even.js);
+     * one undo step, and the words of app/core/evenwords.js. Refused by name with nothing changed: no run, a drag open, or the core's refusals.
+     */
+    evenRun({ value, hold = 'centre', from, to } = {}) {
+      if (st.brush) return set({ message: 'finish the brush drag first' });
+      const d = doc(), s = st.selection, span = Number.isInteger(from) && Number.isInteger(to) ? { from, to } : s && s.base === d ? { from: s.from, to: s.to } : null;
+      if (!span) return set({ message: 'EVEN_RUN: select the piece or the run to even first: click it on the track (Shift-click for a run)' });
+      if (value == null || (typeof value === 'string' && value.trim() === '')) return set({ message: 'EVEN_VALUE: type the width to bring the run to, in metres, or pick the width of the road before or after the run' });
+      const v = typeof value === 'string' ? Number(value) : value;
+      let res = null;
+      const done = commit('even', () => { res = EV.even(d, { ...span, value: v, hold }); return res.doc; }, {}, () => res && res.window);   // the guard over Even's window only, as at the release (L271 item 2 (a))
+      if (!res || doc() !== res.doc) return done;   // refused: the message says why, and nothing changed
+      return set({ ...ok(EVW.evenDone(res)), evenLeaves: null, evenCheck: beginEvenCheck(d, doc(), res), lastEdited: res.changed, ...(s && s.base === d ? { selection: Object.freeze({ ...s, base: res.doc }) } : {}) });
+    },
+    /** EVEN's picks: the width just before the selected run and just after it ({ before, after }, m; null where there is no road), for the typed field. */
+    evenPicks() {
+      const d = doc(), s = st.selection; if (!s || s.base !== d) return null;
+      const prev = (() => { for (let i = s.from - 1; i >= 0; i--) { const P = d.pieces[i]; if (P.type === 'flight') return null; if (P.type === 'road') return P; } return null; })();
+      const next = (() => { for (let i = s.to + 1; i < d.pieces.length; i++) { const P = d.pieces[i]; if (P.type === 'flight') return null; if (P.type === 'road') return P; } return null; })();
+      return { before: prev ? D.channelAt(prev, 'w', prev.length).v : null, after: next ? D.channelAt(next, 'w', 0).v : null };
+    },
     /**
      * THE FREE JUMP (the user: "instead of clicking extend, it says jump ... it then lets the user move around a blank straight piece ... through testing in the game trial and error driving it
      * themselves"; the core is src/core/jump.js). jump(extendOpts) is the Jump button: the current piece placed as Extend would place it (extendOpts: what Extend takes, or null to take off from the
@@ -883,8 +962,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
      * accumulates rounding; endBrush commits. mode 'local' is the core's height/lateral brush (channel 'height' | 'lateral');
      * 'rate' is src/core/sculpt.js on one channel (kh, kv, phi, w, r).
      */
-    beginBrush({ mode = brushFn ? 'local' : 'rate', channel, s0, r, sharp = false, piece, tool, run, keepRate = false }) {
-      if (tool !== undefined) return openTool({ tool, channel, s0, r, sharp, piece, run, keepRate });
+    beginBrush({ mode = brushFn ? 'local' : 'rate', channel, s0, r, sharp = false, piece, tool, run, keepRate = false, hold }) {
+      if (tool !== undefined) return openTool({ tool, channel, s0, r, sharp, piece, run, keepRate, hold });
       if (!BRUSH_MODES.includes(mode)) return set({ message: `brush mode "${mode}" is not one of ${BRUSH_MODES.join(', ')}` });
       if (mode === 'local' && !brushFn) return set({ message: 'the height/lateral brush is not in this build yet: use the rate brush' });
       if (st.brush) return set({ message: 'a brush drag is already open' });
@@ -918,6 +997,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return attempt(() => {
         const t0 = now(), res = brushed(b, delta), d = res.doc, r = resolvedOf(d), ms = now() - t0;
         // the exact, cheap guard at every step: nothing the path is made of may have moved (the drag stays at its last good step)
+        // Even's pass clearance (D623) is read once, at the release (endBrush), not on each step: on his 27.6 km lap it was 1.8 s of a 2.5 s step (L271 item 2 (a))
         if (b.sculpt) { const moved = CL.routeMovedDetail(b.base, b.baseResolved.segments, d, r.resolved.segments, b.baseResolved.start, r.resolved.start); if (moved) throw new D.CoreError('SCULPT_MOVES_CENTRELINE', `Sculpt can't do that: ${CL.plainWhy(moved)}. The drag stays at its last good step.`); }   // (F3: the reason in plain words, not the internal field)
         // the radius the brush really used (the core's brush widens a narrow one; always shown), and any note of its
         // the radius really used: the core's brush reports it as radiusUsed (sculpt.js), shown whenever it widened
@@ -932,8 +1012,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         const h = D.dragTo(st.history, d);
         // a Sculpt step keeps the same pieces in the same places, so the piece the handles are on stays selected (a selection otherwise belongs to the document it was made on);
         // 0.4.29: so does a grab's step (beginFollow), or its run's dots vanished after the first step
-        const keep = (b.sculpt || b.mode === 'follow') && st.selection ? { selection: Object.freeze({ ...st.selection, base: h.present }) } : {};
-        return set({ history: h, ...r, ...keep, brush: { ...b, delta, rUsed: used, ...(b.tool ? { changedPieces: (res.changed || []).map((c) => c.piece) } : {}) }, dirty: true, lastStep: { op: `brush:${b.mode}`, ms }, message: note, messageKind: note ? 'ok' : null });
+        const keep = (b.sculpt || b.mode === 'follow' || b.mode === 'even') && st.selection ? { selection: Object.freeze({ ...st.selection, base: h.present }) } : {};
+        return set({ history: h, ...r, ...keep, brush: { ...b, delta, rUsed: used, ...(b.tool ? { changedPieces: (res.changed || []).map((c) => c.piece) } : {}), ...(res.even ? { evenRes: res.even } : {}) }, dirty: true, lastStep: { op: `brush:${b.mode}`, ms }, message: note, messageKind: note ? 'ok' : null });
       });
     },
     endBrush() {
@@ -942,6 +1022,14 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (b.family === 'route' && b.closedBase) return releaseRoute(b);   // the pointer-up only starts the job
       // the direct check when a Sculpt drag ends: both centrelines built and compared bit for bit; a drag that moved it is dropped whole
       if (b.sculpt) { const moved = CL.pathMoved(CL.snapshot(b.baseResolved), st.resolved); if (moved) return set({ history: b.baseHistory, ...resolvedOf(b.baseHistory.present), brush: null, message: 'SCULPT_MOVES_CENTRELINE: Sculpt dropped this drag: when it ended, the track\'s centreline had moved (checked point by point), so the track is as it was.' }); }
+      // EVEN's release: one undo step, and what it did said in plain words at once (app/core/evenwords.js evenDone); where the car now leaves the road on the new
+      // middle is said when the check after the release lands (beginEvenCheck, D678 repair)
+      // L271 item 2 (a): the pass clearance read ONCE, here, on the released road against the road before the drag; a new break refuses the whole drag by the guard's
+      // own name and puts the track back as it was before it (as the centreline check's drop above does), so nothing changes
+      if (b.mode === 'even' && b.evenRes && doc() !== b.base) {
+        try { passClearanceGuard(b.base, doc(), st.resolved, b.evenRes.window, b.evenBaseResolved); } catch (e) { if (e.name !== 'CoreError') throw e; return set({ history: b.baseHistory, ...resolvedOf(b.baseHistory.present), brush: null, message: e.message }); }
+      }
+      if (b.mode === 'even') return attempt(() => { const res = b.evenRes && doc() !== b.base ? b.evenRes : null; return set({ brush: null, history: D.endDrag(st.history), lastEdited: b.pieces, ...(res ? ok(EVW.evenDone(res)) : {}), evenLeaves: null, ...(res ? { evenCheck: beginEvenCheck(b.base, doc(), res) } : {}) }); });
       // the brushed pieces are what close() goes round (the brush's window)
       // (endDrag keeps the same present, so a Sculpt selection, re-based at each step, still belongs to it)
       return attempt(() => set({ history: D.endDrag(st.history), brush: null, lastEdited: piecesIn(doc(), b.s0 - b.r, b.s0 + b.r) }));
@@ -1026,6 +1114,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       });
     },
     cancelClose: () => { abortClose(); return set({ closePending: null, message: null }); },
+    /** The promise of the state once Even's pending sentence has landed (said, or dropped because the track changed); the state at once when none is pending. */
+    whenEvenChecked: () => (evenJob && evenLanded ? evenLanded : Promise.resolve(st)),
     /** the live checker's finished answer for document `d` (its reds, and whether CSP was on), kept for a press on that very document. */
     noteCheck(d, { csp = true, red = null } = {}) { if (d && typeof d === 'object' && Array.isArray(red)) checked.set(d, { csp: !!csp, red: red.map((x) => ({ reason: x.reason, s: x.s ?? x.s0 ?? 0 })) }); },
     /**

@@ -57,6 +57,42 @@ test('refineKnots cuts every span over [a, b] to ≤ maxSpan, and leaves the spa
   assert.equal(D.refineKnots(doc, 'p1', 95, 160, 5).doc, doc, 'nothing more to do: the same document');
 });
 
+// ROUND ONCE (D678, Even's window ends: lighthouse exo_memory/handback/p-d678-even-build-A_2026-11-27.md, section 5.1, X4). insertKnots rounds the three new points
+// after EACH knot, so a span cut into several pieces carries up to half a step per knot: measured 1.075 steps in the bank channel on Even's banked fixture. With
+// { roundOnce: true } the points are carried through every insertion at full precision and only the new ones rounded, once, at the end.
+const halfStep = (ch) => 0.5 * 10 ** -D.DEC[ch] + 1e-15;
+function worstPerChannel(P, Q) {
+  const out = {};
+  for (const ch of D.CHANNELS) { let w = 0; for (let i = 0; i <= 3000; i++) { const s = (300 * i) / 3000; w = Math.max(w, Math.abs(D.channelAt(P, ch, s).v - D.channelAt(Q, ch, s).v)); } out[ch] = w; }
+  return out;
+}
+test('refineKnots with roundOnce moves every channel by at most half its stored step at dense samples, where rounding after each knot moves one past it', () => {
+  const d = curvy(), once = D.refineKnots(d, 'p1', 95, 160, 1, { roundOnce: true }), each = D.refineKnots(d, 'p1', 95, 160, 1);
+  assert.deepEqual(once.inserted, each.inserted, 'the same knots');
+  assert.deepEqual(once.doc.pieces[0].knots, each.doc.pieces[0].knots);
+  const wOnce = worstPerChannel(d.pieces[0], once.doc.pieces[0]), wEach = worstPerChannel(d.pieces[0], each.doc.pieces[0]);
+  for (const ch of D.CHANNELS) assert.ok(wOnce[ch] <= halfStep(ch), `${ch}: moved ${wOnce[ch]}, half a step is ${halfStep(ch)}`);
+  assert.ok(D.CHANNELS.some((ch) => wEach[ch] > halfStep(ch)), `control: rounding after each knot keeps every channel within half a step here (${JSON.stringify(wEach)}), so this row tells nothing`);
+});
+test('refineKnots with roundOnce leaves the control points of the spans it did not cut the same numbers, refuses as without it, and returns the same document when no span needs cutting', () => {
+  const d = curvy(), P = d.pieces[0], r = D.refineKnots(d, 'p1', 95, 160, 5, { roundOnce: true }), Q = r.doc.pieces[0], n = r.inserted.length;
+  // Boehm's rule: a knot t in [U[k], U[k+1]) replaces the points k-2 and k-1 by three new ones and keeps the rest; so the points before the first knot's k-2 and from
+  // the last knot's k onward are the same numbers (moved along by the n new points)
+  const U = D.knotVector(P), kOf = (t) => { let k = 3; while (k + 1 < U.length - 4 && U[k + 1] <= t) k++; return k; };
+  const first = kOf(r.inserted[0]) - 2, last = kOf(r.inserted[n - 1]);
+  assert.ok(n > 1 && first > 0 && last < P.channels.w.length, `control: ${n} knots, points 0..${first - 1} and ${last}.. untouched`);
+  // every point, new or carried, is stored at its channel's step (the document's format)
+  for (const ch of D.CHANNELS) Q.channels[ch].forEach((x, i) => assert.ok(Object.is(Number(x.toFixed(D.DEC[ch])), x), `${ch} point ${i} (${x}) is not at the step 1e-${D.DEC[ch]}`));
+  for (const ch of D.CHANNELS) {
+    for (let i = 0; i < first; i++) assert.ok(Object.is(Q.channels[ch][i], P.channels[ch][i]), `${ch} point ${i}`);
+    for (let i = last; i < P.channels[ch].length; i++) assert.ok(Object.is(Q.channels[ch][i + n], P.channels[ch][i]), `${ch} point ${i} (now ${i + n})`);
+  }
+  assert.throws(() => D.refineKnots(d, 'p1', 0, 10, 0.001, { roundOnce: true }), (e) => e.code === 'BAD_SPAN');
+  assert.throws(() => D.refineKnots(d, 'p1', 10, 10, 1, { roundOnce: true }), (e) => e.code === 'BAD_RANGE');
+  const fine = D.refineKnots(d, 'p1', 95, 160, 5).doc;
+  assert.equal(D.refineKnots(fine, 'p1', 95, 160, 5, { roundOnce: true }).doc, fine, 'nothing more to do: the same document');
+});
+
 test('knots inserted in a LATER piece\'s first span keep its joint C1 (the document checks every joint)', () => {
   let d = extend(D.createDoc('j'), { length: 120, first: { kh: 1 / 300 } });
   d = extend(d, { length: 160, transition: 100, targets: { kh: -1 / 150, phi: 15 * DEG } });

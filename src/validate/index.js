@@ -615,6 +615,20 @@ const uptoOf = (S, opts) => { if (opts.uptoS == null) return undefined; const k 
 function validate(path, segments, opts = {}) { return core(path, segments, opts, 0, null, uptoOf(path.samples, opts)); }
 
 /**
+ * linesBetween(path, segments, fromS, toS, opts): the load lines (result.lines) at the stations from lap distance fromS to toS, both included, as validate gives
+ * them there: the speed profile is the whole track's and each station's loads are its own, so every line is the one a whole validate makes at that station.
+ * Lines only: a red or a lap read from part of a track is not the track's. For Even's sentence (app/core/evenwords.js), which reads the centre line's load
+ * inside the level's window and nowhere else (D678 repair: three whole validates took 33 s on a 27.6 km lap).
+ */
+function linesBetween(path, segments, fromS, toS, opts = {}) {
+  if (!path || !Array.isArray(path.samples)) throw new Error('validate: needs a path with samples and the segments');
+  if (!Number.isFinite(fromS) || !Number.isFinite(toS) || toS < fromS) throw new Error(`validate: linesBetween needs fromS <= toS, got ${fromS} and ${toS}`);
+  const S = path.samples, a = S.findIndex((p) => p.s >= fromS - 1e-9), b = S.findIndex((p) => p.s > toS + 1e-9);
+  if (a < 0) return [];
+  return core(path, segments, { ...opts, lap: false }, a, null, b < 0 ? S.length : b).lines;
+}
+
+/**
  * Re-check after the path changed from `fromS` on (an append at the head, or an edit of the word starting there):
  * docs/INTERFACES.md §4 `revalidate(prev, path, segments, fromS, opts)`. Everything before fromS − look-back (above) is
  * carried from `prev`; the rest is recomputed. The result equals `validate(path, segments, opts)` exactly (tested).
@@ -816,4 +830,4 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
   }
 }
 
-module.exports = { validate, revalidate, lapOf, speedProfile, SRC, ROLL_RED_DEG_M, ROLL_AMBER_DEG_M, ROLL_CHORD_M, TUBE_MIN_W, STACK_CURL_DEG, STACK_CAR_W_M, _internal: { ranges, rollRates, sustainedLoad, stackCurl } };
+module.exports = { validate, revalidate, linesBetween, lapOf, speedProfile, SRC, ROLL_RED_DEG_M, ROLL_AMBER_DEG_M, ROLL_CHORD_M, TUBE_MIN_W, STACK_CURL_DEG, STACK_CAR_W_M, _internal: { ranges, rollRates, sustainedLoad, stackCurl } };
