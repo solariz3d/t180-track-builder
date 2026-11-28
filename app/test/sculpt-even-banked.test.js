@@ -29,9 +29,12 @@ for (const fx of ['Bhold', 'B-', 'B-0']) {
       const d = F.present(sh), S = F.stations(F.RUN.lo, F.RUN.hi);
       assert.notEqual(d, st0, msg(sh));
       assert.deepEqual(F.redsLacked(d, base), [], 'K1: no red the untouched road lacks');
-      const held = Math.max(...S.map((s) => Math.abs(F.rimAcross(d, s, 'left') - F.rimAcross(base, s, 'left'))));
-      assert.ok(held <= 0.01, `K2: the held edge is ${held} m from the untouched road's`);
-      const c = F.centreOff(d, st0);
+      // K2 and K3 AMENDED BY NAME (D678, the packet's "Amended 17:4x" item 3, B on d678-even-b): B keeps the held edge where it is on the track as given (st0, after
+      // the strokes), where A0 laid it where the untouched road had it (base); and K3's target is the start's own height moved in the plane of the road as built
+      // (F.centreInPlane), where A0's was eased between the window's ends (F.centreOff). From U the two are the same road
+      const held = Math.max(...S.map((s) => Math.abs(F.rimAcross(d, s, 'left') - F.rimAcross(st0, s, 'left'))));
+      assert.ok(held <= 0.01, `K2: the held edge is ${held} m from where it was`);
+      const c = F.centreInPlane(d, st0);
       assert.ok(c.off <= 0.01, `K3: the centre is ${c.off} m off its target at ${c.at}`);
       // K4 and K5 AMENDED (D678, the packet's "Amended 17:4x" item 1): within one stored step, no longer bit for bit. Even cuts the knots over the window's reaches,
       // so the cut spans' new points (the bank's among them) are stored at each channel's step (test/even_fixtures.js outsideChanges)

@@ -124,16 +124,19 @@ test('E5: B+: a typed width says the first sentence at once, and the check\'s wo
 // one grab), so no sentence says it "stays where it is" or "was"; and the stretch is 20 m at the width beyond each end, then a 30 m ease, not a "50 m" ease.
 // the first sentence, said at once after a typed width (the check is left to land on its own)
 const said = async (base, run, hold) => { const sh = await F.shellOn(base); sh.selectPiece(run.from); if (run.to !== run.from) sh.selectPiece(run.to, { extend: true }); sh.evenRun({ value: '16', hold }); return msg(sh); };
-test('W1: the message says the kept edge is laid where Even reads the road\'s own edge and can move, and the middle is laid smooth; never that an edge stays', async () => {
+// W1 AMENDED BY NAME (D678, the packet's "Amended 17:4x" item 3, B on d678-even-b): B keeps the kept edge where it is (core_even.test.js Y1, within 0.01 m over the
+// run) and the middle where it is (Y2), so the words say so: the kept edge stays and the other moves; the middle stays and both edges move. No sentence says the
+// edge is read from the stretch's ends, as A0's did
+test('W1: the message says the kept edge stays where it is and the other edge moves, or the middle stays and both edges move; never that Even reads the road', async () => {
   const base = F.fixture('flat'), run = F.runPieces(base);
-  for (const hold of ['left', 'right']) {
+  for (const [hold, other] of [['left', 'right'], ['right', 'left']]) {
     const m = await said(base, run, hold);
-    assert.match(m, new RegExp(`the ${hold} edge is laid where Even reads the road's own edge from the stretch's ends, so it can move`), `${hold}: ${m}`);
-    assert.doesNotMatch(m, /stays where it/, `${hold}: no edge "stays"`);
+    assert.match(m, new RegExp(`the ${hold} edge stays where it is and the ${other} edge moves`), `${hold}: ${m}`);
+    assert.doesNotMatch(m, /reads the road|laid smooth/, `${hold}: no A0 words`);
   }
   const m = await said(base, run, 'centre');
-  assert.match(m, /the middle is laid smooth between the stretch's ends, and both edges move/, m);
-  assert.doesNotMatch(m, /stays where it/, 'centre: nothing "stays"');
+  assert.match(m, /the middle stays where it is, and both edges move/, m);
+  assert.doesNotMatch(m, /reads the road|laid smooth/, 'centre: no A0 words');
 });
 // W2: not "20 m at the width, then a 30 m ease" either: where a piece's knots are coarse the width starts to ease inside the margin (13.28 m at 460 on the flat
 // turn for a value of 16; the hand-back's 4.4), so the message promises only that the road is back WITHIN the window's reach, which the outside rows hold.

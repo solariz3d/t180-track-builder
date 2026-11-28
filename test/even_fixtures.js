@@ -81,6 +81,16 @@ function centreOff(after, start) {
   }
   return { off: m, at: where };
 }
+/** K3 for B (D678, the packet's "Amended 17:4x" item 3: the kept edge, or the middle, kept where it is): the most the centre's height is off the START's height
+ *  moved in the plane of the road as built by the centre's sideways move, over the window, every 1 m. Nothing eased between the window's ends: a hill made before stays. */
+function centreInPlane(after, start) {
+  let m = 0, where = null;
+  for (const s of stations(WIN.w0, WIN.w1)) {
+    const target = at(start, 'h', s) + Math.tan(builtBank(start, s)) * (at(after, 'l', s) - at(start, 'l', s));
+    const e = Math.abs(at(after, 'h', s) - target); if (e > m) { m = e; where = s; }
+  }
+  return { off: m, at: where };
+}
 /** The track checker's reds, as the app's checker job reads them (app/validate-ui/checkjob.js, CSP on). */
 function reds(doc) { const r = createCheckJob().run({ doc, csp: true }); if (!r.result) throw new Error(`the checker gave no result: ${r.error}`); return r.result.red.map((x) => ({ reason: x.reason, s0: x.s0, s1: x.s1 })); }
 /** The reds of `after` in [a, b] that `before` lacks: a red is lacked unless it lies inside a red of the same reason on `before`, widened by 2 m at each end. */
@@ -149,4 +159,4 @@ async function startOf(base, start) {
   return sh;
 }
 
-module.exports = { FLAT, LAYOUT, BANKED, RUN, WIN, STARTS, EIGHT, fixture, build, runPieces, at, endOf, stations, spread, geomOf, rimAcross, builtBank, weight, centreOff, reds, redsLacked, outsideChanges, stepOf, jointBreaks, shellOn, present, grab, widthStroke, startOf };
+module.exports = { FLAT, LAYOUT, BANKED, RUN, WIN, STARTS, EIGHT, fixture, build, runPieces, at, endOf, stations, spread, geomOf, rimAcross, builtBank, weight, centreOff, centreInPlane, reds, redsLacked, outsideChanges, stepOf, jointBreaks, shellOn, present, grab, widthStroke, startOf };

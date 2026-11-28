@@ -63,9 +63,10 @@ function newLeaves(before, res, { bounded = false } = {}) {
 
 /**
  * The first sentence after a level, said at once: what it did, where, and what became of the edges.
- * D678 repair (the librarian's 15:4x ruling, item 3): no sentence may say an edge "stays where it is" over code that moves it. The kept edge is laid where Even
- * READS the road's own edge from the stretch's ends (src/core/even.js evenIn: restOf and the agree rule), which can be metres from where it was; the middle
- * ('centre') is laid smooth between the stretch's ends. And the stretch: the width is the value over the run and back to the road WITHIN the window's reach
+ * D678 repair (the librarian's 15:4x ruling, item 3): no sentence may say an edge "stays where it is" over code that moves it. B (the packet's "Amended 17:4x"
+ * item 3) keeps the kept edge where it is on the track as given (src/core/even.js evenIn: the sideways offset fitted to it), measured within 0.01 m over the
+ * run (lighthouse exo_memory/handback/p-d678-even-build-A_2026-11-27.md, section 6), and the middle ('centre') where it is, only the width changing; so the
+ * sentence says so, and the other edge, or both, move. And the stretch: the width is the value over the run and back to the road WITHIN the window's reach
  * beyond each end (50 m, more before it at the carry side). Not "20 m at the value, then a 30 m ease": the margin is at the value to 0.01 m where the road beyond
  * it is within about 5 m of the value, but a road farther off leaks into the margin's outer metre (0.0288 m for a 31 m lead levelled to 16; lighthouse
  * exo_memory/handback/p-d678-even-build-A_2026-11-27.md, section 5.3).
@@ -76,7 +77,7 @@ function newLeaves(before, res, { bounded = false } = {}) {
  * draw it as a chord (src/core/adapter.js legacySeg), 1.03 cm narrower at the peak (measured on the banked fixture after a grab 5 m outside the window).
  */
 function evenDone(res) {
-  const where = res.hold === 'centre' ? 'the middle is laid smooth between the stretch\'s ends, and both edges move' : `the ${res.hold} edge is laid where Even reads the road's own edge from the stretch's ends, so it can move`;
+  const where = res.hold === 'centre' ? 'the middle stays where it is, and both edges move' : `the ${res.hold} edge stays where it is and the ${res.hold === 'left' ? 'right' : 'left'} edge moves`;
   const { lo, hi, w0, w1 } = res.window, a = Math.round(lo - w0), b = Math.round(w1 - hi), full = EV.EVEN_MARGIN_M + EV.EVEN_RAMP_M;
   // a window end cut short by the track's start or its open end
   const before = a < 1 ? 'from the track\'s start' : a < full ? `eased toward the road over the ${a} m to the track's start` : `back to the road within ${a} m before it`;

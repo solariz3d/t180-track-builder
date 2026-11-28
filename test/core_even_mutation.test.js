@@ -19,6 +19,9 @@
 //   more, the build's own K3 is already over the bar (the height fit missing its in-plane target near a height feature in the ramps, reported in the hand-back).
 // - S6, a typed width with no run selected, is refused by the core as well (EVEN_RUN for a run of undefined), so the shell's own check is a second guard, not a
 //   behaviour.
+// Left out on this branch (D678, the packet's "Amended 17:4x" item 3, B on d678-even-b; the hand-back's section 6.1): H1 (the held rim's reference from a window
+// end still in a taper, restOf) and H9 (the agree rule, EVEN_AGREE_M). B reads no road from the window's ends, so neither anchor is in its code; Y1m stands in
+// for a mutant that puts A0's reference back, which cannot be written as one replacement in B's code.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -27,16 +30,14 @@ const IR = require('./inner_run.js');
 const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
 const EV = 'src/core/even.js', CS = 'app/core/coreshell.js', VI = 'src/validate/index.js', DOC = 'src/core/document.js';
-const PCLT = ['test/passclear.test.js'], CORE = ['test/core_even.test.js'], SHELL = ['app/test/sculpt-even.test.js'], SENT = ['app/test/sculpt-even-sentence.test.js'], LINES = ['test/validate_lines_between.test.js'], KNOTS = ['test/core_knots.test.js'];
+const PCLT = ['test/passclear.test.js'], CORE = ['test/core_even.test.js'], SHELL = ['app/test/sculpt-even.test.js'], SENT = ['app/test/sculpt-even-sentence.test.js'], LINES = ['test/validate_lines_between.test.js'], KNOTS = ['test/core_knots.test.js'], PANEL = ['app/test/core-pieces-ui.test.js'];
 
 const MUTANTS = [
   // the held rim and the centre
-  { id: 'H1 the held rim\'s reference eases from a window end still in a taper (the registered C1b rule, U4)', pattern: 'F1-F7: from T1', files: SHELL, edits: [[EV, 'if (ma === mb) return easeOf(doc, off, ch, win);', 'return easeOf(doc, off, ch, win);']] },
   { id: 'H2 the held rim is read on the other side of the section', pattern: 'rim held|K2 and K3', edits: [[EV, 'PR.offsetAt(X, side > 0 ? E[1] : E[0])', 'PR.offsetAt(X, side > 0 ? E[0] : E[1])']] },
   { id: 'H3 the held rim is read unturned by the bank (flat-road arithmetic on a banked road)', pattern: 'K2 and K3', edits: [[EV, 'return o[0] * Math.cos(phi) - o[1] * Math.sin(phi);', 'return o[0];']] },
   { id: 'H4 the centre does not rise or fall with the bank as it moves sideways', pattern: 'K2 and K3', edits: [[EV, '+ Math.tan(phiAt(s)) * (', '+ 0 * (']] },
   { id: 'H5 the centre moves in the plane of the bank channel, not the road as built (call 10)', pattern: 'K2 and K3', edits: [[EV, "const phiAt = (s) => { const a = pieceAt(doc, off, s); return builtPhi(doc, plan, a.p, a.sl); };", "const phiAt = (s) => { const a = pieceAt(doc, off, s); return D.channelAt(doc.pieces[a.p], 'phi', a.sl).v; };"]] },
-  { id: 'H9 the held rim is read back from the window\'s ends even where they disagree (the road\'s own width changing across the window)', pattern: 'changes across', edits: [[EV, 'one = [rw, rl].every((f) => Math.abs(f(w0) - f(w1)) <= EVEN_AGREE_M);', 'one = true;']] },
   { id: 'H8 the centre is not moved to hold the rim (hold is read as centre)', pattern: 'rim held', edits: [[EV, "const side = hold === 'left' ? 1 : hold === 'right' ? -1 : 0;", 'const side = 0;']] },
   // the window and the width
   { id: 'W1 no margin at the value beyond the run (its first span still ramping)', pattern: 'first metre|one piece', edits: [[EV, 'let vlo = lo - margin, w0', 'let vlo = lo, w0'], [EV, 'const win = { lo: vlo, hi: hi + margin, ramp, w0, w1 };', 'const win = { lo: vlo, hi, ramp, w0, w1 };']] },
@@ -60,7 +61,13 @@ const MUTANTS = [
   { id: 'B1m the pass clearance ignores `to` (every station from `from` to the end leads)', pattern: 'row 11', files: PCLT, edits: [['src/validate/passclear.js', 'for (let i = from; i <= to; i++) {', 'for (let i = from; i < n; i++) {']] },
   { id: 'B2m the guard on Even\'s step reads only the window\'s first station', pattern: 'B2', files: SHELL, edits: [[CS, '      while (to >= 0 && S[to].s > win.w1 + 1e-9) to--;', '      to = from;']] },
   { id: 'B3m the guard on Even\'s step starts its read at the window\'s end', pattern: 'B2', files: SHELL, edits: [[CS, 'while (from < S.length && S[from].s < win.w0 - 1e-9) from++;', 'while (from < S.length && S[from].s < win.w1 - 1e-9) from++;']] },
-  { id: 'B4m Even\'s result is frozen shallow again (its changed pieces left unfrozen, so every offset read converts the whole lap)', pattern: 'B4', edits: [[EV, 'const out = freeze(D.checkDoc({ ...c1,', 'const out = Object.freeze(D.checkDoc({ ...c1,']] },
+  // AMENDED BY NAME (B on d678-even-b): B's result is `out = freeze(...)` inside the kept edge's branch, no longer `const out`
+  { id: 'B4m Even\'s result is frozen shallow again (its changed pieces left unfrozen, so every offset read converts the whole lap)', pattern: 'B4', edits: [[EV, 'out = freeze(D.checkDoc({ ...c1,', 'out = Object.freeze(D.checkDoc({ ...c1,']] },
+  // B (D678, the packet's "Amended 17:4x" item 3; the hand-back's section 6.1): the kept edge, or the middle, kept where it is, and the one line of guidance
+  { id: 'Y1m the fit\'s target leaves out the new width\'s rim (the offset kept as it is, so the kept edge moves by half the change)', pattern: 'Y1', edits: [[EV, "return valueAt(doc, off, 'l', x) + rim0(x) - rim1(x);", "return valueAt(doc, off, 'l', x);"]] },
+  { id: 'Y1j the one fit treats the point after a joint as held, so the joint\'s slope is not fitted across both sides', pattern: 'Y1 across the joints', edits: [[EV, 'E[1] = lin(Ea[na - 1], 1 + ratio, Ea[na - 2], -ratio);', 'E[1] = { c: P.channels[ch][1], t: [] };']] },
+  { id: 'Y2m the middle is moved as if an edge were kept', pattern: 'Y2', edits: [[EV, 'if (side) {', 'if (true) {']] },
+  { id: 'Y6m the guidance line is gone from the tool\'s hint', pattern: 'Y6', files: PANEL, edits: [['app/core/panel.js', ' After a grab, keep the edge you did not move, or the middle;', '']] },
   // refusals by name
   { id: 'R1 a closed lap\'s start line inside the window is not refused', pattern: 'closed lap', edits: [[EV, 'if (doc.closed && (w0 < 0 || w1 > L)) refuse(', 'if (false) refuse(']] },
   { id: 'R2 a run across the start line is refused as no run, not by the line', pattern: 'closed lap', edits: [[EV, 'if (doc.closed && Number.isInteger(from) && Number.isInteger(to) && from > to', 'if (false && Number.isInteger(from) && Number.isInteger(to) && from > to']] },
@@ -84,7 +91,7 @@ const MUTANTS = [
   { id: 'E3m linesBetween stops a station short of its end', pattern: 'E3', files: LINES, edits: [[VI, 'b < 0 ? S.length : b).lines;', 'b < 0 ? S.length : b - 1).lines;']] },
   { id: 'E3n linesBetween reads the speed from its own stations, not the lap', pattern: 'E3', files: LINES, edits: [[VI, 'return core(path, segments, { ...opts, lap: false }, a, null, b < 0 ? S.length : b).lines;', 'const sub = { ...path, samples: S.slice(a, b < 0 ? S.length : b) }; return core(sub, segments, { ...opts, lap: false }, 0, null, sub.samples.length).lines;']] },
 ];
-const FILES = [...CORE, ...SHELL, ...SENT, ...LINES, ...KNOTS, ...PCLT];
+const FILES = [...CORE, ...SHELL, ...SENT, ...LINES, ...KNOTS, ...PCLT, ...PANEL];
 const HELPERS = ['test/even_fixtures.js', 'test/inner_run.js', 'test/core_helpers.js', 'test/geom_fixtures.js'];
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-even-mut-'));
@@ -103,7 +110,7 @@ function runTests(dir, pattern, files = FILES) {
   const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, ''), n = (k) => Number((out.match(new RegExp(`ℹ ${k} (\\d+)`)) || [])[1]);
   return { tests: n('tests'), pass: n('pass'), fail: n('fail'), skipped: n('skipped'), out };
 }
-test('CONTROL: core_even.test.js, sculpt-even.test.js, sculpt-even-sentence.test.js, validate_lines_between.test.js, core_knots.test.js and passclear.test.js pass whole on an unmutated copy', () => {   // AMENDED BY NAME (D678 repair): the sentence's two files joined it; (17:4x item 1) and core_knots.test.js, for refineKnots' roundOnce; (23:26Z item 2) and passclear.test.js, for the bounded read's `to`
+test('CONTROL: core_even.test.js, sculpt-even.test.js, sculpt-even-sentence.test.js, validate_lines_between.test.js, core_knots.test.js, passclear.test.js and core-pieces-ui.test.js pass whole on an unmutated copy', () => {   // AMENDED BY NAME (D678 repair): the sentence's two files joined it; (17:4x item 1) and core_knots.test.js, for refineKnots' roundOnce; (23:26Z item 2) and passclear.test.js, for the bounded read's `to`; (17:4x item 3, B) and core-pieces-ui.test.js, for the hint's guidance line (Y6)
   const dir = tree();
   try { const r = runTests(dir); assert.ok(r.tests >= 20 && r.fail === 0, `tests ${r.tests}, fail ${r.fail}\n${r.out.slice(-1500)}`); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

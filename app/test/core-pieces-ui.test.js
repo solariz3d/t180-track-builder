@@ -1275,12 +1275,23 @@ for (const [id, held] of [['width:1', 'right'], ['width:-1', 'left']]) {
     assert.ok(moved <= 0.01, `the ${held} edge stays: it moved ${moved} m`);
     // AMENDED BY NAME (D678 repair, the librarian's 15:4x ruling item 3): the done sentence no longer says the kept edge "stays where it was" (it can move: B's
     // read, 2.5); it says where Even lays it. This road has no grab, so the edge's own measure above (moved <= 0.01) still holds here.
-    assert.match(shell.getState().message, new RegExp(`^Even: ${w} m wide from 0\\.30 km to 0\\.60 km.*the ${held} edge is laid where Even reads the road's own edge from the stretch's ends, so it can move`));
+    // AMENDED BY NAME again (D678, the packet's "Amended 17:4x" item 3, B on d678-even-b): B keeps the edge where it is, so the sentence says it stays
+    assert.match(shell.getState().message, new RegExp(`^Even: ${w} m wide from 0\\.30 km to 0\\.60 km.*the ${held} edge stays where it is and the ${held === 'left' ? 'right' : 'left'} edge moves`));
     assert.deepEqual([shell.selectionInfo().from, shell.selectionInfo().to], [1, 2], 'the run stays selected');
     shell.undo(); assert.equal(shell.getState().history.present, d0, 'Undo gives back the very same document');
     P1.panel.unmount();
   });
 }
+// Y6 (D678, the packet's "Amended 17:4x" item 3, B on d678-even-b; lighthouse exo_memory/handback/p-d678-even-build-A_2026-11-27.md, section 6.1): the one line of
+// guidance B's behaviour needs, where the tool is picked: the edge kept stays where it is, so after a grab keep the edge he did not move, or the middle
+test('Y6: with Even picked, the sculpt hint and the "keeps" picker say to keep the edge you did not move, or the middle, and that the kept edge stays where it is', async () => {
+  const P1 = await evenPanel(), keeps = P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'even keeps');
+  const hint = P1.text('sculpt hint');
+  assert.match(hint, /^Even: .*the other edge stays where it is\. After a grab, keep the edge you did not move, or the middle;/, hint);
+  assert.match(keeps.attrs.title, /Keep the edge you did not move, or the middle/, keeps.attrs.title);
+  assert.doesNotMatch(hint + keeps.attrs.title, /reads the road|laid smooth/, 'no A0 words');
+  P1.panel.unmount();
+});
 test('D678: Even typed through the panel: the width as typed (no step) with the edge picked under "keeps"; ◀ before and after ▶ write the road\'s width either side of the run', async () => {
   const P1 = await evenPanel(), { shell } = P1, d0 = shell.getState().history.present, past0 = shell.getState().history.past.length;
   const field = fieldOf(P1, 'even to m'), keeps = P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'even keeps');

@@ -106,14 +106,16 @@ test('after a piece with coarse knots (a plain Extend\'s 20 m spans), the run is
 
 test('where the road\'s own width changes across the window (a 31 m straight into a 12 m turn), the held rim is held where it is now, not read back from the window\'s ends', () => {
   // a plain Extend's 200 m straight keeps the empty track's 31 m; the turn's four pieces are laid at 12 m and the road narrows over the turn's first 60 m. Reading the
-  // road back from the window's ends (31 m and 12 m) would put the held rim 6.7 m off (D678, found after the registration). Measured 0.077 m: the sideways offset is set
-  // at its control points from the rim read on the road, and a 19 m narrowing in 60 m bends between them (a fit of the offset, as the height has, is not built)
+  // road back from the window's ends (31 m and 12 m) would put the held rim 6.7 m off (D678, found after the registration). Measured 0.077 m under A0: the sideways
+  // offset was set at its control points from the rim read on the road, and a 19 m narrowing in 60 m bends between them.
+  // AMENDED BY NAME (D678, the packet's "Amended 17:4x" item 3, B on d678-even-b): the bar is B's own claim, 0.01 m, where it was 0.1 m. B fits the offset by least
+  // squares to the place that keeps the edge (even.js fitChannel), so the bend between control points is the fit's to remove
   let d = extend(D.createDoc('narrows'), { length: 200 });
   for (const p of [...[1, 2, 3, 4].map(() => ({ length: 60, turn: 30 })), { length: 150, turn: 0 }]) d = require('../src/core/turnby.js').extendCorner(d, require('../app/core/panel.js').extendOptions({ length: p.length, turn: p.turn, climb: 0, bank: 0, width: 12, turnAs: 'corner' }));
   assert.ok(F.at(d, 'w', 150) > 30 && Math.abs(F.at(d, 'w', 500) - 12) < 1e-6, 'control: 31 m before the turn, 12 m after it');
   const r = EV.even(d, { from: 1, to: 4, value: 16, hold: 'left' }), S = F.stations(200, 440);
   const held = Math.max(...S.map((s) => Math.abs(F.rimAcross(r.doc, s, 'left') - F.rimAcross(d, s, 'left'))));
-  assert.ok(held <= 0.1, `the held rim moved ${held} m`);
+  assert.ok(held <= 0.01, `the held rim moved ${held} m`);
   assert.ok(widthSpread(r.doc, 200, 440) <= 1e-4, 'and the run is one width');
 });
 
@@ -154,19 +156,22 @@ for (const fx of ['flat', 'B-']) for (const hold of ['left', 'right']) {
     assert.deepEqual(F.jointBreaks(r.doc), [], 'X8: no joint steps');
   });
 }
-// X2 on B- only. On the flat fixture the lead at s 180 is still in its taper from the empty track's 31 m head, and Even as built (A0) lays the kept edge on the 12 m
-// road it reads from the window's far end, about 0.25 m from the edge there (section 5.1, X2f): that is the reading, not the knots, and it is item 3's question.
-for (const hold of ['left', 'right']) {
-  test(`X2: on B-, the ${hold} edge kept, the kept edge is within 0.01 m of where it was over both margins`, () => {
-    const base = F.fixture('B-'), r = EV.even(base, { ...F.runPieces(base), value: 16, hold });
+// X2. On the flat fixture the lead at s 180 is still in its taper from the empty track's 31 m head; A0 laid the kept edge on the 12 m road it read from the window's
+// far end, 0.2516 m from the edge there (section 5.1, X2f), so A0's branch runs X2 on B- only.
+// AMENDED BY NAME (D678, the packet's "Amended 17:4x" item 3, B on d678-even-b): B keeps the edge where it is, with no reading, so X2 runs on flat too (red on A0)
+for (const fx of ['flat', 'B-']) for (const hold of ['left', 'right']) {
+  test(`X2: on ${fx}, the ${hold} edge kept, the kept edge is within 0.01 m of where it was over both margins`, () => {
+    const base = F.fixture(fx), r = EV.even(base, { ...F.runPieces(base), value: 16, hold });
     const worst = Math.max(...F.stations(F.WIN.lo, F.WIN.hi).filter(inMargins).map((s) => Math.abs(F.rimAcross(r.doc, s, hold) - F.rimAcross(base, s, hold))));
     assert.ok(worst <= 0.01, `the kept edge moved ${worst} m in the margins`);
   });
 }
+// AMENDED BY NAME (D678, the packet's "Amended 17:4x" item 3, B on d678-even-b): K3's target is B's, the start's own height moved in the plane of the road as built
+// (F.centreInPlane), where it was A0's height eased between the window's ends (F.centreOff); B keeps a hill made before
 for (const grabs of [[470], [485], [175, 465]]) {
   test(`X3, X4, X8: on B- after a grab at ${grabs.join(' and ')}, K3: the centre's height is within 0.01 m of its target over the window, nothing outside moves past one stored step and no joint steps`, async () => {
     const sh = await F.shellOn(F.fixture('B-')); for (const s of grabs) F.grab(sh, s, 16);
-    const st = F.present(sh), r = EV.even(st, { ...F.runPieces(st), value: 16, hold: 'left' }), c = F.centreOff(r.doc, st);
+    const st = F.present(sh), r = EV.even(st, { ...F.runPieces(st), value: 16, hold: 'left' }), c = F.centreInPlane(r.doc, st);
     assert.ok(c.off <= 0.01, `X3 (K3): ${c.off} m at ${c.at}`);
     assert.deepEqual(F.outsideChanges(r.doc, st).slice(0, 5), [], 'X4: outside the window');
     assert.deepEqual(F.jointBreaks(r.doc), [], 'X8: no joint steps');
@@ -224,5 +229,54 @@ for (const hold of ['left', 'right', 'centre']) {
     const sh = await F.startOf(F.fixture('B-'), 'T1'), st = F.present(sh), r = EV.even(st, { ...F.runPieces(st), value: 16, hold });
     assert.ok(r.changed.length > 0, 'control: Even changed pieces');
     assert.equal(frozenDown(r.doc), null, `not frozen: ${frozenDown(r.doc)}`);
+  });
+}
+
+// ── B (D678, the packet's "Amended 17:4x" item 3; lighthouse exo_memory/handback/p-d678-even-build-A_2026-11-27.md, section 6.1): the kept edge, or the middle,
+// kept WHERE IT IS on the track Even is given, grabs and all. Y1: the kept edge within 0.01 m of where it is over the run. Y2: the middle kept, l and h everywhere
+// within one stored step of the track as given (item 1 cuts the reaches, so not bit for bit). Y3: K3 against the start's own height moved in the plane of the road
+// as built by the sideways move (F.centreInPlane)
+const keptOff = (after, start, hold, a, b) => Math.max(...F.stations(a, b).map((s) => Math.abs(F.rimAcross(after, s, hold) - F.rimAcross(start, s, hold))));
+for (const fx of ['flat', 'B-']) for (const hold of ['left', 'right']) {
+  test(`Y1 and Y3: on ${fx} after one grab (T1), the ${hold} edge kept stays within 0.01 m of where it is over the run, the run is one width, and K3 holds against the start`, async () => {
+    const sh = await F.startOf(F.fixture(fx), 'T1'), st = F.present(sh), r = EV.even(st, { ...F.runPieces(st), value: 16, hold });
+    const k = keptOff(r.doc, st, hold, F.RUN.lo, F.RUN.hi);
+    assert.ok(k <= 0.01, `Y1: the kept edge moved ${k} m`);
+    assert.ok(widthSpread(r.doc, F.RUN.lo, F.RUN.hi) <= 1e-4, 'one width');
+    const c = F.centreInPlane(r.doc, st); assert.ok(c.off <= 0.01, `Y3 (K3): ${c.off} m at ${c.at}`);
+  });
+}
+// Y1 across the joints inside the window (the hand-back's section 6.2): the run's four pieces meet at 260, 320 and 380 and the lead at 200, and the kept edge after
+// eight grabs (T2b), eight width strokes (W8) or a row of grabs every 30 m (175 to 475) bends there. Measured on the first build (the fit piece by piece, each joint's
+// slope taken from the piece before): 0.0541 m at s 201 (T2b flat), 0.0123 at 201 (W8 flat), 0.0178 at 261 (the row), 0.0546 at 201 (T2b on B-)
+const ROW30 = (a, b) => { const o = []; for (let s = a; s <= b; s += 30) o.push(s); return o; };
+for (const [fx, start] of [['flat', 'T2b'], ['flat', 'W8'], ['flat', 'row'], ['B-', 'T2b']]) {
+  test(`Y1 across the joints: on ${fx} from ${start === 'row' ? 'a row of grabs every 30 m from 175 to 475' : start}, the left edge kept stays within 0.01 m of where it is over the run`, async () => {
+    let sh;
+    if (start === 'row') { sh = await F.shellOn(F.fixture(fx)); for (const s of ROW30(175, 475)) F.grab(sh, s, 16); } else sh = await F.startOf(F.fixture(fx), start);
+    const st = F.present(sh), r = EV.even(st, { ...F.runPieces(st), value: 16, hold: 'left' });
+    const k = keptOff(r.doc, st, 'left', F.RUN.lo, F.RUN.hi);
+    assert.ok(k <= 0.01, `Y1: the kept edge moved ${k} m`);
+  });
+}
+// The start run: B MISSES ITS OWN CLAIM HERE, by 0.0038 m (0.0138 m at s 51; the hand-back's section 6.2), the row named in advance as closest to the bar. The road
+// before it narrows from the empty track's 31 m head to 16 m at the grab and widens again within 25 m, about 0.8 m of width per metre, and the builder reads its
+// rim on 2 m segments, which bends about the chord between whole metres by up to 0.08 m (read on the cross-section every 0.25 m); the fitted offset, a spline on the
+// piece's 10 m spans, goes through that, not along it. The row pins the miss as measured, so it cannot grow unseen
+test('Y1: a run from the track\'s start after a grab at 30, the right edge kept, stays within 0.014 m of where it is from the start to the run\'s end (B\'s 0.01 m missed here, by 0.0038 m)', async () => {
+  const sh = await F.shellOn(F.fixture('flat')); F.grab(sh, 30, 16);
+  const st = F.present(sh), off = SC.pieceOffsets(st), hi = off[1] + st.pieces[1].length, r = EV.even(st, { from: 0, to: 1, value: 16, hold: 'right' });
+  const k = keptOff(r.doc, st, 'right', 0, hi);
+  assert.ok(k <= 0.014, `the kept edge moved ${k} m`);
+});
+for (const fx of ['flat', 'B-']) for (const [ch, id] of [['height', 'a hill'], ['lateral', 'a swerve']]) {
+  test(`Y2: on ${fx} with ${id} at 320, the middle kept: its sideways offset and height everywhere within one stored step of the track as given`, async () => {
+    const sh = await F.shellOn(F.fixture(fx)); sh.setSculpt(false); sh.beginBrush({ mode: 'local', channel: ch, s0: 320, r: 30 }); sh.brushTo(2); sh.endBrush(); sh.setSculpt(true);
+    const st = F.present(sh), r = EV.even(st, { ...F.runPieces(st), value: 16, hold: 'centre' }), c = ch === 'height' ? 'h' : 'l';
+    assert.ok(Math.abs(F.at(st, c, 320) - F.at(F.fixture(fx), c, 320) - 2) <= 0.01, `control: ${id} of 2 m at 320`);
+    const worst = { l: 0, h: 0 };
+    for (const s of F.stations(0, F.endOf(st))) for (const k of ['l', 'h']) worst[k] = Math.max(worst[k], Math.abs(F.at(r.doc, k, s) - F.at(st, k, s)));
+    assert.ok(worst.l <= F.stepOf('l') * (1 + 1e-9) && worst.h <= F.stepOf('h') * (1 + 1e-9), `the middle moved: l ${worst.l}, h ${worst.h}`);
+    assert.ok(Math.abs(F.at(r.doc, 'w', F.RUN.mid) - 16) <= 1e-4, 'and the width is the value');
   });
 }

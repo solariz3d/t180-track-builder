@@ -22,7 +22,7 @@ function evenDrag(sh, { from, to }, hold, value) {
 const msg = (sh) => sh.getState().message || '';
 
 for (const start of ['T1', 'T2b']) {
-  test(`F1-F7: from ${start} on his flat turn, Even (the right edge's handle, the left edge held) brings the turn to 16 m with the inner edge where the road had it`, async () => {
+  test(`F1-F7: from ${start} on his flat turn, Even (the right edge's handle, the left edge held) brings the turn to 16 m with the inner edge where it is (B; amended by name below)`, async () => {
     const base = F.fixture('flat'), sh = await F.startOf(base, start), st0 = F.present(sh), run = F.runPieces(st0);
     evenDrag(sh, run, 'left', 16);
     const d = F.present(sh), S = F.stations(F.RUN.lo, F.RUN.hi);
@@ -30,19 +30,24 @@ for (const start of ['T1', 'T2b']) {
     const w = F.spread(S.map((s) => F.at(d, 'w', s)));
     assert.ok(w <= 0.01, `F1: width spread ${w}`);
     assert.ok(Math.abs(F.at(d, 'w', F.RUN.mid) - 16) <= 0.01, 'F1: at 16 m');
-    const outer = F.spread(S.map((s) => F.rimAcross(d, s, 'right')));
-    assert.ok(outer <= 0.01, `F2: outer edge spread ${outer}`);
-    const inner = Math.max(...S.map((s) => Math.abs(F.rimAcross(d, s, 'left') - F.rimAcross(base, s, 'left'))));
-    assert.ok(inner <= 0.01, `F3: the inner edge is ${inner} m from the untouched road's`);
+    // F2, F3, F6 and F7 AMENDED BY NAME (D678, the packet's "Amended 17:4x" item 3, B on d678-even-b; the hand-back's section 6.2). B keeps the inner edge where the
+    // grabs left it (st0), where A0 laid it where the untouched road had it (base); the outer edge follows it at the new width; the centre's height stays as the
+    // grabs left it, moved only in the plane of the road (F.centreInPlane), where A0 eased it between the window's ends; and the start's own reds on the run stay.
+    // F2 is therefore the span across one over the run and the outer edge no more uneven than the inner edge as it was, NOT the example's outer edge even (A0
+    // meets that): each grab of the outer edge also moved the inner one, and B keeps it
+    const across = F.spread(S.map((s) => F.rimAcross(d, s, 'left') - F.rimAcross(d, s, 'right')));
+    assert.ok(across <= 0.01, `F2: the span across is ${across} m uneven`);
+    const outer = F.spread(S.map((s) => F.rimAcross(d, s, 'right'))), innerNow = F.spread(S.map((s) => F.rimAcross(st0, s, 'left')));
+    assert.ok(outer <= innerNow + 0.01, `F2: outer edge spread ${outer}, the inner edge's as it was ${innerNow}`);
+    const inner = Math.max(...S.map((s) => Math.abs(F.rimAcross(d, s, 'left') - F.rimAcross(st0, s, 'left'))));
+    assert.ok(inner <= 0.01, `F3: the inner edge is ${inner} m from where it was`);
     // F4 AMENDED (D678, the packet's "Amended 17:4x" item 1): outside the window every channel within one stored step, no longer bit for bit (test/even_fixtures.js outsideChanges)
     assert.deepEqual(F.outsideChanges(d, st0).slice(0, 5), [], 'F4: outside the window, nothing past one stored step');
     assert.doesNotThrow(() => D.checkDoc(d), 'F5: checkDoc');
     assert.deepEqual(F.jointBreaks(d), [], 'F5: no step at the joints in w, l or h');
-    const h = F.spread(S.map((s) => F.at(d, 'h', s)));
-    assert.ok(h <= 0.01, `F6: centre height spread ${h}`);
-    const onRun = F.reds(d).filter((x) => x.s1 >= F.RUN.lo && x.s0 <= F.RUN.hi);
-    assert.deepEqual(onRun, [], 'F7: no red on the run');
-    assert.deepEqual(F.redsLacked(d, base), [], 'F7: no red in the window the untouched road lacks');
+    const h = F.centreInPlane(d, st0);
+    assert.ok(h.off <= 0.01, `F6: the centre's height is ${h.off} m off the start's in the plane of the road at ${h.at}`);
+    assert.deepEqual(F.redsLacked(d, st0), [], 'F7: no red in the window the start lacks (B keeps the start\'s own reds on the run, which A0 cleared)');
     // F5: one undo step: Undo gives the start back byte for byte, Redo the level
     const after = D.serialize(d);
     sh.undo(); assert.equal(D.serialize(F.present(sh)), D.serialize(st0), 'Undo: the start');
@@ -68,8 +73,9 @@ test('the drag snaps to 0.5 m, keeps the run selected through every step, and it
   assert.match(msg(sh), /^Even: 16 m wide from 0\.20 km to 0\.44 km/);
   // AMENDED BY NAME (D678 repair, the librarian's 15:4x ruling item 3): the words are made true to the code. The kept edge is laid where Even reads the road's
   // own edge from the stretch's ends and can move (B's read, 2.5: 3.96 m on the flat turn after a grab), so "stays where it was" is withdrawn.
-  assert.match(msg(sh), /the right edge is laid where Even reads the road's own edge from the stretch's ends, so it can move/);
-  assert.doesNotMatch(msg(sh), /stays where it/);
+  // AMENDED BY NAME again (D678, the packet's "Amended 17:4x" item 3, B on d678-even-b): B keeps the edge where it is (Y1, within 0.01 m), so the words say so
+  assert.match(msg(sh), /the right edge stays where it is and the left edge moves/);
+  assert.doesNotMatch(msg(sh), /reads the road/);
   sh.undo(); assert.equal(D.serialize(F.present(sh)), D.serialize(F.fixture('flat')), 'the whole drag is one undo step');
 });
 
