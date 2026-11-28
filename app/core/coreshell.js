@@ -480,12 +480,14 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   // WIN (D678, Even's step only; lighthouse exo_memory/handback/p-d678-even-build-A_2026-11-27.md, 5.2b): the level's window { w0, w1 } (lap distance). Only the stations
   // inside it are read, each against every station of the lap: outside it Even moves nothing past one stored step (0.0123 mm on a 27.6 km lap), and reading from the
   // window to the lap's end cost 4 s a step there. commit and the level-end drag pass none, and read as before.
-  function passClearanceGuard(before, after, res, win = null) {
+  // BEFORE_RES (L271 item 2 (a)): the resolved road the edit is measured against, st.resolved unless given; Even's release passes the road before its drag, since by
+  // then st.resolved is the dragged road.
+  function passClearanceGuard(before, after, res, win = null, beforeRes = st.resolved) {
     if (!res.segments.length) return;
     const PCL = require('../../src/validate/passclear.js'), A = require('../../src/export/apron.js');
     const apronOf = (x) => (x.edgeApronM === undefined ? A.APRON_WIDTH_M : x.edgeApronM);
-    const pa = clearancePath(res, !!after.closed), segsB = st.resolved && st.resolved.segments;
-    const pb = before && before.pieces.length && segsB && segsB.length ? clearancePath(st.resolved, !!before.closed) : null;
+    const pa = clearancePath(res, !!after.closed), segsB = beforeRes && beforeRes.segments;
+    const pb = before && before.pieces.length && segsB && segsB.length ? clearancePath(beforeRes, !!before.closed) : null;
     // the first station the edit moved: the two paths share their stations, to the bit, up to it
     let from = 0;
     if (pb && apronOf(before) === apronOf(after)) {
@@ -514,9 +516,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     throw new D.CoreError('PASS_CLEARANCE', `too close to another pass of the road: ${what}; a road over another must keep its underside ${w.needM.toFixed(1)} m clear for a car${fresh.length > 1 ? ` (${fresh.length} places)` : ''}. Nothing changed.`);
   }
   /** Commit a new document as one undo step, timing the operation plus the adapter. */
-  const commit = (op, make, extra = {}) => attempt(() => {
+  const commit = (op, make, extra = {}, guardWin = null) => attempt(() => {
     const t0 = now(), d = make(), r = resolvedOf(d), ms = now() - t0;
-    passClearanceGuard(doc(), d, r.resolved);   // D623: a new break of the pass clearance is refused by name (CoreError: the message, nothing changes)
+    passClearanceGuard(doc(), d, r.resolved, typeof guardWin === 'function' ? guardWin() : guardWin);   // D623: a new break of the pass clearance is refused by name (CoreError: the message, nothing changes)
     return set({ history: D.commit(st.history, d), ...r, dirty: true, message: null, lastStep: { op, ms }, ...extra });
   });
   const lastRoad = (d) => { for (let i = d.pieces.length - 1; i >= 0; i--) if (d.pieces[i].type === 'road') return i; return -1; };
@@ -701,7 +703,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     const guard = family === 'shape' ? { sculpt: true, baseResolved: st.resolved, sculptPiece: Number.isInteger(piece) && !run ? piece : undefined, ...(run ? { ratioAt: centreOf(d, w.s0) || undefined } : {}) } : {};
     const mode = T.mode === 'smooth' ? 'smooth' : T.mode;
     // Even's drag is measured from the run's width at its centre, where the run's handle reads it (sculptInfo)
-    const evenAt = T.mode === 'even' ? (() => { const c = centreOf(d, w.s0); return { hold: hold || 'centre', value0: c ? D.channelAt(d.pieces[c.piece], 'w', c.u).v : NaN }; })() : {};
+    const evenAt = T.mode === 'even' ? (() => { const c = centreOf(d, w.s0); return { hold: hold || 'centre', value0: c ? D.channelAt(d.pieces[c.piece], 'w', c.u).v : NaN, evenBaseResolved: st.resolved }; })() : {};
     return attempt(() => set({
       history: D.beginDrag(st.history),
       brush: { mode, channel: ch, s0: w.s0, r: w.r, sharp: !!(sharp && brushFn), base, delta: 0, tool, family, pieces: w.pieces, span: run || (Number.isInteger(piece) ? { from: piece, to: piece } : null), keepRate: !!keepRate, baseHistory: st.history, ...(closedRoute ? { closedBase: d } : {}), ...guard, ...evenAt },
@@ -775,7 +777,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (value == null || (typeof value === 'string' && value.trim() === '')) return set({ message: 'EVEN_VALUE: type the width to bring the run to, in metres, or pick the width of the road before or after the run' });
       const v = typeof value === 'string' ? Number(value) : value;
       let res = null;
-      const done = commit('even', () => { res = EV.even(d, { ...span, value: v, hold }); return res.doc; });
+      const done = commit('even', () => { res = EV.even(d, { ...span, value: v, hold }); return res.doc; }, {}, () => res && res.window);   // the guard over Even's window only, as at the release (L271 item 2 (a))
       if (!res || doc() !== res.doc) return done;   // refused: the message says why, and nothing changed
       return set({ ...ok(EVW.evenDone(res)), evenLeaves: null, evenCheck: beginEvenCheck(d, doc(), res), lastEdited: res.changed, ...(s && s.base === d ? { selection: Object.freeze({ ...s, base: res.doc }) } : {}) });
     },
@@ -988,7 +990,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return attempt(() => {
         const t0 = now(), res = brushed(b, delta), d = res.doc, r = resolvedOf(d), ms = now() - t0;
         // the exact, cheap guard at every step: nothing the path is made of may have moved (the drag stays at its last good step)
-        if (b.mode === 'even') passClearanceGuard(b.base, d, r.resolved, res.even && res.even.window);   // Even moves the road sideways: a new break of the pass clearance is refused at the step (D623), as the level's end drag is
+        // Even's pass clearance (D623) is read once, at the release (endBrush), not on each step: on his 27.6 km lap it was 1.8 s of a 2.5 s step (L271 item 2 (a))
         if (b.sculpt) { const moved = CL.routeMovedDetail(b.base, b.baseResolved.segments, d, r.resolved.segments, b.baseResolved.start, r.resolved.start); if (moved) throw new D.CoreError('SCULPT_MOVES_CENTRELINE', `Sculpt can't do that: ${CL.plainWhy(moved)}. The drag stays at its last good step.`); }   // (F3: the reason in plain words, not the internal field)
         // the radius the brush really used (the core's brush widens a narrow one; always shown), and any note of its
         // the radius really used: the core's brush reports it as radiusUsed (sculpt.js), shown whenever it widened
@@ -1015,6 +1017,11 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (b.sculpt) { const moved = CL.pathMoved(CL.snapshot(b.baseResolved), st.resolved); if (moved) return set({ history: b.baseHistory, ...resolvedOf(b.baseHistory.present), brush: null, message: 'SCULPT_MOVES_CENTRELINE: Sculpt dropped this drag: when it ended, the track\'s centreline had moved (checked point by point), so the track is as it was.' }); }
       // EVEN's release: one undo step, and what it did said in plain words at once (app/core/evenwords.js evenDone); where the car now leaves the road on the new
       // middle is said when the check after the release lands (beginEvenCheck, D678 repair)
+      // L271 item 2 (a): the pass clearance read ONCE, here, on the released road against the road before the drag; a new break refuses the whole drag by the guard's
+      // own name and puts the track back as it was before it (as the centreline check's drop above does), so nothing changes
+      if (b.mode === 'even' && b.evenRes && doc() !== b.base) {
+        try { passClearanceGuard(b.base, doc(), st.resolved, b.evenRes.window, b.evenBaseResolved); } catch (e) { if (e.name !== 'CoreError') throw e; return set({ history: b.baseHistory, ...resolvedOf(b.baseHistory.present), brush: null, message: e.message }); }
+      }
       if (b.mode === 'even') return attempt(() => { const res = b.evenRes && doc() !== b.base ? b.evenRes : null; return set({ brush: null, history: D.endDrag(st.history), lastEdited: b.pieces, ...(res ? ok(EVW.evenDone(res)) : {}), evenLeaves: null, ...(res ? { evenCheck: beginEvenCheck(b.base, doc(), res) } : {}) }); });
       // the brushed pieces are what close() goes round (the brush's window)
       // (endDrag keeps the same present, so a Sculpt selection, re-based at each step, still belongs to it)

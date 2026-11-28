@@ -226,3 +226,25 @@ for (const hold of ['left', 'right', 'centre']) {
     assert.equal(frozenDown(r.doc), null, `not frozen: ${frozenDown(r.doc)}`);
   });
 }
+
+// C1 (L271 item 2 (b); lighthouse exo_memory/loop/packet_t180_even_a0_and_slope_grab_on_L_2026-11-28.md, its "item 5"): a drag re-runs Even on the SAME base at every
+// step; the window's reaches are cut once per drag, not once per step, so the cut pieces (and the road read from the window's ends, and its bank plan) stay one
+// set of objects and the segment caches hold them. Two calls on one base with different values reuse the same cut track and the same reference road; the results
+// are the same bytes as with nothing memoised (C2, the fixture rows).
+test('C1: two Even calls on one base reuse one cut track and one reference road (the reaches cut once per drag)', () => {
+  const base = F.fixture('flat'), run = F.runPieces(base), I = EV._internal;
+  assert.equal(typeof I.cutOf, 'function', 'the cut track is memoised (cutOf)');
+  const a = I.cutOf(base, run), b = I.cutOf(base, run);
+  assert.equal(a.doc, b.doc, 'the same cut track');
+  const r1 = EV.even(base, { ...run, value: 16, hold: 'left' }), r2 = EV.even(base, { ...run, value: 17, hold: 'left' });
+  assert.equal(I.cutOf(base, run).doc, a.doc, 'still the same after two levels');
+  assert.notEqual(r1.doc, r2.doc);
+});
+test('C2: Even with its cut and reference memoised gives the same bytes as Even run on a fresh copy of the base (no memo hit)', () => {
+  for (const fx of ['flat', 'B-']) for (const hold of ['left', 'right', 'centre']) {
+    const base = F.fixture(fx), run = F.runPieces(base), copy = JSON.parse(JSON.stringify(base));
+    const a = EV.even(base, { ...run, value: 16, hold }), a2 = EV.even(base, { ...run, value: 16, hold }), b = EV.even(D.checkDoc(copy), { ...run, value: 16, hold });
+    assert.equal(JSON.stringify(a.doc), JSON.stringify(b.doc), `${fx} ${hold}: memoised against fresh`);
+    assert.equal(JSON.stringify(a2.doc), JSON.stringify(b.doc), `${fx} ${hold}: a second call on the same base`);
+  }
+});

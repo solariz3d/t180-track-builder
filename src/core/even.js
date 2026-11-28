@@ -192,15 +192,34 @@ function fitHeight(doc, target, win) {
  * Returns { doc, changed (piece indices), window { lo, hi, w0, w1 } (lap distance), value, hold, shiftAt (s -> the centre's move across the road, in its built plane, m) }.
  */
 function even(doc, { from, to, value, hold = 'centre', ramp = EVEN_RAMP_M, margin = EVEN_MARGIN_M } = {}) {
-  const W0 = evenWindow(doc, { from, to, ramp, margin }), { off, L, lo, hi } = W0;   // the refusals, read on the track as given (as the shell reads them when a drag opens)
+  const C = cutOf(doc, { from, to, ramp, margin });   // the refusals first, read on the track as given (as the shell reads them when a drag opens)
   if (!isNum(value)) refuse('EVEN_VALUE', `the width must be a number of metres, got ${value}`);
   if (value < EVEN_MIN_M || value > EVEN_MAX_M) refuse('EVEN_VALUE', `the width must be between ${EVEN_MIN_M} and ${EVEN_MAX_M} m, got ${value}`);
   if (!HOLDS.includes(hold)) refuse('EVEN_HOLD', `hold is one of ${HOLDS.join(', ')}, got ${hold}`);
-  // the knots over the window's reaches cut first, then the window taken again on the cut track: with the piece before the run cut, its last span no longer
-  // carries a slope into the run, so the carry side (evenWindow) has nothing to reach back for and the window is the 20 m margin and the 30 m ramp
-  const cut = refineEnds(doc, off, L, lo, hi, margin + ramp);
-  const W = cut === doc ? W0 : evenWindow(cut, { from, to, ramp, margin });
-  return evenIn(cut, { off: W.off, L: W.L, lo: W.lo, hi: W.hi, win: W.win, w0: W.win.w0, w1: W.win.w1, value, hold, given: doc });
+  const W = C.W;
+  return evenIn(C.doc, { off: W.off, L: W.L, lo: W.lo, hi: W.hi, win: W.win, w0: W.win.w0, w1: W.win.w1, value, hold, given: doc, memo: C.memo });
+}
+
+/**
+ * THE CUT, ONCE PER DRAG (L271 item 2 (b); lighthouse exo_memory/loop/packet_t180_even_a0_and_slope_grab_on_L_2026-11-28.md, its "item 5"). The knots over the window's
+ * reaches are cut first (refineEnds), then the window taken again on the cut track: with the piece before the run cut, its last span no longer carries a slope into
+ * the run, so the carry side (evenWindow) has nothing to reach back for and the window is the 20 m margin and the 30 m ramp. A drag re-runs Even on the SAME base at
+ * every step, and the cut made new piece objects each time, so the segment cache never held them (about 0.45 s a step on a 27.6 km lap, D678 5.4). The cut track,
+ * frozen all the way down, and a memo for what depends on it alone (the road read from the window's ends, its rim readers, the bank plan: evenIn's `once`) are kept
+ * per base document and window in a WeakMap, so a drag computes them once. Only a document frozen all the way down is memoised (one that can change cannot be keyed by
+ * identity); any other gets a fresh cut and no memo. Returns { doc (the cut track), W (its window), memo (a Map, or null) }.
+ */
+const CUT_MEMO = new WeakMap();
+const frozenDown = (o) => !o || typeof o !== 'object' || (Object.isFrozen(o) && Object.keys(o).every((k) => frozenDown(o[k])));
+function cutOf(doc, { from, to, ramp = EVEN_RAMP_M, margin = EVEN_MARGIN_M } = {}) {
+  const key = `${from}|${to}|${ramp}|${margin}`, byDoc = CUT_MEMO.get(doc);
+  if (byDoc && byDoc.has(key)) return byDoc.get(key);
+  const W0 = evenWindow(doc, { from, to, ramp, margin }), { off, L, lo, hi } = W0;
+  const cut0 = refineEnds(doc, off, L, lo, hi, margin + ramp), cut = cut0 === doc ? doc : freeze(cut0);
+  const keep = Object.isFrozen(doc) && Array.isArray(doc.pieces) && doc.pieces.every(frozenDown);
+  const C = { doc: cut, W: cut === doc ? W0 : evenWindow(cut, { from, to, ramp, margin }), memo: keep ? new Map() : null };
+  if (keep) { const m = byDoc || new Map(); m.set(key, C); if (!byDoc) CUT_MEMO.set(doc, m); }
+  return C;
 }
 
 /**
@@ -262,7 +281,9 @@ function evenWindow(doc, { from, to, ramp = EVEN_RAMP_M, margin = EVEN_MARGIN_M 
 }
 
 /** The level itself, on a window evenWindow gave. `given`: the track Even was handed, when `doc` is it with its window's reaches cut (refineEnds); `changed` is counted against it. */
-function evenIn(doc, { off, L, lo, hi, win, w0, w1, value, hold, given = doc }) {
+function evenIn(doc, { off, L, lo, hi, win, w0, w1, value, hold, given = doc, memo = null }) {
+  // what depends on the cut track alone, computed once per drag (cutOf): the road read from the window's ends, its rim readers, the bank plan
+  const once = (k, f) => { if (!memo) return f(); if (!memo.has(k)) memo.set(k, f()); return memo.get(k); };
   const fh = easeOf(doc, off, 'h', win), fl = easeOf(doc, off, 'l', win);
   const d1 = levelTo(doc, { w: value }, win);   // the width at the value, l and h as they were
   // l: the held rim where the road without bumps has it (C1b), or eased ('centre')
@@ -272,9 +293,13 @@ function evenIn(doc, { off, L, lo, hi, win, w0, w1, value, hold, given = doc }) 
   if (side) {
     // the road before any grab or stroke, read from the window's two ends; where they disagree (the road's own width or offset changes across the window, a
     // 31 m straight into a 12 m turn) there is no one road to read back, and the held rim is held where it is now
-    const rw = restOf(doc, off, 'w', win, L), rl = restOf(doc, off, 'l', win, L), one = [rw, rl].every((f) => Math.abs(f(w0) - f(w1)) <= EVEN_AGREE_M);
-    dStar = one ? levelTo(doc, { w: rw, l: rl }, win) : doc;
-    offS = SC.pieceOffsets(dStar); rim0 = rimReader(doc, side); rim1 = rimReader(d1, side); rimS = rimReader(dStar, side);
+    const ref = once('ref', () => {
+      const rw = restOf(doc, off, 'w', win, L), rl = restOf(doc, off, 'l', win, L), one = [rw, rl].every((f) => Math.abs(f(w0) - f(w1)) <= EVEN_AGREE_M);
+      const dS = one ? levelTo(doc, { w: rw, l: rl }, win) : doc;
+      return { dStar: dS, offS: SC.pieceOffsets(dS) };
+    });
+    dStar = ref.dStar; offS = ref.offS;
+    rim0 = once(`rim0${side}`, () => rimReader(doc, side)); rim1 = rimReader(d1, side); rimS = once(`rimS${side}`, () => rimReader(dStar, side));
   }
   doc.pieces.forEach((P, p) => {
     if (P.type !== 'road' || off[p] + P.length < w0 || off[p] > w1) { resL.push(null); return; }
@@ -295,7 +320,7 @@ function evenIn(doc, { off, L, lo, hi, win, w0, w1, value, hold, given = doc }) 
   });
   const c1 = freeze(D.checkDoc({ ...d1, pieces: SC.settle(d1, 'l', resL).pieces }));
   // h: in the plane of the road as built, fitted (Alt F)
-  const plan = bankPlan(doc), offC = SC.pieceOffsets(c1);
+  const plan = once('plan', () => bankPlan(doc)), offC = SC.pieceOffsets(c1);
   const phiAt = (s) => { const a = pieceAt(doc, off, s); return builtPhi(doc, plan, a.p, a.sl); };
   const target = (s) => {
     const g = weight(s, win.lo, win.hi, win.ramp), l = valueAt(c1, offC, 'l', s), hs = valueAt(doc, off, 'h', s), ls = valueAt(doc, off, 'l', s);
@@ -315,4 +340,4 @@ function shiftOf(before, after, plan = bankPlan(before)) {
   return (s) => { const a = pieceAt(before, off, s); if (!a) throw new Error(`even: no road at ${s}`); return (valueAt(after, offA, 'l', s) - valueAt(before, off, 'l', s)) / Math.cos(builtPhi(before, plan, a.p, a.sl)); };
 }
 
-module.exports = { even, evenWindow, shiftOf, HOLDS, EVEN_RAMP_M, EVEN_MARGIN_M, EVEN_SNAP_M, EVEN_MIN_M, EVEN_MAX_M, EVEN_END_SPAN_M, _internal: { weight, rimReader, levelTo, fitHeight, builtPhi, refineEnds } };
+module.exports = { even, evenWindow, shiftOf, HOLDS, EVEN_RAMP_M, EVEN_MARGIN_M, EVEN_SNAP_M, EVEN_MIN_M, EVEN_MAX_M, EVEN_END_SPAN_M, _internal: { weight, rimReader, levelTo, fitHeight, builtPhi, refineEnds, cutOf } };
